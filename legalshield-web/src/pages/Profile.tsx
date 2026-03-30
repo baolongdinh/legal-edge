@@ -1,13 +1,13 @@
 import { User, Mail, Lock, CreditCard, Bell } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Typography } from '../components/ui/Typography'
-import { useUserStore } from '../store'
+import { useUserStore, usePayment } from '../store'
 import { supabase } from '../lib/supabase'
-import { useEffect, useState } from 'react'
+import { useEffect } from 'react'
 
 export function Profile() {
-    const { user, subscription, setUser, setSubscription, apiCallsUsed, apiCallsLimit } = useUserStore()
-    const [isLoadingCheckout, setIsLoadingCheckout] = useState(false)
+    const { user, subscription, setUser, syncSubscription, apiCallsUsed, apiCallsLimit } = useUserStore()
+    const { processPayment, isLoading: isLoadingCheckout } = usePayment()
 
     useEffect(() => {
         const syncUser = async () => {
@@ -15,7 +15,6 @@ export function Profile() {
             if (authUser) {
                 // Get extended profile
                 const { data: profile } = await supabase.from('users').select('*').eq('id', authUser.id).single()
-                const { data: sub } = await supabase.from('subscriptions').select('plan_id').eq('user_id', authUser.id).maybeSingle()
 
                 setUser({
                     id: authUser.id,
@@ -23,51 +22,12 @@ export function Profile() {
                     name: profile?.full_name || authUser.user_metadata?.full_name || 'Người dùng'
                 })
 
-                if (sub) setSubscription(sub.plan_id as any)
+                // Sync full subscription data from DB
+                syncSubscription(authUser.id)
             }
         }
         syncUser()
-    }, [setUser, setSubscription])
-
-    const handlePayment = async (provider: 'stripe' | 'momo' | 'vnpay') => {
-        setIsLoadingCheckout(true)
-        try {
-            let res: any
-            if (provider === 'momo') {
-                res = await supabase.functions.invoke('momo-payment', {
-                    body: {
-                        plan_id: 'pro',
-                        redirect_url: window.location.origin + '/profile?momo=success',
-                        ipn_url: `${window.location.origin.replace('localhost', '127.0.0.1')}/functions/v1/payment-webhook?provider=momo` // Backend should override with real Edge Function URL
-                    }
-                })
-            } else if (provider === 'vnpay') {
-                res = await supabase.functions.invoke('vnpay-payment', {
-                    body: {
-                        plan_id: 'pro',
-                        return_url: window.location.origin + '/profile?vnpay=success'
-                    }
-                })
-            } else {
-                res = await supabase.functions.invoke('create-checkout-session', {
-                    body: {
-                        plan_id: 'pro_monthly',
-                        success_url: window.location.origin + '/profile?success=true',
-                        cancel_url: window.location.origin + '/profile?canceled=true'
-                    }
-                })
-            }
-
-            if (res.error) throw res.error
-            if (res.data?.checkout_url) {
-                window.location.href = res.data.checkout_url
-            }
-        } catch (err) {
-            console.error(`${provider} payment failed:`, err)
-        } finally {
-            setIsLoadingCheckout(false)
-        }
-    }
+    }, [setUser, syncSubscription])
 
     const planDisplay = { free: 'Miễn phí', pro: 'Pro', enterprise: 'Enterprise' }
 
@@ -83,8 +43,8 @@ export function Profile() {
                     </div>
                     <div className="space-y-4">
                         {[
-                            { label: 'Họ và tên', icon: User, value: user?.name ?? 'Nguyễn Văn A', type: 'text' },
-                            { label: 'Email', icon: Mail, value: user?.email ?? 'user@company.vn', type: 'email' },
+                            { label: 'Họ và tên', icon: User, value: user?.name ?? '', type: 'text' },
+                            { label: 'Email', icon: Mail, value: user?.email ?? '', type: 'email' },
                         ].map(({ label, icon: Icon, value, type }) => (
                             <div key={label}>
                                 <label className="block text-xs font-medium text-gold-muted mb-1.5 uppercase tracking-wider font-sans">{label}</label>
@@ -99,24 +59,7 @@ export function Profile() {
                     </div>
                 </section>
 
-                {/* Password */}
-                <section className="bg-navy-elevated rounded-xl border border-slate-border p-6">
-                    <div className="flex items-center gap-3 mb-5">
-                        <Lock size={18} className="text-gold-primary" />
-                        <Typography variant="h3" className="text-base">Bảo mật</Typography>
-                    </div>
-                    <div className="space-y-4">
-                        {['Mật khẩu hiện tại', 'Mật khẩu mới', 'Xác nhận mật khẩu mới'].map((label) => (
-                            <div key={label}>
-                                <label className="block text-xs font-medium text-gold-muted mb-1.5 uppercase tracking-wider">{label}</label>
-                                <input type="password" placeholder="••••••••"
-                                    className="w-full px-3 py-2.5 text-sm bg-navy-base border border-slate-border rounded-md text-paper-dark focus:outline-none focus:border-gold-primary transition-colors" />
-                            </div>
-                        ))}
-                        <Button variant="ghost">Đổi mật khẩu</Button>
-                    </div>
-                </section>
-
+                {/* (Rest of the component remains the same, but handlePayment is now processPayment) */}
                 {/* Subscription */}
                 <section className="bg-navy-elevated rounded-xl border border-slate-border p-6">
                     <div className="flex items-center justify-between mb-4">
@@ -141,7 +84,7 @@ export function Profile() {
                                 <Button
                                     variant="outline"
                                     className="border-slate-border hover:border-gold-primary group py-6 h-auto flex flex-col items-center gap-2"
-                                    onClick={() => handlePayment('stripe')}
+                                    onClick={() => processPayment('stripe')}
                                     disabled={isLoadingCheckout}
                                 >
                                     <div className="w-8 h-8 flex items-center justify-center text-blue-400 group-hover:scale-110 transition-transform">
@@ -153,7 +96,7 @@ export function Profile() {
                                 <Button
                                     variant="outline"
                                     className="border-slate-border hover:border-[#A50064] group py-6 h-auto flex flex-col items-center gap-2"
-                                    onClick={() => handlePayment('momo')}
+                                    onClick={() => processPayment('momo')}
                                     disabled={isLoadingCheckout}
                                 >
                                     <div className="w-8 h-8 rounded-lg overflow-hidden group-hover:scale-110 transition-transform bg-[#A50064] flex items-center justify-center text-[10px] font-bold text-white">MOMO</div>
@@ -163,7 +106,7 @@ export function Profile() {
                                 <Button
                                     variant="outline"
                                     className="border-slate-border hover:border-[#005BAA] group py-6 h-auto flex flex-col items-center gap-2"
-                                    onClick={() => handlePayment('vnpay')}
+                                    onClick={() => processPayment('vnpay')}
                                     disabled={isLoadingCheckout}
                                 >
                                     <div className="w-8 h-8 rounded-lg overflow-hidden group-hover:scale-110 transition-transform bg-[#005BAA] flex items-center justify-center text-[10px] font-bold text-white">VN PAY</div>
@@ -176,6 +119,24 @@ export function Profile() {
                     {subscription !== 'free' && (
                         <Button variant="outline" size="sm">Quản lý gói</Button>
                     )}
+                </section>
+
+                {/* Password */}
+                <section className="bg-navy-elevated rounded-xl border border-slate-border p-6">
+                    <div className="flex items-center gap-3 mb-5">
+                        <Lock size={18} className="text-gold-primary" />
+                        <Typography variant="h3" className="text-base">Bảo mật</Typography>
+                    </div>
+                    <div className="space-y-4">
+                        {['Mật khẩu hiện tại', 'Mật khẩu mới', 'Xác nhận mật khẩu mới'].map((label) => (
+                            <div key={label}>
+                                <label className="block text-xs font-medium text-gold-muted mb-1.5 uppercase tracking-wider">{label}</label>
+                                <input type="password" placeholder="••••••••"
+                                    className="w-full px-3 py-2.5 text-sm bg-navy-base border border-slate-border rounded-md text-paper-dark focus:outline-none focus:border-gold-primary transition-colors" />
+                            </div>
+                        ))}
+                        <Button variant="ghost">Đổi mật khẩu</Button>
+                    </div>
                 </section>
 
                 {/* Notifications */}

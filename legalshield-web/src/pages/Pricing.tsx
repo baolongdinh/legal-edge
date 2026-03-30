@@ -1,10 +1,12 @@
-import { Link } from 'react-router-dom'
+import { Link, useNavigate } from 'react-router-dom'
 import { Check, Scale } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Typography } from '../components/ui/Typography'
+import { usePayment } from '../store'
 
 const plans = [
     {
+        id: 'free',
         name: 'Miễn phí', price: '0đ', period: '/tháng',
         description: 'Khám phá nền tảng',
         features: ['10 phân tích / tháng', 'RAG cơ bản', 'Kho template chuẩn'],
@@ -12,6 +14,7 @@ const plans = [
         highlight: false,
     },
     {
+        id: 'pro',
         name: 'Pro', price: '990.000đ', period: '/tháng',
         description: 'Cho cá nhân & SME',
         features: ['200 phân tích / tháng', 'RAG đầy đủ + án lệ', 'Soạn thảo không giới hạn', 'Xuất PDF chuẩn pháp lý', 'Hỗ trợ ưu tiên'],
@@ -19,6 +22,7 @@ const plans = [
         highlight: true,
     },
     {
+        id: 'enterprise',
         name: 'Enterprise', price: 'Liên hệ', period: '',
         description: 'Cho công ty luật & doanh nghiệp lớn',
         features: ['Phân tích không giới hạn', 'Kho pháp lý riêng', 'API tích hợp riêng', 'Supavisor pool riêng', 'SLA 99.9%'],
@@ -28,6 +32,19 @@ const plans = [
 ]
 
 export function Pricing() {
+    const navigate = useNavigate()
+    const { processPayment, isLoading } = usePayment()
+
+    const handlePlanSelect = async (planId: string) => {
+        if (planId === 'free') {
+            navigate('/dashboard')
+        } else if (planId === 'pro') {
+            processPayment('stripe', 'pro')
+        } else {
+            window.location.href = 'mailto:sales@legalshield.vn'
+        }
+    }
+
     return (
         <div className="min-h-screen bg-navy-base bg-grid font-sans">
             {/* Nav */}
@@ -53,8 +70,8 @@ export function Pricing() {
             <div className="max-w-5xl mx-auto px-8 pb-24 grid grid-cols-1 md:grid-cols-3 gap-6">
                 {plans.map((plan) => (
                     <div key={plan.name} className={`flex flex-col p-6 rounded-xl border card-hover ${plan.highlight
-                            ? 'border-gold-primary bg-gold-primary/10 shadow-[0_0_48px_rgba(201,168,76,0.15)]'
-                            : 'border-slate-border bg-navy-elevated'
+                        ? 'border-gold-primary bg-gold-primary/10 shadow-[0_0_48px_rgba(201,168,76,0.15)]'
+                        : 'border-slate-border bg-navy-elevated'
                         }`}>
                         {plan.highlight && (
                             <Typography variant="label" className="text-gold-primary text-center mb-3">Phổ biến nhất</Typography>
@@ -74,7 +91,14 @@ export function Pricing() {
                             ))}
                         </ul>
 
-                        <Button variant={plan.ctaVariant} className="w-full">{plan.cta}</Button>
+                        <Button
+                            variant={plan.ctaVariant}
+                            className="w-full"
+                            onClick={() => handlePlanSelect(plan.id)}
+                            disabled={isLoading}
+                        >
+                            {plan.cta}
+                        </Button>
                     </div>
                 ))}
             </div>

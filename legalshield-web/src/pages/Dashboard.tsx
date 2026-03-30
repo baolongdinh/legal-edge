@@ -32,16 +32,29 @@ function formatRelativeTime(dateStr: string) {
 export function Dashboard() {
     const [contracts, setContracts] = useState<ContractWithRisks[]>([])
     const [loading, setLoading] = useState(true)
+    const [isRefreshing, setIsRefreshing] = useState(false)
     const [stats, setStats] = useState([
         { label: 'Hợp đồng đã phân tích', value: '0', icon: FileText },
         { label: 'Rủi ro được phát hiện', value: '0', icon: TrendingUp },
         { label: 'Giờ tiết kiệm được', value: '0h', icon: Clock },
     ])
 
+    const handleRefresh = async () => {
+        setIsRefreshing(true)
+        try {
+            await supabase.rpc('refresh_contract_stats')
+            window.location.reload() // Or just re-fetch
+        } catch (err) {
+            console.error('Refresh failed:', err)
+        } finally {
+            setIsRefreshing(false)
+        }
+    }
+
     useEffect(() => {
         async function fetchData() {
             try {
-                // Fetch contracts with their risks
+                // Fetch contracts
                 const { data: contractsData, error: contractsError } = await supabase
                     .from('contracts')
                     .select(`
@@ -51,6 +64,9 @@ export function Dashboard() {
                     .order('created_at', { ascending: false })
 
                 if (contractsError) throw contractsError
+
+                // Fetch real stats from RPC
+                const { data: statsData } = await supabase.rpc('get_my_stats').maybeSingle() as { data: any }
 
                 const formatted: ContractWithRisks[] = (contractsData || []).map(c => {
                     const risks = c.contract_risks as any[]
@@ -71,14 +87,14 @@ export function Dashboard() {
 
                 setContracts(formatted)
 
-                // Calculate stats
-                const totalContracts = formatted.length
-                const totalRisks = formatted.reduce((acc, curr) => acc + curr.risk_count, 0)
-                const hoursSaved = Math.floor(totalContracts * 0.75) // Assume 45 mins per contract
+                // Calculate stats from RPC or fallback
+                const totalContracts = statsData?.total_contracts || formatted.length
+                const totalAnalyzed = statsData?.analyzed_count || formatted.filter(c => c.status === 'analyzed').length
+                const hoursSaved = Math.floor(totalAnalyzed * 0.75)
 
                 setStats([
-                    { label: 'Hợp đồng đã phân tích', value: totalContracts.toString(), icon: FileText },
-                    { label: 'Rủi ro được phát hiện', value: totalRisks.toString(), icon: TrendingUp },
+                    { label: 'Hợp đồng đã tải lên', value: totalContracts.toString(), icon: FileText },
+                    { label: 'Bản phân tích AI', value: totalAnalyzed.toString(), icon: TrendingUp },
                     { label: 'Giờ tiết kiệm được', value: `${hoursSaved}h`, icon: Clock },
                 ])
             } catch (err) {
@@ -118,7 +134,12 @@ export function Dashboard() {
 
             {/* Header + action */}
             <div className="flex items-center justify-between">
-                <Typography variant="h3" className="text-lg">Hợp đồng gần đây</Typography>
+                <div className="flex items-center gap-4">
+                    <Typography variant="h3" className="text-lg">Hợp đồng gần đây</Typography>
+                    <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="h-8 w-8 p-0">
+                        <Clock size={16} className={isRefreshing ? 'animate-spin' : ''} />
+                    </Button>
+                </div>
                 <Link to="/analysis">
                     <Button size="sm" variant="ghost">
                         <Plus size={15} /> Phân tích mới

@@ -1,4 +1,6 @@
 import { create } from 'zustand'
+import { useState } from 'react'
+import { supabase } from '../lib/supabase'
 
 // --- Global UI State ---
 interface UIState {
@@ -28,23 +30,43 @@ interface AnalysisState {
     isAnalyzing: boolean
     currentDocumentId: string | null
     risks: RiskBadge[]
-    setDocument: (id: string) => void
+    isHashMatch: boolean
+    setDocument: (id: string, isHashMatch?: boolean) => void
     setRisks: (risks: RiskBadge[]) => void
     startAnalysis: () => void
     addRisk: (risk: RiskBadge) => void
     clearRisks: () => void
 }
 
-export const useAnalysisStore = create<AnalysisState>((set) => ({
-    isAnalyzing: false,
-    currentDocumentId: null,
-    risks: [],
-    setDocument: (id) => set({ currentDocumentId: id }),
-    setRisks: (risks) => set({ risks, isAnalyzing: false }),
-    startAnalysis: () => set({ isAnalyzing: true, risks: [] }),
-    addRisk: (risk) => set((s) => ({ risks: [...s.risks, risk] })),
-    clearRisks: () => set({ risks: [], isAnalyzing: false, currentDocumentId: null }),
-}))
+import { persist, createJSONStorage } from 'zustand/middleware'
+import { get, set, del } from 'idb-keyval'
+
+// Custom storage using IndexedDB (idb-keyval)
+const storage = {
+    getItem: async (name: string) => (await get(name)) || null,
+    setItem: async (name: string, value: string) => await set(name, value),
+    removeItem: async (name: string) => await del(name),
+}
+
+export const useAnalysisStore = create<AnalysisState>()(
+    persist(
+        (set) => ({
+            isAnalyzing: false,
+            currentDocumentId: null,
+            risks: [],
+            isHashMatch: false,
+            setDocument: (id, isHashMatch = false) => set({ currentDocumentId: id, isHashMatch }),
+            setRisks: (risks) => set({ risks, isAnalyzing: false }),
+            startAnalysis: () => set({ isAnalyzing: true, risks: [] }),
+            addRisk: (risk) => set((s) => ({ risks: [...s.risks, risk] })),
+            clearRisks: () => set({ risks: [], isAnalyzing: false, currentDocumentId: null, isHashMatch: false }),
+        }),
+        {
+            name: 'legalshield-analysis-storage',
+            storage: createJSONStorage(() => storage),
+        }
+    )
+)
 
 // --- Upload State (Analysis view) ---
 interface UploadState {
@@ -81,6 +103,7 @@ interface UserState {
     apiCallsLimit: number
     setUser: (user: UserState['user']) => void
     setSubscription: (plan: UserState['subscription']) => void
+    syncSubscription: (userId: string) => Promise<void>
 }
 
 export const useUserStore = create<UserState>((set) => ({
@@ -90,7 +113,71 @@ export const useUserStore = create<UserState>((set) => ({
     apiCallsLimit: 10,
     setUser: (user) => set({ user }),
     setSubscription: (subscription) => set({ subscription }),
+    syncSubscription: async (userId: string) => {
+        const { data } = await supabase
+            .from('subscriptions')
+            .select('plan, api_calls_used, api_calls_limit')
+            .eq('user_id', userId)
+            .maybeSingle()
+
+        if (data) {
+            set({
+                subscription: data.plan as any,
+                apiCallsUsed: data.api_calls_used,
+                apiCallsLimit: data.api_calls_limit
+            })
+        }
+    }
 }))
+
+// --- Payment Hook ---
+export const usePayment = () => {
+    const [isLoading, setIsLoading] = useState(false)
+    const { user } = useUserStore()
+
+    const processPayment = async (provider: 'stripe' | 'momo' | 'vnpay', planId: string = 'pro') => {
+        if (!user) return
+        setIsLoading(true)
+        try {
+            let res: any
+            const origin = window.location.origin
+
+            if (provider === 'momo') {
+                res = await supabase.functions.invoke('momo-payment', {
+                    body: {
+                        plan_id: planId,
+                        redirect_url: `${origin}/profile?momo=success`,
+                        ipn_url: `${origin}/functions/v1/payment-webhook?provider=momo`
+                    }
+                })
+            } else if (provider === 'vnpay') {
+                res = await supabase.functions.invoke('vnpay-payment', {
+                    body: { plan_id: planId, return_url: `${origin}/profile?vnpay=success` }
+                })
+            } else {
+                res = await supabase.functions.invoke('create-checkout-session', {
+                    body: {
+                        plan_id: planId === 'pro' ? 'pro_monthly' : planId,
+                        success_url: `${origin}/profile?success=true`,
+                        cancel_url: `${origin}/profile?canceled=true`
+                    }
+                })
+            }
+
+            if (res.error) throw res.error
+            if (res.data?.checkout_url) {
+                window.location.href = res.data.checkout_url
+            }
+        } catch (err) {
+            console.error(`${provider} payment error:`, err)
+            throw err
+        } finally {
+            setIsLoading(false)
+        }
+    }
+
+    return { processPayment, isLoading }
+}
 
 // --- Clause Editor State ---
 export interface Clause {

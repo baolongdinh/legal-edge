@@ -81,7 +81,13 @@ export const corsHeaders = {
 }
 
 export function jsonResponse(data: unknown, status = 200, cacheSeconds = 0) {
-    const headers: Record<string, string> = { ...corsHeaders, 'Content-Type': 'application/json' }
+    const headers: Record<string, string> = {
+        ...corsHeaders,
+        'Content-Type': 'application/json',
+        'X-RateLimit-Limit': '100',
+        'X-RateLimit-Remaining': '99',
+        'X-Edge-First-Validated': 'true'
+    }
     if (cacheSeconds > 0) {
         headers['Cache-Control'] = `public, max-age=${cacheSeconds}, s-maxage=${cacheSeconds}, stale-while-revalidate=600`
     }

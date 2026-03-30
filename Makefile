@@ -17,10 +17,11 @@ dev:
 # Loads secrets from ./supabase/.env
 deploy-supabase:
 	@echo "▶ Pushing database migrations..."
-	supabase db push
+	@set -a && . ./supabase/.env && set +a && \
+	npx supabase db push --password "$$SUPABASE_DB_PASSWORD"
 	@echo "▶ Setting Edge Function secrets from supabase/.env..."
 	@set -a && . ./supabase/.env && set +a && \
-	supabase secrets set \
+	npx supabase secrets set --project-ref "$$SUPABASE_PROJECT_ID" \
 		GEMINI_API_KEYS="$$GEMINI_API_KEYS" \
 		GROQ_API_KEYS="$$GROQ_API_KEYS" \
 		STRIPE_SECRET_KEY="$$STRIPE_SECRET_KEY" \
@@ -38,14 +39,16 @@ deploy-supabase:
 		R2_ENDPOINT="$$R2_ENDPOINT" \
 		R2_PUBLIC_DOMAIN="$$R2_PUBLIC_DOMAIN"
 	@echo "▶ Deploying all Edge Functions..."
-	supabase functions deploy risk-review
-	supabase functions deploy generate-contract
-	supabase functions deploy parse-document
-	supabase functions deploy export-pdf
-	supabase functions deploy create-checkout-session
-	supabase functions deploy momo-payment
-	supabase functions deploy vnpay-payment
-	supabase functions deploy payment-webhook
+	@set -a && . ./supabase/.env && set +a && \
+	npx supabase functions deploy risk-review --project-ref "$$SUPABASE_PROJECT_ID" && \
+	npx supabase functions deploy generate-contract --project-ref "$$SUPABASE_PROJECT_ID" && \
+	npx supabase functions deploy parse-document --project-ref "$$SUPABASE_PROJECT_ID" && \
+	npx supabase functions deploy export-pdf --project-ref "$$SUPABASE_PROJECT_ID" && \
+	npx supabase functions deploy create-checkout-session --project-ref "$$SUPABASE_PROJECT_ID" && \
+	npx supabase functions deploy momo-payment --project-ref "$$SUPABASE_PROJECT_ID" && \
+	npx supabase functions deploy vnpay-payment --project-ref "$$SUPABASE_PROJECT_ID" && \
+	npx supabase functions deploy payment-webhook --project-ref "$$SUPABASE_PROJECT_ID"
+	@echo "✅ Supabase deployment complete!"
 	@echo "✅ Supabase deployment complete!"
 
 # Deploy Frontend to Vercel

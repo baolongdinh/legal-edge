@@ -2,7 +2,7 @@
 
 **Status**: Draft
 **Owner**: AI Agent (Antigravity)
-**Decisions**: [AI-01, DB-01, CS-01]
+**Decisions**: [AI-01, DB-01, CS-01, CS-02, DB-02]
 
 ## Overview
 
@@ -38,12 +38,12 @@ A user uploads a 20MB PDF. Instead of the Edge Function potentially timing out o
 
 ### 2. Materialized Views
 - [ ] Create a `mv_contract_stats` view in Postgres.
-- [ ] Implement a mechanism to refresh the view (e.g., a trigger or a scheduled Edge Function).
+- [ ] Implement a scheduled refresh mechanism using `pg_cron` (Hourly).
 
 ### 3. Client-side Parsing
-- [ ] Integrate `pdfjs-dist` into the React frontend.
+- [ ] Integrate `pdfjs-dist` (for PDF) and `mammoth` (for DOCX) into the React frontend.
 - [ ] Update `UploadZone` in `ContractAnalysis.tsx` to extract text locally from the `File` object.
-- [ ] Update `parse-document` Edge Function to be an optional fallback for non-PDF files if needed.
+- [ ] Update `parse-document` Edge Function to be an optional fallback or maintain it for legacy support.
 
 ## Non-Functional Requirements
 
@@ -53,10 +53,9 @@ A user uploads a 20MB PDF. Instead of the Edge Function potentially timing out o
 
 ## Dependencies & Assumptions
 
-- **Dependencies**: `pdfjs-dist`, `Gemini API`, `Supabase PG_CRON` (optional).
-- **Assumptions**: User's browser is modern enough to support `pdfjs-dist`.
+- **Dependencies**: `pdfjs-dist`, `mammoth`, `Gemini API`, `Supabase PG_CRON`.
+- **Assumptions**: User's browser is modern enough to support these libraries.
 
 ## Open Questions / Risks
 
-- [NEEDS CLARIFICATION: Should internal DOCX parsing also move to client-side using `mammoth`?]
-- [NEEDS CLARIFICATION: What is the acceptable delay for Materialized View refreshes? (e.g., Hourly, Daily, or On-Demand?)]
+- [None]
