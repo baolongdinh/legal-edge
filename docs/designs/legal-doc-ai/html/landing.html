@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>LegalShield — Hệ thống Tư vấn Hợp đồng Thông minh</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&amp;family=Inter:wght@300;400;500;600&amp;family=JetBrains+Mono&amp;family=Crimson+Pro:wght@400;500&amp;family=Newsreader:opsz,wght@6..72,400;6..72,600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "outline-variant": "#4d4637",
+              "inverse-surface": "#d7e3fc",
+              "on-primary-fixed": "#241a00",
+              "on-tertiary-fixed": "#410004",
+              "on-secondary-fixed-variant": "#5c4300",
+              "on-secondary": "#402d00",
+              "primary-container": "#c9a84c",
+              "tertiary-fixed-dim": "#ffb3ad",
+              "secondary-fixed": "#ffdfa0",
+              "outline": "#99907e",
+              "on-error": "#690005",
+              "on-tertiary-container": "#7c1a1b",
+              "surface-container-lowest": "#030e20",
+              "surface-tint": "#e6c364",
+              "on-surface": "#d7e3fc",
+              "inverse-primary": "#755b00",
+              "surface-variant": "#2a3548",
+              "on-secondary-container": "#ffd375",
+              "error": "#ffb4ab",
+              "background": "#071325",
+              "on-tertiary-fixed-variant": "#852221",
+              "on-tertiary": "#65080d",
+              "surface": "#071325",
+              "surface-container-high": "#1f2a3d",
+              "tertiary-container": "#ff8a82",
+              "primary-fixed": "#ffe08f",
+              "error-container": "#93000a",
+              "secondary-container": "#795900",
+              "on-primary": "#3d2e00",
+              "surface-container-highest": "#2a3548",
+              "inverse-on-surface": "#253144",
+              "surface-dim": "#071325",
+              "on-error-container": "#ffdad6",
+              "secondary-fixed-dim": "#ecc165",
+              "primary": "#e6c364",
+              "on-surface-variant": "#d0c5b2",
+              "surface-container": "#142032",
+              "surface-container-low": "#101c2e",
+              "tertiary-fixed": "#ffdad7",
+              "primary-fixed-dim": "#e6c364",
+              "surface-bright": "#2e394d",
+              "tertiary": "#ffb4ae",
+              "on-primary-fixed-variant": "#584400",
+              "on-background": "#d7e3fc",
+              "secondary": "#ecc165",
+              "on-primary-container": "#503d00",
+              "on-secondary-fixed": "#261a00"
+            },
+            fontFamily: {
+              "headline": ["Cormorant Garamond", "serif"],
+              "body": ["Inter", "sans-serif"],
+              "label": ["Inter", "sans-serif"],
+              "mono": ["JetBrains Mono", "monospace"],
+              "serif-body": ["Crimson Pro", "serif"]
+            },
+            borderRadius: {"DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem"},
+          },
+        },
+      }
+    </script>
+<style>
+      .noise-texture {
+        background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        opacity: 0.05;
+        pointer-events: none;
+      }
+      .grid-lines {
+        background-image: linear-gradient(to right, rgba(230, 195, 100, 0.05) 1px, transparent 1px);
+        background-size: 12.5% 100%;
+      }
+      .topographic-bg {
+        background-image: url("data:image/svg+xml,%3Csvg width='800' height='800' viewBox='0 0 800 800' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='none' stroke='%23C9A84C' stroke-width='0.5' stroke-opacity='0.1'%3E%3Cpath d='M100 200c50-20 80 10 120 0s70-40 120-20 60 50 110 30 90-30 140-10 70 60 120 40'/%3E%3Cpath d='M50 300c60 10 90-30 150-10s80 50 140 30 70-40 130-20 80 60 140 40 80-30 140-10'/%3E%3Cpath d='M0 400c70-20 100 40 170 10s90-60 160-30 80 50 150 20 90-40 160-10 80 60 150 30'/%3E%3Cpath d='M150 500c50 30 90-10 140 20s80 60 130 30 70-50 120-20 90 40 140 10 70-60 120-30'/%3E%3Cpath d='M200 600c60-10 100 40 160 10s90-60 150-30 80 50 140 20 90-40 150-10 80 60 140 30'/%3E%3C/g%3E%3C/svg%3E");
+      }
+      body { background-color: #071325; color: #F0EBE0; }
+      .section-hairline { border-top: 0.2px solid rgba(230, 195, 100, 0.15); }
+      .card-divider { border-right: 0.5px solid rgba(201, 168, 76, 0.2); }
+      .outline-text {
+        -webkit-text-stroke: 1px rgba(230, 195, 100, 0.15);
+        color: transparent;
+      }
+      .nav-glow:hover {
+        box-shadow: 0 0 20px rgba(230, 195, 100, 0.2);
+      }
+    </style>
+</head>
+<body class="font-body selection:bg-primary/30 selection:text-primary overflow-x-hidden relative">
+<!-- Global Architectural Grid -->
+<div class="fixed inset-0 grid-lines pointer-events-none z-0"></div>
+<!-- Top Navigation Bar -->
+<nav class="fixed top-0 w-full z-50 bg-[#0A1628]/95 backdrop-blur-xl border-b border-[#4D4637]/15">
+<div class="flex justify-between items-center px-8 h-20 w-full max-w-7xl mx-auto">
+<div class="font-['Cormorant_Garamond'] text-2xl font-bold text-[#F0EBE0] tracking-tight">LegalShield</div>
+<div class="hidden md:flex items-center space-x-10">
+<a class="text-[#E6C364] font-medium border-b border-[#E6C364] pb-1 font-['Inter'] text-sm tracking-wide" href="#">Trang chủ</a>
+<a class="text-[#F0EBE0]/70 hover:text-[#F0EBE0] transition-colors font-['Inter'] text-sm tracking-wide" href="#">Tính năng</a>
+<a class="text-[#F0EBE0]/70 hover:text-[#F0EBE0] transition-colors font-['Inter'] text-sm tracking-wide" href="#">Bảng giá</a>
+</div>
+<div class="flex items-center space-x-6">
+<button class="text-[#F0EBE0]/70 hover:text-[#E6C364] transition-all duration-300 font-['Inter'] text-sm">Đăng nhập</button>
+<button class="bg-[#E6C364] text-[#3D2E00] px-6 py-2 rounded-sm font-bold text-sm hover:opacity-90 transition-all nav-glow">Liên hệ</button>
+</div>
+</div>
+</nav>
+<!-- Hero Section -->
+<section class="relative min-h-screen w-full flex items-center bg-[#0A1628] overflow-hidden">
+<div class="absolute inset-0 noise-texture"></div>
+<!-- Subtle Wireframe/System Graphics -->
+<div class="absolute right-0 top-1/2 -translate-y-1/2 select-none pointer-events-none opacity-20 w-1/2 h-full flex items-center justify-center">
+<svg class="w-[800px] h-[800px]" fill="none" viewbox="0 0 200 200" xmlns="http://www.w3.org/2000/svg">
+<!-- Abstract Legal Pillar Wireframe -->
+<path d="M70 40 L130 40 L130 160 L70 160 Z" stroke="#E6C364" stroke-width="0.5"></path>
+<path d="M60 40 L140 40 M60 160 L140 160" stroke="#E6C364" stroke-width="0.5"></path>
+<path d="M70 40 L100 20 L130 40" stroke="#E6C364" stroke-width="0.5"></path>
+<path d="M100 20 L100 160" stroke="#E6C364" stroke-dasharray="2 2" stroke-width="0.3"></path>
+<!-- Orbital Rings -->
+<circle cx="100" cy="100" r="80" stroke="#E6C364" stroke-width="0.2"></circle>
+<circle cx="100" cy="100" r="95" stroke="#E6C364" stroke-width="0.2"></circle>
+<!-- Coordinate markers -->
+<text class="opacity-80" fill="#E6C364" font-family="JetBrains Mono" font-size="2" opacity="0.5" x="10" y="20">X: 104.22 // Y: 492.01</text>
+<text class="opacity-80" fill="#E6C364" font-family="JetBrains Mono" font-size="2" opacity="0.5" x="180" y="20">SYS: ACTIVE</text>
+<text class="opacity-80" fill="#E6C364" font-family="JetBrains Mono" font-size="2" opacity="0.5" x="10" y="190">AUTH_KEY: 0x82...9F</text>
+<text class="opacity-80" fill="#E6C364" font-family="JetBrains Mono" font-size="2" opacity="0.5" x="160" y="190">LN: 40.7128° N</text>
+</svg>
+</div>
+<div class="absolute top-1/2 left-0 w-32 h-[1px] bg-[#E6C364]/40"></div>
+<div class="max-w-7xl mx-auto px-8 w-full relative z-10">
+<div class="max-w-3xl">
+<!-- Micro-text System Status -->
+<div class="flex items-center space-x-3 mb-6 opacity-40">
+<span class="w-2 h-2 bg-[#E6C364] rounded-full animate-pulse"></span>
+<span class="font-mono text-[10px] uppercase tracking-[0.4em]">Integrated Legal Analysis v2.4</span>
+</div>
+<h1 class="font-headline text-6xl md:text-7xl lg:text-8xl text-[#F0EBE0] leading-[1.1] mb-8">
+                    Tư Vấn Hợp Đồng <br/>Thông Minh
+                </h1>
+<p class="font-body text-xl text-[#F0EBE0]/60 mb-12 tracking-tight">
+                    Phân tích pháp lý chính xác. Bảo vệ lợi ích của bạn.
+                </p>
+<div>
+<button class="border border-[#C9A84C] text-[#F0EBE0] px-10 py-4 font-semibold text-lg hover:bg-[#C9A84C]/10 transition-colors uppercase tracking-widest">
+                        Bắt đầu ngay
+                    </button>
+</div>
+</div>
+</div>
+</section>
+<!-- Logo Strip -->
+<div class="bg-[#0A1628] py-16 section-hairline relative overflow-hidden">
+<div class="max-w-7xl mx-auto px-8 relative z-10">
+<p class="text-center font-['Inter'] text-[10px] uppercase tracking-[0.3em] text-[#F0EBE0]/40 mb-10">Trusted by leading Vietnamese legal chambers</p>
+<div class="flex flex-wrap justify-center items-center gap-12 md:gap-20 opacity-30 grayscale contrast-125">
+<div class="font-headline text-xl text-[#F0EBE0] font-bold italic tracking-tighter">Vinh &amp; Partners</div>
+<div class="font-headline text-xl text-[#F0EBE0] font-bold tracking-widest">HANOI LAW</div>
+<div class="font-headline text-xl text-[#F0EBE0] italic">Indochina Legal</div>
+<div class="font-headline text-xl text-[#F0EBE0] font-semibold border border-[#F0EBE0] px-2 py-0.5">S&amp;S</div>
+<div class="font-headline text-xl text-[#F0EBE0] font-medium tracking-tight">ThangLong Chambers</div>
+<div class="font-headline text-xl text-[#F0EBE0] font-light italic">LexViệt</div>
+</div>
+</div>
+</div>
+<!-- Features Section -->
+<section class="py-32 bg-[#071325] section-hairline relative">
+<div class="max-w-7xl mx-auto px-8 relative">
+<h2 class="font-headline text-4xl text-center text-[#F0EBE0] mb-20 tracking-tight">Ba trụ cột bảo vệ bạn</h2>
+<div class="grid grid-cols-1 md:grid-cols-3">
+<!-- Card 1: Phân tích hợp đồng -->
+<div class="relative bg-[#152238]/40 backdrop-blur-sm p-12 border-t border-[#C9A84C] flex flex-col items-start space-y-6 md:card-divider group overflow-hidden">
+<span class="absolute -right-4 -bottom-4 font-headline text-9xl outline-text font-bold select-none opacity-10 transition-transform group-hover:scale-110 duration-700">01</span>
+<div class="text-[#C9A84C] relative z-10">
+<span class="material-symbols-outlined text-4xl" data-icon="scales">scale</span>
+</div>
+<h3 class="font-headline text-2xl text-[#F0EBE0] relative z-10">Phân tích hợp đồng</h3>
+<p class="font-body text-sm text-[#F0EBE0]/70 leading-relaxed relative z-10 max-lines-2">
+                        Tự động bóc tách các điều khoản phức tạp và làm rõ nghĩa vụ pháp lý của từng bên trong văn bản.
+                    </p>
+</div>
+<!-- Card 2: Phát hiện rủi ro -->
+<div class="relative bg-[#152238]/40 backdrop-blur-sm p-12 border-t border-[#C9A84C] flex flex-col items-start space-y-6 md:card-divider group overflow-hidden">
+<span class="absolute -right-4 -bottom-4 font-headline text-9xl outline-text font-bold select-none opacity-10 transition-transform group-hover:scale-110 duration-700">02</span>
+<div class="text-[#C9A84C] relative z-10">
+<span class="material-symbols-outlined text-4xl" data-icon="shield">shield</span>
+</div>
+<h3 class="font-headline text-2xl text-[#F0EBE0] relative z-10">Phát hiện rủi ro</h3>
+<p class="font-body text-sm text-[#F0EBE0]/70 leading-relaxed relative z-10 max-lines-2">
+                        Cảnh báo ngay lập tức các lỗ hổng pháp lý và các điều khoản có thể gây bất lợi cho doanh nghiệp của bạn.
+                    </p>
+</div>
+<!-- Card 3: Tư vấn điều khoản -->
+<div class="relative bg-[#152238]/40 backdrop-blur-sm p-12 border-t border-[#C9A84C] flex flex-col items-start space-y-6 group overflow-hidden">
+<span class="absolute -right-4 -bottom-4 font-headline text-9xl outline-text font-bold select-none opacity-10 transition-transform group-hover:scale-110 duration-700">03</span>
+<div class="text-[#C9A84C] relative z-10">
+<span class="material-symbols-outlined text-4xl" data-icon="description">description</span>
+</div>
+<h3 class="font-headline text-2xl text-[#F0EBE0] relative z-10">Tư vấn điều khoản</h3>
+<p class="font-body text-sm text-[#F0EBE0]/70 leading-relaxed relative z-10 max-lines-2">
+                        Đề xuất các phương án sửa đổi tối ưu dựa trên quy định pháp luật Việt Nam hiện hành.
+                    </p>
+</div>
+</div>
+</div>
+</section>
+<!-- CTA Footer Section -->
+<section class="py-40 bg-[#0A1628] section-hairline relative overflow-hidden">
+<!-- Topographical/Legal Network Background -->
+<div class="absolute inset-0 topographic-bg opacity-40 mix-blend-overlay"></div>
+<div class="absolute inset-0 noise-texture"></div>
+<div class="max-w-7xl mx-auto px-8 text-center relative z-10">
+<div class="inline-block px-4 py-1 border border-[#C9A84C]/30 mb-8">
+<span class="text-[10px] uppercase tracking-[0.5em] text-[#C9A84C]">Enterprise Grade Security</span>
+</div>
+<h2 class="font-headline text-4xl md:text-5xl lg:text-6xl text-[#F0EBE0] mb-12 max-w-4xl mx-auto leading-tight">Sẵn sàng bảo vệ lợi ích pháp lý của doanh nghiệp bạn?</h2>
+<button class="bg-[#C9A84C] text-[#0A1628] px-12 py-5 font-bold text-lg rounded-sm hover:opacity-95 transition-all shadow-2xl hover:scale-[1.02] active:scale-[0.98] mb-10">
+                Bắt đầu hành trình pháp lý
+            </button>
+<div class="flex items-center justify-center space-x-3 text-[#F0EBE0]/40">
+<span class="material-symbols-outlined text-sm">lock</span>
+<span class="text-[10px] uppercase tracking-[0.2em] font-mono">Encrypted with 256-bit AES</span>
+<span class="w-1.5 h-1.5 rounded-full bg-[#C9A84C]/30 mx-2"></span>
+<span class="text-[10px] uppercase tracking-[0.2em] font-mono">Safe &amp; Secure</span>
+</div>
+</div>
+</section>
+<!-- Global Footer -->
+<footer class="bg-[#0A1628] border-t border-[#4D4637]/15 py-20 relative z-10">
+<div class="max-w-7xl mx-auto px-8 flex flex-col items-center space-y-12">
+<div class="font-['Cormorant_Garamond'] text-3xl font-bold text-[#F0EBE0] tracking-tight">LegalShield</div>
+<nav class="flex flex-wrap justify-center gap-12">
+<a class="text-[#F0EBE0]/50 hover:text-[#E6C364] transition-colors font-['Inter'] text-xs uppercase tracking-[0.2em]" href="#">Trang chủ</a>
+<a class="text-[#F0EBE0]/50 hover:text-[#E6C364] transition-colors font-['Inter'] text-xs uppercase tracking-[0.2em]" href="#">Tính năng</a>
+<a class="text-[#F0EBE0]/50 hover:text-[#E6C364] transition-colors font-['Inter'] text-xs uppercase tracking-[0.2em]" href="#">Bảng giá</a>
+<a class="text-[#F0EBE0]/50 hover:text-[#E6C364] transition-colors font-['Inter'] text-xs uppercase tracking-[0.2em]" href="#">Liên hệ</a>
+</nav>
+<div class="pt-12 border-t border-[#4D4637]/10 w-full text-center">
+<p class="font-['Inter'] text-[11px] tracking-[0.1em] text-[#F0EBE0]/20 uppercase italic">
+                    © 2024 LegalShield. High-End Editorial Authority. All Rights Reserved.
+                </p>
+</div>
+</div>
+</footer>
+</body></html>

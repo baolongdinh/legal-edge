@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Hồ sơ &amp; Cài đặt | LegalShield</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:wght@300;400;700&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary": "#b9c8de",
+              "surface-container-high": "#1f2a3d",
+              "primary-fixed": "#ffe08f",
+              "on-tertiary-container": "#41403a",
+              "secondary-container": "#39485a",
+              "tertiary-fixed": "#e7e2da",
+              "on-tertiary": "#32302b",
+              "on-secondary-fixed-variant": "#39485a",
+              "inverse-primary": "#755b00",
+              "surface": "#071325",
+              "on-tertiary-fixed": "#1d1c17",
+              "tertiary-fixed-dim": "#cac6be",
+              "primary": "#e6c364",
+              "outline": "#99907e",
+              "surface-bright": "#2e394d",
+              "error-container": "#93000a",
+              "on-secondary-container": "#a7b6cc",
+              "on-background": "#d7e3fc",
+              "on-secondary-fixed": "#0d1c2d",
+              "error": "#ffb4ab",
+              "surface-dim": "#071325",
+              "surface-variant": "#2a3548",
+              "primary-container": "#c9a84c",
+              "primary-fixed-dim": "#e6c364",
+              "outline-variant": "#4d4637",
+              "on-surface-variant": "#d0c5b2",
+              "on-primary-fixed-variant": "#584400",
+              "inverse-surface": "#d7e3fc",
+              "surface-tint": "#e6c364",
+              "on-primary": "#3d2e00",
+              "on-primary-container": "#503d00",
+              "on-surface": "#d7e3fc",
+              "on-error": "#690005",
+              "surface-container-highest": "#2a3548",
+              "secondary-fixed-dim": "#b9c8de",
+              "on-primary-fixed": "#241a00",
+              "on-error-container": "#ffdad6",
+              "secondary-fixed": "#d4e4fa",
+              "on-secondary": "#233143",
+              "inverse-on-surface": "#253144",
+              "tertiary-container": "#afaba4",
+              "tertiary": "#cbc6bf",
+              "surface-container-lowest": "#030e20",
+              "surface-container": "#142032",
+              "surface-container-low": "#101c2e",
+              "on-tertiary-fixed-variant": "#494741",
+              "background": "#071325"
+            },
+            fontFamily: {
+              "headline": ["Noto Serif"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0px", "lg": "0px", "xl": "0px", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #071325;
+            color: #d7e3fc;
+            font-family: 'Inter', sans-serif;
+        }
+        .serif-display {
+            font-family: 'Noto Serif', serif;
+        }
+        .glass-panel {
+            background: rgba(42, 53, 72, 0.7);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(77, 70, 55, 0.2);
+        }
+    </style>
+</head>
+<body class="min-h-screen">
+<!-- SideNavBar (Authority Source: JSON) -->
+<nav class="fixed left-0 top-0 h-full flex flex-col py-8 px-6 z-40 bg-[#101c2e] w-64 font-['Noto_Serif'] text-base">
+<div class="mb-12">
+<h1 class="font-serif text-[#C9A84C] font-bold text-xl tracking-tighter">LegalShield</h1>
+<p class="text-slate-500 font-sans text-[10px] uppercase tracking-[0.2em] mt-1">The Digital Jurist</p>
+</div>
+<div class="space-y-2 flex-1">
+<a class="flex items-center gap-4 px-4 py-3 text-slate-500 font-sans hover:bg-[#1f2a3d] hover:text-[#C9A84C] transition-all duration-400" href="#">
+<span class="material-symbols-outlined" data-icon="book_5">book_5</span>
+<span>Thư viện</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-slate-500 font-sans hover:bg-[#1f2a3d] hover:text-[#C9A84C] transition-all duration-400" href="#">
+<span class="material-symbols-outlined" data-icon="gavel">gavel</span>
+<span>Hợp đồng</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-slate-500 font-sans hover:bg-[#1f2a3d] hover:text-[#C9A84C] transition-all duration-400" href="#">
+<span class="material-symbols-outlined" data-icon="payments">payments</span>
+<span>Bảng giá</span>
+</a>
+<a class="flex items-center gap-4 px-4 py-3 text-[#C9A84C] bg-[#1f2a3d] font-bold translate-x-1 transition-all duration-400" href="#">
+<span class="material-symbols-outlined" data-icon="person">person</span>
+<span>Cài đặt</span>
+</a>
+</div>
+<div class="mt-auto">
+<button class="w-full bg-[#e6c364] text-[#3d2e00] py-3 text-sm font-bold hover:bg-[#c9a84c] transition-colors">
+                Nâng cấp Premium
+            </button>
+</div>
+</nav>
+<!-- Main Content Canvas -->
+<main class="ml-64 min-h-screen">
+<!-- TopAppBar (Authority Source: JSON) -->
+<header class="flex justify-between items-center w-full px-12 h-20 bg-[#071325] border-b border-[#4d4637]/10">
+<div class="flex items-center gap-8">
+<nav class="hidden md:flex gap-8 items-center">
+<a class="text-slate-400 font-sans hover:text-[#C9A84C] text-sm transition-colors duration-400 uppercase tracking-widest" href="#">Thư viện điều khoản</a>
+<a class="text-slate-400 font-sans hover:text-[#C9A84C] text-sm transition-colors duration-400 uppercase tracking-widest" href="#">Bảng giá</a>
+<a class="text-slate-400 font-sans hover:text-[#C9A84C] text-sm transition-colors duration-400 uppercase tracking-widest" href="#">Hỗ trợ</a>
+</nav>
+</div>
+<div class="flex items-center gap-6">
+<div class="flex items-center gap-4 text-slate-400">
+<span class="material-symbols-outlined cursor-pointer hover:text-[#C9A84C]" data-icon="notifications">notifications</span>
+<span class="material-symbols-outlined cursor-pointer hover:text-[#C9A84C]" data-icon="settings">settings</span>
+</div>
+<div class="w-10 h-10 bg-surface-container-high border border-outline-variant/30 flex items-center justify-center">
+<img alt="User Profile Avatar" class="w-full h-full object-cover" data-alt="professional portrait of a legal expert in a dark navy suit with subtle warm lighting and a minimalist background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuC64gTWw-eyrRlU7zGVSsayLpCA6IkR0jSuuf4qzZ-kVsX3aJ6xqNKTgk5l5YuRRCUcKZAaMzghxLwQgXa-qu8PJTQiKrZPN3cDjJdq5XCAPol6ICbFFhoFAvFRnHJnxOt3PIgZQK3-kB2KisZ5tamMIOg3LLvdHMq4K8njDWKErOl57d4xBZRH8vQsNI3k3QK-u9GxbPT53uVXu-VBxiP7laZ5Gh3Iy_2y7YnlQLEdJ7nYLNb6KVH_Dhf4oQQxngapCi7FTGrX_N8"/>
+</div>
+</div>
+</header>
+<!-- Page Header (Editorial Authority) -->
+<section class="px-12 pt-16 pb-12">
+<div class="max-w-5xl">
+<p class="text-primary font-body text-xs uppercase tracking-[0.4em] mb-4">Quản trị viên hệ thống</p>
+<h2 class="serif-display text-5xl font-light text-on-surface tracking-tight mb-2">Hồ sơ &amp; Cài đặt</h2>
+<p class="text-slate-500 font-body text-lg max-w-2xl leading-relaxed">Quản lý danh tính số, các gói đăng ký pháp lý và cấu hình bảo mật dành cho thành viên chuyên nghiệp của LegalShield.</p>
+</div>
+</section>
+<!-- Profile & Settings Content (Bento Grid Style) -->
+<section class="px-12 pb-24">
+<div class="max-w-6xl grid grid-cols-12 gap-8">
+<!-- Left Column: Navigation & Summary -->
+<div class="col-span-12 lg:col-span-4 space-y-8">
+<!-- Profile Card -->
+<div class="bg-surface-container p-8 space-y-6 shadow-[0_20px_40px_rgba(201,168,76,0.03)]">
+<div class="flex flex-col items-center text-center space-y-4">
+<div class="w-32 h-32 border border-primary/20 p-1 relative">
+<img alt="Avatar" class="w-full h-full bg-surface-container-high" data-alt="close-up of professional lawyer avatar with sharp features and a confident expression in a high-contrast dark theme" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDNlUiwfUqyZWkto-QArs0fSD0bBkzHDhUEciGO_1AKLYC-f42z2sgP9_OmgUXz0bjSFO_I2lkZG5w4FFFzyJXLgnCToyZRKwktPOOaou9v059LWmvcRiZH-D-mrVAjB0x62JRMzY2mv9HXfedIqkYQO7PcAOINdnGjCYQLy8hKc_xT8wWK6KBJumfqoegOAltF0zSe_KhJQRgNnRM7rG4iadM2iDMgyPAkKRXhyEc5SC80u9TT__AJFesGXXtZceGsjfcsNLZIn2g"/>
+<button class="absolute bottom-0 right-0 bg-primary text-on-primary p-2 text-xs">
+<span class="material-symbols-outlined" data-icon="edit" style="font-size: 16px;">edit</span>
+</button>
+</div>
+<div>
+<h3 class="serif-display text-xl text-on-surface">Luật sư Nguyễn Văn An</h3>
+<p class="text-slate-500 text-sm font-body">ID: LS-2024-8892</p>
+</div>
+<div class="inline-flex items-center px-3 py-1 bg-secondary-container text-on-secondary-container text-[10px] uppercase tracking-widest font-semibold">
+                                Hội viên Premium
+                            </div>
+</div>
+<div class="pt-6 border-t border-outline-variant/10 space-y-4">
+<div class="flex justify-between text-sm">
+<span class="text-slate-500">Tham gia từ</span>
+<span class="text-on-surface">Tháng 01, 2023</span>
+</div>
+<div class="flex justify-between text-sm">
+<span class="text-slate-500">Trạng thái</span>
+<span class="text-primary">Đang hoạt động</span>
+</div>
+</div>
+</div>
+<!-- Quick Links (Glassmorphism) -->
+<div class="glass-panel p-8 space-y-4">
+<h4 class="serif-display text-lg text-primary mb-4">Lối tắt nhanh</h4>
+<a class="flex items-center justify-between group py-2 border-b border-outline-variant/10" href="#">
+<span class="text-sm text-on-surface group-hover:text-primary transition-colors">Tải xuống chứng chỉ</span>
+<span class="material-symbols-outlined text-sm text-slate-500 group-hover:translate-x-1 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</a>
+<a class="flex items-center justify-between group py-2 border-b border-outline-variant/10" href="#">
+<span class="text-sm text-on-surface group-hover:text-primary transition-colors">Lịch sử giao dịch</span>
+<span class="material-symbols-outlined text-sm text-slate-500 group-hover:translate-x-1 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</a>
+<a class="flex items-center justify-between group py-2" href="#">
+<span class="text-sm text-on-surface group-hover:text-primary transition-colors">Trung tâm bảo mật</span>
+<span class="material-symbols-outlined text-sm text-slate-500 group-hover:translate-x-1 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+</div>
+<!-- Right Column: Settings Form -->
+<div class="col-span-12 lg:col-span-8 space-y-12">
+<!-- Section: Personal Information -->
+<div class="space-y-8" id="thong-tin-ca-nhan">
+<div class="flex items-end gap-4">
+<h3 class="serif-display text-3xl text-on-surface">Thông tin cá nhân</h3>
+<div class="h-[1px] flex-1 bg-outline-variant/20 mb-3"></div>
+</div>
+<div class="grid grid-cols-1 md:grid-cols-2 gap-x-8 gap-y-10">
+<div class="space-y-2 group">
+<label class="block text-xs uppercase tracking-widest text-slate-500 group-focus-within:text-primary transition-colors serif-display">Họ và Tên</label>
+<input class="w-full bg-transparent border-b border-outline outline-none focus:border-primary py-2 text-on-surface transition-colors placeholder-slate-700" type="text" value="Nguyễn Văn An"/>
+</div>
+<div class="space-y-2 group">
+<label class="block text-xs uppercase tracking-widest text-slate-500 group-focus-within:text-primary transition-colors serif-display">Địa chỉ Email</label>
+<input class="w-full bg-transparent border-b border-outline outline-none focus:border-primary py-2 text-on-surface transition-colors" type="email" value="an.nguyen@legalshield.vn"/>
+</div>
+<div class="space-y-2 group">
+<label class="block text-xs uppercase tracking-widest text-slate-500 group-focus-within:text-primary transition-colors serif-display">Số điện thoại</label>
+<input class="w-full bg-transparent border-b border-outline outline-none focus:border-primary py-2 text-on-surface transition-colors" type="text" value="+84 90 123 4567"/>
+</div>
+<div class="space-y-2 group">
+<label class="block text-xs uppercase tracking-widest text-slate-500 group-focus-within:text-primary transition-colors serif-display">Số hiệu thẻ luật sư</label>
+<input class="w-full bg-transparent border-b border-outline outline-none focus:border-primary py-2 text-on-surface transition-colors" type="text" value="VBF-2024-HANOI-001"/>
+</div>
+</div>
+<div class="space-y-2 group">
+<label class="block text-xs uppercase tracking-widest text-slate-500 group-focus-within:text-primary transition-colors serif-display">Địa chỉ văn phòng</label>
+<input class="w-full bg-transparent border-b border-outline outline-none focus:border-primary py-2 text-on-surface transition-colors" type="text" value="Tầng 12, Tòa nhà Landmark, Quận 1, TP. Hồ Chí Minh"/>
+</div>
+</div>
+<!-- Section: Subscription & Billing -->
+<div class="space-y-8 pt-8" id="dang-ky-thanh-toan">
+<div class="flex items-end gap-4">
+<h3 class="serif-display text-3xl text-on-surface">Đăng ký &amp; Thanh toán</h3>
+<div class="h-[1px] flex-1 bg-outline-variant/20 mb-3"></div>
+</div>
+<div class="bg-surface-container-low p-8 border border-primary/10 relative overflow-hidden">
+<div class="absolute top-0 right-0 p-4">
+<span class="material-symbols-outlined text-primary/10 text-8xl" data-icon="verified" style="font-variation-settings: 'FILL' 1;">verified</span>
+</div>
+<div class="relative z-10 space-y-6">
+<div class="flex justify-between items-start">
+<div>
+<p class="text-primary text-xs uppercase tracking-widest font-bold mb-1">Gói hiện tại</p>
+<h4 class="serif-display text-2xl text-on-surface">Hạng Chuyên gia (Professional)</h4>
+</div>
+<div class="text-right">
+<p class="text-2xl serif-display text-on-surface">2.500.000đ</p>
+<p class="text-slate-500 text-xs">/ hàng tháng</p>
+</div>
+</div>
+<div class="grid grid-cols-2 gap-4 text-sm">
+<div class="flex items-center gap-2 text-slate-300">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check_circle">check_circle</span>
+                                        Thư viện 5,000+ mẫu hợp đồng
+                                    </div>
+<div class="flex items-center gap-2 text-slate-300">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check_circle">check_circle</span>
+                                        Hỗ trợ pháp lý AI 24/7
+                                    </div>
+<div class="flex items-center gap-2 text-slate-300">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check_circle">check_circle</span>
+                                        Chữ ký số bảo mật
+                                    </div>
+<div class="flex items-center gap-2 text-slate-300">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check_circle">check_circle</span>
+                                        Lưu trữ đám mây không giới hạn
+                                    </div>
+</div>
+<div class="flex gap-4 pt-4">
+<button class="px-6 py-2 bg-primary text-on-primary text-sm font-bold hover:translate-y-[-2px] transition-transform shadow-[0_10px_20px_rgba(201,168,76,0.1)]">Nâng cấp gói</button>
+<button class="px-6 py-2 border border-outline-variant/30 text-on-surface text-sm hover:bg-surface-container transition-colors">Hủy đăng ký</button>
+</div>
+</div>
+</div>
+<div class="space-y-4">
+<h4 class="text-xs uppercase tracking-widest text-slate-500 serif-display">Phương thức thanh toán</h4>
+<div class="flex items-center justify-between p-4 bg-surface-container border border-outline-variant/10">
+<div class="flex items-center gap-4">
+<div class="w-12 h-8 bg-[#1a1f2e] flex items-center justify-center border border-outline-variant/20">
+<span class="material-symbols-outlined text-secondary" data-icon="credit_card">credit_card</span>
+</div>
+<div>
+<p class="text-sm text-on-surface">Visa ending in •••• 4492</p>
+<p class="text-xs text-slate-500">Expires 12/26</p>
+</div>
+</div>
+<button class="text-xs text-primary uppercase tracking-widest hover:underline">Chỉnh sửa</button>
+</div>
+</div>
+</div>
+<!-- Section: System Settings -->
+<div class="space-y-8 pt-8" id="cai-dat-he-thong">
+<div class="flex items-end gap-4">
+<h3 class="serif-display text-3xl text-on-surface">Cài đặt hệ thống</h3>
+<div class="h-[1px] flex-1 bg-outline-variant/20 mb-3"></div>
+</div>
+<div class="space-y-6">
+<div class="flex items-center justify-between py-4 border-b border-outline-variant/10">
+<div>
+<p class="text-on-surface text-sm font-medium">Thông báo qua Email</p>
+<p class="text-slate-500 text-xs">Nhận cập nhật về các vụ việc và thay đổi điều khoản.</p>
+</div>
+<div class="w-10 h-5 bg-primary-container relative">
+<div class="absolute right-0 top-0 w-5 h-5 bg-primary"></div>
+</div>
+</div>
+<div class="flex items-center justify-between py-4 border-b border-outline-variant/10">
+<div>
+<p class="text-on-surface text-sm font-medium">Xác thực hai yếu tố (2FA)</p>
+<p class="text-slate-500 text-xs">Tăng cường bảo mật cho tài khoản pháp lý của bạn.</p>
+</div>
+<div class="w-10 h-5 bg-surface-container-highest relative">
+<div class="absolute left-0 top-0 w-5 h-5 bg-slate-500"></div>
+</div>
+</div>
+<div class="flex items-center justify-between py-4 border-b border-outline-variant/10">
+<div>
+<p class="text-on-surface text-sm font-medium">Ngôn ngữ hiển thị</p>
+<p class="text-slate-500 text-xs">Chọn ngôn ngữ ưu tiên cho giao diện người dùng.</p>
+</div>
+<select class="bg-transparent border-none text-primary text-sm focus:ring-0 cursor-pointer">
+<option class="bg-[#071325]">Tiếng Việt</option>
+<option class="bg-[#071325]">English (US)</option>
+<option class="bg-[#071325]">Français</option>
+</select>
+</div>
+</div>
+</div>
+<!-- Action Buttons -->
+<div class="pt-12 flex justify-end gap-6">
+<button class="text-slate-500 text-sm uppercase tracking-widest hover:text-on-surface transition-colors">Hủy bỏ</button>
+<button class="bg-primary text-on-primary px-10 py-3 text-sm font-bold shadow-[0_20px_40px_rgba(201,168,76,0.15)] hover:translate-y-[-2px] transition-all">Lưu thay đổi</button>
+</div>
+</div>
+</div>
+</section>
+<!-- Footer (Authority Source: JSON) -->
+<footer class="w-full py-12 px-12 flex justify-between items-center border-t border-[#4d4637]/20 bg-[#071325]">
+<div class="space-y-2">
+<p class="font-serif text-[#C9A84C] text-lg">LegalShield Vietnam</p>
+<p class="font-sans text-[10px] uppercase tracking-widest text-slate-600">© 2024 LegalShield Vietnam. All Rights Reserved. Authority through Restraint.</p>
+</div>
+<div class="flex gap-8">
+<a class="font-sans text-xs uppercase tracking-widest text-slate-600 hover:text-[#C9A84C] transition-opacity opacity-80 hover:opacity-100" href="#">Điều khoản dịch vụ</a>
+<a class="font-sans text-xs uppercase tracking-widest text-slate-600 hover:text-[#C9A84C] transition-opacity opacity-80 hover:opacity-100" href="#">Bảo mật</a>
+<a class="font-sans text-xs uppercase tracking-widest text-slate-600 hover:text-[#C9A84C] transition-opacity opacity-80 hover:opacity-100" href="#">Liên hệ</a>
+</div>
+</footer>
+</main>
+</body></html>

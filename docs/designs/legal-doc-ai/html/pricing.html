@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>Bảng giá dịch vụ | LegalShield</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif:ital,wght@0,300;0,400;0,700;1,300&amp;family=Inter:wght@300;400;500;600&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+      tailwind.config = {
+        darkMode: "class",
+        theme: {
+          extend: {
+            colors: {
+              "secondary": "#b9c8de",
+              "surface-container-high": "#1f2a3d",
+              "primary-fixed": "#ffe08f",
+              "on-tertiary-container": "#41403a",
+              "secondary-container": "#39485a",
+              "tertiary-fixed": "#e7e2da",
+              "on-tertiary": "#32302b",
+              "on-secondary-fixed-variant": "#39485a",
+              "inverse-primary": "#755b00",
+              "surface": "#071325",
+              "on-tertiary-fixed": "#1d1c17",
+              "tertiary-fixed-dim": "#cac6be",
+              "primary": "#e6c364",
+              "outline": "#99907e",
+              "surface-bright": "#2e394d",
+              "error-container": "#93000a",
+              "on-secondary-container": "#a7b6cc",
+              "on-background": "#d7e3fc",
+              "on-secondary-fixed": "#0d1c2d",
+              "error": "#ffb4ab",
+              "surface-dim": "#071325",
+              "surface-variant": "#2a3548",
+              "primary-container": "#c9a84c",
+              "primary-fixed-dim": "#e6c364",
+              "outline-variant": "#4d4637",
+              "on-surface-variant": "#d0c5b2",
+              "on-primary-fixed-variant": "#584400",
+              "inverse-surface": "#d7e3fc",
+              "surface-tint": "#e6c364",
+              "on-primary": "#3d2e00",
+              "on-primary-container": "#503d00",
+              "on-surface": "#d7e3fc",
+              "on-error": "#690005",
+              "surface-container-highest": "#2a3548",
+              "secondary-fixed-dim": "#b9c8de",
+              "on-primary-fixed": "#241a00",
+              "on-error-container": "#ffdad6",
+              "secondary-fixed": "#d4e4fa",
+              "on-secondary": "#233143",
+              "inverse-on-surface": "#253144",
+              "tertiary-container": "#afaba4",
+              "tertiary": "#cbc6bf",
+              "surface-container-lowest": "#030e20",
+              "surface-container": "#142032",
+              "surface-container-low": "#101c2e",
+              "on-tertiary-fixed-variant": "#494741",
+              "background": "#071325"
+            },
+            fontFamily: {
+              "headline": ["Noto Serif"],
+              "body": ["Inter"],
+              "label": ["Inter"]
+            },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+          },
+        },
+      }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        .editorial-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 2rem;
+        }
+        body {
+            background-color: #071325;
+            color: #d7e3fc;
+            -webkit-font-smoothing: antialiased;
+        }
+    </style>
+</head>
+<body class="font-body selection:bg-primary/30">
+<!-- Top Navigation Shell -->
+<header class="bg-[#071325] fixed top-0 left-0 w-full z-50">
+<div class="flex justify-between items-center w-full px-12 h-20 max-w-[1920px] mx-auto">
+<div class="text-2xl font-serif text-[#C9A84C] tracking-tighter font-bold">LegalShield</div>
+<nav class="hidden md:flex items-center space-x-12">
+<a class="text-slate-400 font-sans hover:text-[#C9A84C] transition-colors duration-400" href="#">Thư viện điều khoản</a>
+<a class="text-[#C9A84C] border-b border-[#C9A84C] pb-1 font-sans" href="#">Bảng giá</a>
+<a class="text-slate-400 font-sans hover:text-[#C9A84C] transition-colors duration-400" href="#">Hỗ trợ</a>
+</nav>
+<div class="flex items-center space-x-6">
+<button class="text-slate-400 hover:text-[#C9A84C] transition-colors">
+<span class="material-symbols-outlined" data-icon="notifications">notifications</span>
+</button>
+<div class="h-10 w-10 bg-surface-container-high overflow-hidden">
+<img alt="User Profile Avatar" class="w-full h-full object-cover" data-alt="close-up portrait of a professional lawyer in a sharp dark suit against a blurred architectural background" src="https://lh3.googleusercontent.com/aida-public/AB6AXuDYo6vvbQy_ijvv8IONMPP57jMoLtbqVHoUMYQCZ71ARZjfVTFmVMJfi9dtp10ApQn7S1tiWii-ZE9zyzdVyTEDogmeiCr7ebRFv1SbX4Q00z1yEKi40QQr8k3yzcxaK5Vmg6mIqMQRO8hNw73j5cT2Yj3FrFBp-dxjRFjpDrba6wUvoaGBH-olNjUtEC-Go4t_psaRD3wjfcdUq-JwShsiCW4FifKoXUUHTBJWudBCoySjBiOCOZdQgLUjjugkzwPxzVqKVx_RY1k"/>
+</div>
+</div>
+</div>
+</header>
+<main class="pt-32 pb-24 px-6 md:px-12 max-w-[1920px] mx-auto">
+<!-- Hero Section: Intentional Asymmetry -->
+<section class="editorial-grid mb-24">
+<div class="col-span-12 md:col-span-8 lg:col-span-7">
+<span class="text-primary font-headline italic text-xl mb-4 block">Lựa chọn sự bảo hộ tối ưu</span>
+<h1 class="text-5xl md:text-7xl font-headline font-light tracking-tight leading-tight mb-8">
+                    Đầu tư vào sự <span class="text-primary italic">minh bạch</span> pháp lý.
+                </h1>
+<p class="text-secondary text-lg leading-relaxed max-w-xl font-light">
+                    Hệ thống gói dịch vụ của LegalShield được thiết kế để mang lại quyền năng pháp lý tương đương một văn phòng luật sư cao cấp, sẵn sàng hỗ trợ bạn mọi lúc, mọi nơi.
+                </p>
+</div>
+</section>
+<!-- Pricing Cards Section -->
+<section class="grid grid-cols-1 lg:grid-cols-3 gap-0 border-y border-outline-variant/20">
+<!-- Personal Tier -->
+<div class="p-12 border-r border-outline-variant/20 bg-surface-container-low transition-colors hover:bg-surface-container">
+<div class="mb-16">
+<h3 class="font-headline text-2xl text-on-surface mb-2">Cá nhân</h3>
+<p class="text-slate-500 text-sm font-sans uppercase tracking-widest mb-8">Giải pháp cơ bản</p>
+<div class="flex items-baseline space-x-2">
+<span class="text-4xl font-headline text-primary">299k</span>
+<span class="text-slate-500 font-sans">/ tháng</span>
+</div>
+</div>
+<div class="space-y-6 mb-16">
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check">check</span>
+<span class="text-on-surface-variant font-light">Thư viện 500+ mẫu hợp đồng</span>
+</div>
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check">check</span>
+<span class="text-on-surface-variant font-light">Xuất văn bản (PDF/Word)</span>
+</div>
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check">check</span>
+<span class="text-on-surface-variant font-light">Phân tích AI cơ bản</span>
+</div>
+<div class="flex items-center space-x-3 opacity-30">
+<span class="material-symbols-outlined text-sm" data-icon="close">close</span>
+<span class="text-on-surface-variant font-light line-through">Ký số pháp lý tập trung</span>
+</div>
+</div>
+<button class="w-full py-4 border border-outline-variant/40 text-primary font-sans tracking-widest uppercase text-xs hover:bg-primary hover:text-on-primary transition-all duration-300">
+                    Bắt đầu ngay
+                </button>
+</div>
+<!-- Professional Tier (Featured) -->
+<div class="p-12 border-r border-outline-variant/20 bg-[#142032] relative overflow-hidden group">
+<!-- Golden Glow Accent -->
+<div class="absolute top-0 right-0 w-32 h-32 bg-primary/5 blur-[80px]"></div>
+<div class="mb-16">
+<div class="flex justify-between items-start">
+<div>
+<h3 class="font-headline text-2xl text-primary mb-2">Chuyên nghiệp</h3>
+<p class="text-primary-fixed/60 text-sm font-sans uppercase tracking-widest mb-8">Dành cho Freelancer &amp; SME</p>
+</div>
+<span class="bg-primary-container/20 text-primary px-3 py-1 text-[10px] uppercase tracking-tighter border border-primary/20">Phổ biến nhất</span>
+</div>
+<div class="flex items-baseline space-x-2">
+<span class="text-5xl font-headline text-primary">899k</span>
+<span class="text-slate-500 font-sans">/ tháng</span>
+</div>
+</div>
+<div class="space-y-6 mb-16">
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check</span>
+<span class="text-on-surface font-normal">Toàn bộ thư viện hợp đồng</span>
+</div>
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check</span>
+<span class="text-on-surface font-normal">Phân tích AI chuyên sâu</span>
+</div>
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check</span>
+<span class="text-on-surface font-normal">Ký số pháp lý không giới hạn</span>
+</div>
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check" data-weight="fill" style="font-variation-settings: 'FILL' 1;">check</span>
+<span class="text-on-surface font-normal">Tư vấn nhanh từ chuyên gia</span>
+</div>
+</div>
+<button class="w-full py-4 bg-primary text-on-primary font-sans tracking-widest uppercase text-xs hover:bg-primary-container translate-y-0 hover:-translate-y-1 transition-all duration-300 shadow-[0_20px_40px_rgba(201,168,76,0.08)]">
+                    Nâng cấp Premium
+                </button>
+</div>
+<!-- Enterprise Tier -->
+<div class="p-12 bg-surface-container-low transition-colors hover:bg-surface-container">
+<div class="mb-16">
+<h3 class="font-headline text-2xl text-on-surface mb-2">Doanh nghiệp</h3>
+<p class="text-slate-500 text-sm font-sans uppercase tracking-widest mb-8">Tập đoàn &amp; Tổ chức</p>
+<div class="flex items-baseline space-x-2">
+<span class="text-4xl font-headline text-primary">Liên hệ</span>
+</div>
+</div>
+<div class="space-y-6 mb-16">
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check">check</span>
+<span class="text-on-surface-variant font-light">Quản trị phân quyền đa tầng</span>
+</div>
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check">check</span>
+<span class="text-on-surface-variant font-light">Tùy chỉnh API tích hợp</span>
+</div>
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check">check</span>
+<span class="text-on-surface-variant font-light">Luật sư đại diện riêng</span>
+</div>
+<div class="flex items-center space-x-3">
+<span class="material-symbols-outlined text-primary text-sm" data-icon="check">check</span>
+<span class="text-on-surface-variant font-light">Bảo mật chuẩn Military-grade</span>
+</div>
+</div>
+<button class="w-full py-4 border border-outline-variant/40 text-primary font-sans tracking-widest uppercase text-xs hover:bg-primary hover:text-on-primary transition-all duration-300">
+                    Liên hệ tư vấn
+                </button>
+</div>
+</section>
+<!-- Feature Comparison (Editorial style) -->
+<section class="mt-32">
+<div class="max-w-4xl">
+<h2 class="font-headline text-3xl mb-12">Chi tiết tính năng</h2>
+<div class="space-y-0">
+<!-- Row 1 -->
+<div class="grid grid-cols-12 py-8 border-b border-outline-variant/10 items-center group">
+<div class="col-span-12 md:col-span-6 mb-4 md:mb-0">
+<h4 class="font-headline text-lg text-on-surface group-hover:text-primary transition-colors">AI Analysis (Phân tích AI)</h4>
+<p class="text-slate-500 text-sm font-light mt-1">Sử dụng mô hình ngôn ngữ lớn để rà soát rủi ro tiềm ẩn trong hợp đồng.</p>
+</div>
+<div class="col-span-4 md:col-span-2 text-center text-slate-400 font-light text-sm">Cơ bản</div>
+<div class="col-span-4 md:col-span-2 text-center text-primary font-medium text-sm">Nâng cao</div>
+<div class="col-span-4 md:col-span-2 text-center text-secondary font-light text-sm">Tùy chỉnh</div>
+</div>
+<!-- Row 2 -->
+<div class="grid grid-cols-12 py-8 border-b border-outline-variant/10 items-center group">
+<div class="col-span-12 md:col-span-6 mb-4 md:mb-0">
+<h4 class="font-headline text-lg text-on-surface group-hover:text-primary transition-colors">Document Export</h4>
+<p class="text-slate-500 text-sm font-light mt-1">Hỗ trợ các định dạng .docx, .pdf, .odt với watermark bảo mật.</p>
+</div>
+<div class="col-span-4 md:col-span-2 text-center text-slate-400 font-light text-sm">Có</div>
+<div class="col-span-4 md:col-span-2 text-center text-primary font-medium text-sm">Vô hạn</div>
+<div class="col-span-4 md:col-span-2 text-center text-secondary font-light text-sm">Vô hạn</div>
+</div>
+<!-- Row 3 -->
+<div class="grid grid-cols-12 py-8 border-b border-outline-variant/10 items-center group">
+<div class="col-span-12 md:col-span-6 mb-4 md:mb-0">
+<h4 class="font-headline text-lg text-on-surface group-hover:text-primary transition-colors">Contract Library</h4>
+<p class="text-slate-500 text-sm font-light mt-1">Hệ thống mẫu văn bản pháp lý được cập nhật hàng tuần theo luật Việt Nam.</p>
+</div>
+<div class="col-span-4 md:col-span-2 text-center text-slate-400 font-light text-sm">500+ mẫu</div>
+<div class="col-span-4 md:col-span-2 text-center text-primary font-medium text-sm">10.000+ mẫu</div>
+<div class="col-span-4 md:col-span-2 text-center text-secondary font-light text-sm">Full access</div>
+</div>
+</div>
+</div>
+</section>
+<!-- Trust Section / CTA -->
+<section class="mt-32 editorial-grid bg-surface-container py-20 px-12">
+<div class="col-span-12 lg:col-span-6">
+<h2 class="text-4xl font-headline font-light mb-8">Bạn cần một giải pháp <span class="italic text-primary">đặc thù?</span></h2>
+<p class="text-secondary mb-12 font-light leading-relaxed">Nếu doanh nghiệp của bạn có quy trình vận hành phức tạp, đội ngũ chuyên gia của chúng tôi sẵn sàng xây dựng một lộ trình riêng biệt.</p>
+<a class="inline-flex items-center space-x-4 group text-primary tracking-widest uppercase text-xs" href="#">
+<span>Trò chuyện cùng chuyên gia</span>
+<span class="material-symbols-outlined group-hover:translate-x-2 transition-transform" data-icon="arrow_forward">arrow_forward</span>
+</a>
+</div>
+<div class="hidden lg:block lg:col-span-5 lg:col-start-8 relative">
+<div class="absolute inset-0 bg-primary/5 -translate-x-4 -translate-y-4"></div>
+<img alt="High-end law office interior" class="w-full h-full object-cover relative z-10 opacity-60" data-alt="ultra-modern minimalist law office interior with dark marble textures golden accent lighting and large glass windows overlooking a city skyline at dusk" src="https://lh3.googleusercontent.com/aida-public/AB6AXuAWfM6khUkEiudEEVXpPRpyuM4yyzZUNBUYt6WKuRlyoDYOdUK0kV2108Cfv9G4nSDtSPgqFq0zo0yOur77SZ_RLHxkwb9c-JYRdrbaQ3DNR1GhtwcO7qajdv8Qx8Q16ttwus5P5kZbPKjdE8ichbUPx1id-CLfXt7TmbFRjOkZFDPyUi-3VmccIPjbscMaIAI4cyjSBrj1OUBukbj7LWRbJIw_5bIDPRvfmXTf-uEtKWM6oQeHFr21ojfXuu8VDmGn7iL64xLbs38"/>
+</div>
+</section>
+</main>
+<!-- Footer -->
+<footer class="w-full py-12 px-12 flex justify-between items-center border-t border-[#4d4637]/20 bg-[#071325]">
+<div class="flex flex-col space-y-2">
+<div class="font-serif text-[#C9A84C] text-lg font-bold">LegalShield</div>
+<p class="font-sans text-xs uppercase tracking-widest text-slate-600">© 2024 LegalShield Vietnam. All Rights Reserved. Authority through Restraint.</p>
+</div>
+<div class="flex space-x-8">
+<a class="font-sans text-xs uppercase tracking-widest text-slate-600 hover:text-[#C9A84C] transition-opacity" href="#">Điều khoản dịch vụ</a>
+<a class="font-sans text-xs uppercase tracking-widest text-slate-600 hover:text-[#C9A84C] transition-opacity" href="#">Bảo mật</a>
+<a class="font-sans text-xs uppercase tracking-widest text-slate-600 hover:text-[#C9A84C] transition-opacity" href="#">Liên hệ</a>
+</div>
+</footer>
+</body></html>

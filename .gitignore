@@ -1,0 +1,47 @@
+# IDEs & Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS Files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Dependencies
+node_modules/
+/jspm_packages/
+
+# Build & Output
+dist/
+build/
+.vercel/
+.next/
+out/
+
+# Environment & Secrets (CRITICAL)
+.env
+.env.local
+.env.*.local
+*.env
+supabase/.env
+supabase/.env.local
+!*.env.example
+!supabase/.env.example
+
+# Supabase
+supabase/.temp/
+supabase/functions/.env
+
+# AI / Agents
+.gitnexus/
+.agents/
+.stitch/
+.claude/
+.gemini/
+.agent/
+_agents/
+_agent/
+AGENTS.md
+CLAUDE.md

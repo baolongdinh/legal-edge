@@ -1,0 +1,54 @@
+:root {
+  /* BACKGROUNDS */
+  --color-bg-primary: #0A1628;
+  --color-bg-secondary: #0F1E32;
+  --color-bg-card: #111D2E;
+  --color-bg-document: #F5F0E8;
+
+  /* ACCENTS & METALS */
+  --color-gold-primary: #C9A84C;
+  --color-gold-muted: #8B6914;
+  --color-border: rgba(201, 168, 114, 0.2);
+
+  /* TYPOGRAPHY */
+  --color-text-primary: #F0EBE0;
+  --color-text-muted: #8899AA;
+
+  /* RISK STATUS */
+  --color-risk-critical: #7F1D1D;
+  --color-risk-warning: #92400E;
+  --color-risk-note: #1E3A5F;
+
+  /* SPACING & SHAPE */
+  --radius-sharp: 0px;
+  --radius-soft: 8px;
+  --container-max-width: 1440px;
+
+  /* TRANSITIONS */
+  --transition-standard: 400ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* TYPOGRAPHY RULES */
+h1, h2, h3, .editorial-serif {
+  font-family: 'Cormorant Garamond', serif;
+  font-weight: 600;
+  color: var(--color-gold-primary);
+}
+
+.contract-text {
+  font-family: 'Crimson Pro', serif;
+  font-size: 16px;
+  line-height: 1.8;
+  color: #1A1A1A; /* High contrast for document reading */
+}
+
+.mono-ref {
+  font-family: 'JetBrains Mono', monospace;
+  font-size: 13px;
+  letter-spacing: 0.05em;
+}
+
+body {
+  font-family: 'Inter', sans-serif;
+  -webkit-font-smoothing: antialiased;
+}

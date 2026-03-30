@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+
+<html class="dark" lang="vi"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>LegalShield | Phân tích Hợp đồng thuê kho bãi</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,600;0,700;1,400&amp;family=Inter:wght@400;500;600&amp;family=Crimson+Pro:ital,wght@0,400;0,600;1,400&amp;family=JetBrains+Mono:wght@400;500&amp;family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "outline-variant": "#4d4637",
+                        "inverse-surface": "#d7e3fc",
+                        "on-primary-fixed": "#241a00",
+                        "on-tertiary-fixed": "#410004",
+                        "on-secondary-fixed-variant": "#5c4300",
+                        "on-secondary": "#402d00",
+                        "primary-container": "#c9a84c",
+                        "tertiary-fixed-dim": "#ffb3ad",
+                        "secondary-fixed": "#ffdfa0",
+                        "outline": "#99907e",
+                        "on-error": "#690005",
+                        "on-tertiary-container": "#7c1a1b",
+                        "surface-container-lowest": "#030e20",
+                        "surface-tint": "#e6c364",
+                        "on-surface": "#d7e3fc",
+                        "inverse-primary": "#755b00",
+                        "surface-variant": "#2a3548",
+                        "on-secondary-container": "#ffd375",
+                        "error": "#ffb4ab",
+                        "background": "#0A1628",
+                        "on-tertiary-fixed-variant": "#852221",
+                        "on-tertiary": "#65080d",
+                        "surface": "#0A1628",
+                        "surface-container-high": "#1f2a3d",
+                        "tertiary-container": "#ff8a82",
+                        "primary-fixed": "#ffe08f",
+                        "error-container": "#93000a",
+                        "secondary-container": "#795900",
+                        "on-primary": "#3d2e00",
+                        "surface-container-highest": "#2a3548",
+                        "inverse-on-surface": "#253144",
+                        "surface-dim": "#071325",
+                        "on-error-container": "#ffdad6",
+                        "secondary-fixed-dim": "#ecc165",
+                        "primary": "#e6c364",
+                        "on-surface-variant": "#A0AEC0",
+                        "surface-container": "#0F1E32",
+                        "surface-container-low": "#0A1628",
+                        "tertiary-fixed": "#ffdad7",
+                        "primary-fixed-dim": "#e6c364",
+                        "surface-bright": "#162539",
+                        "tertiary": "#ffb4ae",
+                        "on-primary-fixed-variant": "#584400",
+                        "on-background": "#F0EBE0",
+                        "secondary": "#ecc165",
+                        "on-primary-container": "#503d00",
+                        "on-secondary-fixed": "#261a00"
+                    },
+                    fontFamily: {
+                        "headline": ["Cormorant Garamond", "serif"],
+                        "body": ["Inter", "sans-serif"],
+                        "serif-body": ["Crimson Pro", "serif"],
+                        "mono": ["JetBrains Mono", "monospace"]
+                    },
+                    borderRadius: { "DEFAULT": "0.125rem", "lg": "0.25rem", "xl": "0.5rem", "full": "0.75rem" },
+                },
+            },
+        }
+    </script>
+<style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        .document-paper {
+            background-color: #F5F0E8;
+            color: #1A1A1A;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+        }
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 4px;
+        }
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: rgba(230, 195, 100, 0.2);
+        }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: rgba(230, 195, 100, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-background text-on-surface font-body min-h-screen flex flex-col">
+<!-- TopNavBar -->
+<nav class="bg-[#0A1628]/95 backdrop-blur-md fixed top-0 w-full z-50 border-b border-[#E6C364]/10">
+<div class="flex justify-between items-center px-8 h-20 w-full max-w-7xl mx-auto">
+<div class="flex items-center gap-12">
+<span class="font-['Cormorant_Garamond'] text-2xl font-bold text-[#F0EBE0]">LegalShield</span>
+<div class="hidden md:flex items-center gap-8">
+<a class="font-['Inter'] text-sm tracking-wide text-[#F0EBE0]/70 hover:text-[#E6C364] transition-colors" href="#">Trang chủ</a>
+<a class="font-['Inter'] text-sm tracking-wide text-[#E6C364] font-medium border-b border-[#E6C364] pb-1" href="#">Tính năng</a>
+<a class="font-['Inter'] text-sm tracking-wide text-[#F0EBE0]/70 hover:text-[#E6C364] transition-colors" href="#">Bảng giá</a>
+</div>
+</div>
+<div class="flex items-center gap-4">
+<button class="font-['Inter'] text-sm tracking-wide text-[#F0EBE0]/70 hover:text-[#F0EBE0] transition-colors">Đăng nhập</button>
+<button class="bg-[#E6C364] text-[#0A1628] px-6 py-2 rounded-sm font-bold text-sm transition-all hover:brightness-110">Liên hệ</button>
+</div>
+</div>
+</nav>
+<!-- Header / Breadcrumb & Actions -->
+<header class="mt-20 px-8 py-4 border-b border-[#E6C364]/10 flex justify-between items-center bg-[#0F1E32]">
+<div class="flex items-center gap-2 text-sm text-[#A0AEC0] font-body">
+<span class="hover:text-primary transition-colors cursor-pointer">Thư viện</span>
+<span class="material-symbols-outlined text-[16px]">chevron_right</span>
+<span class="text-[#F0EBE0]">Hợp đồng thuê kho bãi</span>
+</div>
+<div class="flex items-center gap-4">
+<button class="flex items-center gap-2 px-4 py-1.5 border border-[#E6C364]/20 text-[#A0AEC0] hover:text-primary hover:border-[#E6C364]/50 transition-colors text-sm font-medium">
+<span class="material-symbols-outlined text-sm">share</span>
+<span>Chia sẻ</span>
+</button>
+<button class="flex items-center gap-2 px-4 py-1.5 border border-[#E6C364]/20 text-[#A0AEC0] hover:text-primary hover:border-[#E6C364]/50 transition-colors text-sm font-medium">
+<span class="material-symbols-outlined text-sm">download</span>
+<span>Tải xuống</span>
+</button>
+</div>
+</header>
+<!-- Main Workspace -->
+<main class="flex-grow flex w-full max-w-[1440px] mx-auto overflow-hidden">
+<!-- LEFT PANEL: Contract Viewer -->
+<section class="w-7/12 h-[calc(100vh-148px)] overflow-y-auto custom-scrollbar p-12 bg-[#0A1628] flex justify-center border-r border-[#E6C364]/10">
+<div class="document-paper w-full max-w-3xl min-h-[1200px] p-16 font-serif-body leading-[1.8] text-[16px]">
+<h1 class="text-2xl font-bold text-center mb-12 uppercase tracking-widest border-b border-black/10 pb-8">HỢP ĐỒNG THUÊ KHO BÃI</h1>
+<p class="mb-6 font-semibold">Số: 142/2024/HDTKB-LS</p>
+<p class="mb-8">Hôm nay, ngày 24 tháng 05 năm 2024, tại TP. Hồ Chí Minh, chúng tôi gồm các bên sau đây:</p>
+<div class="space-y-4 mb-10">
+<div>
+<p class="font-bold">BÊN CHO THUÊ (BÊN A): CÔNG TY CỔ PHẦN LOGISTICS ĐÔNG NAM</p>
+<p>Địa chỉ: KCN Cát Lái, Quận 2, TP. Thủ Đức, TP. Hồ Chí Minh</p>
+<p>Đại diện: Ông Nguyễn Văn An - Chức vụ: Giám đốc</p>
+</div>
+<div>
+<p class="font-bold">BÊN THUÊ (BÊN B): CÔNG TY TNHH THƯƠNG MẠI DỊCH VỤ GIAO NHẬN</p>
+<p>Địa chỉ: 456 Lê Văn Sỹ, Quận 3, TP. Hồ Chí Minh</p>
+<p>Đại diện: Bà Lê Thị Bình - Chức vụ: Quản lý vận hành</p>
+</div>
+</div>
+<div class="space-y-10">
+<section>
+<h2 class="font-bold text-lg mb-4">Điều 1: Nội dung thỏa thuận</h2>
+<p>Bên A đồng ý cho Bên B thuê diện tích kho bãi tại địa chỉ nêu trên với tổng diện tích 500m2. Mục đích sử dụng: Lưu kho hàng gia dụng và đồ điện tử.</p>
+</section>
+<section class="relative group">
+<div class="absolute -left-16 top-0 bottom-0 w-[4px] bg-[#C9A84C]"></div>
+<div class="bg-[#E6C364]/5 -mx-4 px-4 py-2">
+<h2 class="font-bold text-lg mb-4">Điều 5: Trách nhiệm bồi thường thiệt hại</h2>
+<p class="mb-4">5.1. Bên A chịu trách nhiệm bảo quản hàng hóa trong tình trạng nguyên vẹn như khi nhận từ Bên B.</p>
+<p class="italic text-[#795900] font-semibold">5.2. Trong trường hợp xảy ra hỏa hoạn, thiên tai hoặc các sự kiện bất khả kháng dẫn đến hư hỏng hàng hóa, Bên A được miễn trừ toàn bộ trách nhiệm bồi thường cho Bên B, bất kể các biện pháp phòng ngừa đã được thực hiện hay chưa.</p>
+</div>
+</section>
+<section>
+<h2 class="font-bold text-lg mb-4">Điều 8: Chấm dứt hợp đồng</h2>
+<p>Bên A có quyền đơn phương chấm dứt hợp đồng mà không cần báo trước nếu Bên B chậm thanh toán tiền thuê quá 05 ngày. Trong trường hợp này, Bên A có quyền giữ lại toàn bộ hàng hóa trong kho cho đến khi nhận được thanh toán đầy đủ.</p>
+</section>
+</div>
+</div>
+</section>
+<!-- RIGHT PANEL: Risk Analysis -->
+<aside class="w-5/12 h-[calc(100vh-148px)] overflow-y-auto custom-scrollbar p-10 bg-[#0F1E32] flex flex-col">
+<div class="mb-8">
+<h2 class="font-headline text-3xl text-[#E6C364] font-semibold mb-2">Phân tích rủi ro hợp đồng</h2>
+<p class="text-[#A0AEC0] text-sm font-body">Hệ thống AI đã phát hiện 3 điểm rủi ro pháp lý cần chú ý.</p>
+</div>
+<div class="space-y-6 flex-grow">
+<!-- Card 1: Critical -->
+<div class="bg-[#0A1628] border-l-4 border-l-[#ff5555] border-t border-r border-b border-[#E6C364]/10 p-6 shadow-2xl transition-all hover:border-[#E6C364]/30 hover:bg-[#162539]">
+<div class="flex items-center justify-between mb-4">
+<span class="bg-[#ff5555]/10 text-[#ff5555] border border-[#ff5555]/30 text-[10px] font-bold px-2 py-0.5 tracking-[0.1em]">NGHIÊM TRỌNG</span>
+<span class="font-mono text-[11px] text-[#A0AEC0]">ĐIỀU 5.2</span>
+</div>
+<h3 class="text-[#F0EBE0] font-semibold mb-2 text-base">Miễn trừ trách nhiệm quá mức</h3>
+<p class="text-sm text-[#A0AEC0] leading-relaxed mb-4">
+                    Điều khoản 5.2 cho phép Bên A miễn trừ trách nhiệm bồi thường ngay cả khi không thực hiện các biện pháp phòng ngừa cần thiết. Điều này vi phạm nguyên tắc cơ bản của nghĩa vụ bảo quản tài sản.
+                </p>
+<p class="text-xs italic text-[#E6C364] font-serif-body">Vi phạm Điều 585 Bộ luật Dân sự 2015 về nguyên tắc bồi thường thiệt hại.</p>
+</div>
+<!-- Card 2: Warning -->
+<div class="bg-[#0A1628] border-l-4 border-l-[#F6AD55] border-t border-r border-b border-[#E6C364]/10 p-6 shadow-2xl transition-all hover:border-[#E6C364]/30 hover:bg-[#162539]">
+<div class="flex items-center justify-between mb-4">
+<span class="bg-[#F6AD55]/10 text-[#F6AD55] border border-[#F6AD55]/30 text-[10px] font-bold px-2 py-0.5 tracking-[0.1em]">CẦN LƯU Ý</span>
+<span class="font-mono text-[11px] text-[#A0AEC0]">ĐIỀU 8</span>
+</div>
+<h3 class="text-[#F0EBE0] font-semibold mb-2 text-base">Quyền cầm giữ hàng hóa trái luật</h3>
+<p class="text-sm text-[#A0AEC0] leading-relaxed mb-4">
+                    Quyền "giữ lại toàn bộ hàng hóa" mà không có sự đồng ý của cơ quan thẩm quyền hoặc thỏa thuận cụ thể về biện pháp bảo đảm có thể bị coi là hành vi chiếm giữ tài sản trái phép.
+                </p>
+<p class="text-xs italic text-[#E6C364] font-serif-body">Tham chiếu Điều 346 Bộ luật Dân sự 2015 về Cầm giữ tài sản.</p>
+</div>
+<!-- Card 3: Info -->
+<div class="bg-[#0A1628] border-l-4 border-l-[#63B3ED] border-t border-r border-b border-[#E6C364]/10 p-6 shadow-2xl transition-all hover:border-[#E6C364]/30 hover:bg-[#162539]">
+<div class="flex items-center justify-between mb-4">
+<span class="bg-[#63B3ED]/10 text-[#63B3ED] border border-[#63B3ED]/30 text-[10px] font-bold px-2 py-0.5 tracking-[0.1em]">LƯU Ý</span>
+<span class="font-mono text-[11px] text-[#A0AEC0]">ĐIỀU 1</span>
+</div>
+<h3 class="text-[#F0EBE0] font-semibold mb-2 text-base">Thiếu chi tiết về hiện trạng kho</h3>
+<p class="text-sm text-[#A0AEC0] leading-relaxed mb-4">
+                    Hợp đồng không đính kèm biên bản bàn giao mô tả tình trạng kỹ thuật, hệ thống PCCC và tiêu chuẩn an ninh của kho bãi tại thời điểm thuê.
+                </p>
+<p class="text-xs italic text-[#E6C364] font-serif-body">Khuyến nghị bổ sung Phụ lục 01: Biên bản bàn giao hiện trạng.</p>
+</div>
+</div>
+<!-- Action Button -->
+<div class="mt-10 pt-6 border-t border-[#E6C364]/10">
+<button class="w-full bg-[#E6C364] text-[#0A1628] py-4 font-bold tracking-[0.15em] hover:brightness-110 transition-all flex items-center justify-center gap-3">
+<span class="material-symbols-outlined font-bold">picture_as_pdf</span>
+                XUẤT BÁO CÁO PDF
+            </button>
+</div>
+</aside>
+</main>
+<!-- Footer -->
+<footer class="bg-[#0A1628] border-t border-[#E6C364]/10">
+<div class="flex flex-col items-center py-12 px-4 space-y-6 w-full max-w-7xl mx-auto">
+<span class="font-['Cormorant_Garamond'] text-xl font-bold text-[#F0EBE0]">LegalShield</span>
+<div class="flex gap-8">
+<a class="text-[#A0AEC0] hover:text-[#E6C364] transition-colors text-sm font-['Inter']" href="#">Trang chủ</a>
+<a class="text-[#A0AEC0] hover:text-[#E6C364] transition-colors text-sm font-['Inter']" href="#">Tính năng</a>
+<a class="text-[#A0AEC0] hover:text-[#E6C364] transition-colors text-sm font-['Inter']" href="#">Bảng giá</a>
+<a class="text-[#A0AEC0] hover:text-[#E6C364] transition-colors text-sm font-['Inter']" href="#">Liên hệ</a>
+</div>
+<p class="font-['Inter'] text-sm tracking-tight text-[#A0AEC0]/50">© 2024 LegalShield. High-End Editorial Authority.</p>
+</div>
+</footer>
+</body></html>
