@@ -103,6 +103,7 @@ Focus on high-signal findings. Limit to 50 findings total; aggregate remainder i
 - Requirements with zero associated tasks
 - Tasks with no mapped requirement/story
 - Success Criteria requiring buildable work (performance, security, availability) not reflected in tasks
+- For AI legal advisory / RAG / legal research features: missing tasks for source policy, retrieval-first evidence gathering, citation verification, abstention handling, citation rendering, and evaluation MUST be flagged as a coverage gap
 
 #### F. Inconsistency
 
@@ -117,6 +118,7 @@ Use this heuristic to prioritize findings:
 
 - **CRITICAL**: Violates constitution MUST, missing core spec artifact, or requirement with zero coverage that blocks baseline functionality
 - **HIGH**: Duplicate or conflicting requirement, ambiguous security/performance attribute, untestable acceptance criterion
+- **HIGH**: AI legal advisory tasks exist but omit citation verification, evidence validation, or abstention behavior
 - **MEDIUM**: Terminology drift, missing non-functional task coverage, underspecified edge case
 - **LOW**: Style/wording improvements, minor redundancy not affecting execution order
 

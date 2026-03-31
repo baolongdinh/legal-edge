@@ -1,9 +1,13 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import { FileText, Clock, TrendingUp, Plus, Loader2 } from 'lucide-react'
+import { FileText, AlertTriangle, TrendingUp, Plus, Loader2, Trash2, Sparkles, Clock } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 import { Button } from '../components/ui/Button'
 import { RiskBadge } from '../components/ui/RiskBadge'
 import { Typography } from '../components/ui/Typography'
+import { Dialog } from '../components/ui/Dialog'
+import { Skeleton } from '../components/ui/Skeleton'
 import { supabase } from '../lib/supabase'
 
 interface ContractWithRisks {
@@ -13,6 +17,13 @@ interface ContractWithRisks {
     status: string
     risk_count: number
     max_risk_level: 'critical' | 'moderate' | 'note'
+}
+
+interface DashboardStat {
+    label: string
+    value: string
+    icon: typeof FileText
+    tone?: 'default' | 'danger' | 'accent'
 }
 
 function formatRelativeTime(dateStr: string) {
@@ -33,148 +44,267 @@ export function Dashboard() {
     const [contracts, setContracts] = useState<ContractWithRisks[]>([])
     const [loading, setLoading] = useState(true)
     const [isRefreshing, setIsRefreshing] = useState(false)
-    const [stats, setStats] = useState([
-        { label: 'Hợp đồng đã phân tích', value: '0', icon: FileText },
-        { label: 'Rủi ro được phát hiện', value: '0', icon: TrendingUp },
-        { label: 'Giờ tiết kiệm được', value: '0h', icon: Clock },
+    const [deletingId, setDeletingId] = useState<string | null>(null)
+    const [confirmId, setConfirmId] = useState<string | null>(null)
+    const [isDeleting, setIsDeleting] = useState(false)
+    const [stats, setStats] = useState<DashboardStat[]>([
+        { label: 'Hợp đồng đã tải lên', value: '0', icon: FileText },
+        { label: 'Bản phân tích hoàn tất', value: '0', icon: Sparkles },
+        { label: 'Rủi ro đã phát hiện', value: '0', icon: AlertTriangle, tone: 'danger' },
+        { label: 'Đang chờ audit', value: '0', icon: TrendingUp, tone: 'accent' },
     ])
 
     const handleRefresh = async () => {
         setIsRefreshing(true)
         try {
-            await supabase.rpc('refresh_contract_stats')
-            window.location.reload() // Or just re-fetch
+            const { error } = await supabase.rpc('refresh_contract_stats')
+            if (error) {
+                console.warn('refresh_contract_stats failed:', error.message)
+            }
+            fetchData()
+            toast.success('Đã cập nhật số liệu mới nhất')
         } catch (err) {
             console.error('Refresh failed:', err)
+            toast.error('Cập nhật thất bại')
         } finally {
             setIsRefreshing(false)
         }
     }
 
-    useEffect(() => {
-        async function fetchData() {
-            try {
-                // Fetch contracts
-                const { data: contractsData, error: contractsError } = await supabase
-                    .from('contracts')
-                    .select(`
-                        id, title, created_at, status,
-                        contract_risks ( level )
-                    `)
-                    .order('created_at', { ascending: false })
+    const confirmDelete = async () => {
+        if (!confirmId) return
+        setIsDeleting(true)
+        try {
+            setDeletingId(confirmId)
+            // Delete cascade handled by migrations if configured, or manual here
+            await supabase.from('contract_risks').delete().eq('contract_id', confirmId)
+            await supabase.from('contract_chunks').delete().eq('contract_id', confirmId)
+            const { error } = await supabase.from('contracts').delete().eq('id', confirmId)
+            if (error) throw error
 
-                if (contractsError) throw contractsError
-
-                // Fetch real stats from RPC
-                const { data: statsData } = await supabase.rpc('get_my_stats').maybeSingle() as { data: any }
-
-                const formatted: ContractWithRisks[] = (contractsData || []).map(c => {
-                    const risks = c.contract_risks as any[]
-                    const levels = risks.map(r => r.level)
-                    let maxLevel: any = 'note'
-                    if (levels.includes('critical')) maxLevel = 'critical'
-                    else if (levels.includes('moderate')) maxLevel = 'moderate'
-
-                    return {
-                        id: c.id,
-                        title: c.title,
-                        created_at: c.created_at,
-                        status: c.status,
-                        risk_count: risks.length,
-                        max_risk_level: maxLevel
-                    }
-                })
-
-                setContracts(formatted)
-
-                // Calculate stats from RPC or fallback
-                const totalContracts = statsData?.total_contracts || formatted.length
-                const totalAnalyzed = statsData?.analyzed_count || formatted.filter(c => c.status === 'analyzed').length
-                const hoursSaved = Math.floor(totalAnalyzed * 0.75)
-
-                setStats([
-                    { label: 'Hợp đồng đã tải lên', value: totalContracts.toString(), icon: FileText },
-                    { label: 'Bản phân tích AI', value: totalAnalyzed.toString(), icon: TrendingUp },
-                    { label: 'Giờ tiết kiệm được', value: `${hoursSaved}h`, icon: Clock },
-                ])
-            } catch (err) {
-                console.error('Error fetching dashboard data:', err)
-            } finally {
-                setLoading(false)
-            }
+            setContracts(prev => prev.filter(c => c.id !== confirmId))
+            toast.success('Hợp đồng đã được xóa thành công')
+        } catch (err) {
+            console.error('Delete failed:', err)
+            toast.error('Xóa hợp đồng thất bại. Vui lòng thử lại.')
+        } finally {
+            setIsDeleting(false)
+            setConfirmId(null)
+            setDeletingId(null)
         }
+    }
 
+    async function fetchData() {
+        try {
+            const { data: contractsData, error: contractsError } = await supabase
+                .from('contracts')
+                .select(`
+                    id, title, created_at, status,
+                    contract_risks ( level )
+                `)
+                .order('created_at', { ascending: false })
+
+            if (contractsError) throw contractsError
+
+            const formatted: ContractWithRisks[] = (contractsData || []).map(c => {
+                const risks = c.contract_risks as any[]
+                const levels = risks.map(r => r.level)
+                let maxLevel: any = 'note'
+                if (levels.includes('critical')) maxLevel = 'critical'
+                else if (levels.includes('moderate')) maxLevel = 'moderate'
+
+                return {
+                    id: c.id,
+                    title: c.title,
+                    created_at: c.created_at,
+                    status: c.status,
+                    risk_count: risks.length,
+                    max_risk_level: maxLevel
+                }
+            })
+
+            setContracts(formatted)
+
+            const totalContracts = formatted.length
+            const completedAnalyses = formatted.filter((c) => c.status === 'completed' || c.risk_count > 0).length
+            const totalRisks = formatted.reduce((sum, contract) => sum + contract.risk_count, 0)
+            const pendingAudits = formatted.filter((c) => c.status === 'pending_audit').length
+
+            setStats([
+                { label: 'Hợp đồng đã tải lên', value: totalContracts.toString(), icon: FileText },
+                { label: 'Bản phân tích hoàn tất', value: completedAnalyses.toString(), icon: Sparkles },
+                { label: 'Rủi ro đã phát hiện', value: totalRisks.toString(), icon: AlertTriangle, tone: 'danger' },
+                { label: 'Đang chờ audit', value: pendingAudits.toString(), icon: TrendingUp, tone: 'accent' },
+            ])
+        } catch (err) {
+            console.error('Error fetching dashboard data:', err)
+        } finally {
+            setLoading(false)
+        }
+    }
+
+    useEffect(() => {
         fetchData()
     }, [])
 
     if (loading) {
         return (
-            <div className="h-full flex items-center justify-center">
-                <Loader2 className="w-8 h-8 text-gold-primary animate-spin" />
+            <div className="h-full p-6 space-y-6">
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    {[1, 2, 3].map(i => <Skeleton key={i} height={80} className="rounded-lg" />)}
+                </div>
+                <div className="flex justify-between items-center">
+                    <Skeleton width={150} height={24} />
+                    <Skeleton width={120} height={32} />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {[1, 2, 3, 4].map(i => <Skeleton key={i} height={120} className="rounded-lg" />)}
+                </div>
             </div>
         )
     }
 
     return (
-        <div className="h-full overflow-y-auto p-6 space-y-6 animate-slide-up text-paper-dark">
+        <div className="h-full overflow-y-auto p-6 space-y-8 text-paper-dark relative">
+            <Dialog
+                isOpen={!!confirmId}
+                onClose={() => setConfirmId(null)}
+                onConfirm={confirmDelete}
+                variant="danger"
+                title="Xóa hợp đồng?"
+                description="Hành động này sẽ xóa vĩnh viễn hợp đồng và các bản phân tích rủi ro liên quan. Bạn không thể hoàn tác thao tác này."
+                confirmText="Xóa vĩnh viễn"
+                isLoading={isDeleting}
+            />
+
             {/* Stats row */}
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
-                {stats.map(({ label, value, icon: Icon }) => (
-                    <div key={label} className="flex items-center gap-4 p-4 bg-navy-elevated rounded-lg border border-slate-border">
-                        <div className="w-10 h-10 rounded-md bg-gold-primary/15 flex items-center justify-center text-gold-primary">
-                            <Icon size={20} />
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
+                {stats.map(({ label, value, icon: Icon, tone = 'default' }, index) => (
+                    <motion.div
+                        key={label}
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: index * 0.1 }}
+                        className="flex items-center gap-4 p-5 bg-navy-elevated/40 backdrop-blur-md rounded-xl border border-slate-border/30 shadow-lg relative overflow-hidden group"
+                    >
+                        <div className="absolute inset-0 bg-gradient-to-br from-gold-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
+                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ring-1 ${
+                            tone === 'danger'
+                                ? 'bg-red-500/10 text-red-300 ring-red-500/20'
+                                : tone === 'accent'
+                                    ? 'bg-blue-500/10 text-blue-300 ring-blue-500/20'
+                                    : 'bg-gold-primary/10 text-gold-primary ring-gold-primary/20'
+                        }`}>
+                            <Icon size={24} />
                         </div>
-                        <div>
-                            <p className="text-2xl font-serif font-semibold">{value}</p>
-                            <Typography variant="caption">{label}</Typography>
+                        <div className="relative z-10">
+                            <p className={`text-3xl font-serif font-bold ${
+                                tone === 'danger'
+                                    ? 'text-red-300'
+                                    : tone === 'accent'
+                                        ? 'text-blue-300'
+                                        : 'text-gradient-gold'
+                            }`}>{value}</p>
+                            <Typography variant="caption" className="text-paper-dark/60 font-medium uppercase tracking-wider">{label}</Typography>
                         </div>
-                    </div>
+                    </motion.div>
                 ))}
             </div>
 
             {/* Header + action */}
             <div className="flex items-center justify-between">
                 <div className="flex items-center gap-4">
-                    <Typography variant="h3" className="text-lg">Hợp đồng gần đây</Typography>
-                    <Button variant="ghost" size="sm" onClick={handleRefresh} disabled={isRefreshing} className="h-8 w-8 p-0">
-                        <Clock size={16} className={isRefreshing ? 'animate-spin' : ''} />
-                    </Button>
+                    <Typography variant="h2" className="text-2xl font-serif">Hợp đồng gần đây</Typography>
+                    <button
+                        onClick={handleRefresh}
+                        disabled={isRefreshing}
+                        className="p-1.5 rounded-full hover:bg-slate-border/20 transition-colors disabled:opacity-50"
+                        title="Làm mới dữ liệu"
+                    >
+                        <Clock size={16} className={isRefreshing ? 'animate-spin' : 'text-paper-dark/50'} />
+                    </button>
                 </div>
                 <Link to="/analysis">
-                    <Button size="sm" variant="ghost">
-                        <Plus size={15} /> Phân tích mới
+                    <Button size="sm" variant="ghost" className="gap-2 border-gold-primary/30">
+                        <Plus size={16} /> Phân tích mới
                     </Button>
                 </Link>
             </div>
 
             {/* Contract cards */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {contracts.length === 0 ? (
-                    <div className="col-span-full py-20 text-center border-2 border-dashed border-slate-border rounded-xl">
-                        <FileText className="mx-auto mb-4 text-slate-muted/50" size={48} />
-                        <Typography variant="subtitle" className="text-sm">Chưa có hợp đồng nào. Hãy bắt đầu phân tích hợp đồng đầu tiên!</Typography>
-                        <Link to="/analysis" className="mt-4 inline-block">
-                            <Button variant="ghost" size="sm">Tải lên ngay</Button>
-                        </Link>
-                    </div>
-                ) : (
-                    contracts.map((c) => (
-                        <Link key={c.id} to={`/analysis?id=${c.id}`} className="block">
-                            <div className="p-5 bg-navy-elevated rounded-lg card-hover cursor-pointer border border-slate-border/50">
-                                <div className="flex items-start justify-between gap-2 mb-3">
-                                    <Typography variant="body" className="font-medium leading-snug">{c.title}</Typography>
-                                    <RiskBadge level={c.max_risk_level} />
-                                </div>
-                                <div className="flex items-center gap-3">
-                                    <Typography variant="caption" className="px-2 py-0.5 rounded bg-slate-border/40 text-xs uppercase tracking-tighter">
-                                        {c.risk_count} rủi ro
-                                    </Typography>
-                                    <Typography variant="caption">{formatRelativeTime(c.created_at)}</Typography>
-                                </div>
-                            </div>
-                        </Link>
-                    ))
-                )}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <AnimatePresence mode="popLayout">
+                    {contracts.length === 0 ? (
+                        <motion.div
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            className="col-span-full py-24 text-center border-2 border-dashed border-slate-border/20 rounded-2xl bg-navy-elevated/20"
+                        >
+                            <FileText className="mx-auto mb-4 text-slate-muted/30" size={56} />
+                            <Typography variant="h3" className="text-xl mb-2">Chưa có dữ liệu</Typography>
+                            <Typography variant="body" className="text-paper-dark/50 max-w-xs mx-auto mb-6">Bắt đầu tải lên hợp đồng đầu tiên để AI phân tích rủi ro giúp bạn.</Typography>
+                            <Link to="/analysis">
+                                <Button variant="primary" size="md">Bắt đầu ngay</Button>
+                            </Link>
+                        </motion.div>
+                    ) : (
+                        contracts.map((c, index) => (
+                            <motion.div
+                                key={c.id}
+                                layout
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                exit={{ opacity: 0, scale: 0.8, x: -50 }}
+                                transition={{ type: 'spring', stiffness: 300, damping: 25, delay: index * 0.05 }}
+                                className="group/card"
+                            >
+                                <Link to={`/analysis?id=${c.id}`} className="block h-full">
+                                    <div className="relative h-full p-6 bg-navy-elevated/40 backdrop-blur-sm rounded-xl border border-slate-border/30 hover:border-gold-primary/40 hover:shadow-[0_20px_40px_rgba(0,0,0,0.4),0_0_20px_rgba(201,168,76,0.1)] transition-all duration-300 group overflow-hidden">
+                                        <div className="absolute top-0 right-0 p-6 opacity-0 group-hover/card:opacity-100 transition-all z-20">
+                                            <button
+                                                onClick={(e) => {
+                                                    e.preventDefault()
+                                                    e.stopPropagation()
+                                                    setConfirmId(c.id)
+                                                }}
+                                                disabled={deletingId === c.id}
+                                                className="p-2 rounded-lg text-paper-dark/40 hover:text-red-400 hover:bg-red-400/10 transition-colors"
+                                                title="Xóa hợp đồng"
+                                            >
+                                                {deletingId === c.id
+                                                    ? <Loader2 size={16} className="animate-spin" />
+                                                    : <Trash2 size={16} />}
+                                            </button>
+                                        </div>
+
+                                        <div className="flex flex-col h-full">
+                                            <div className="flex items-start justify-between gap-4 mb-4 pr-8">
+                                                <Typography variant="h3" className="text-lg font-serif group-hover:text-gold-primary transition-colors line-clamp-2">
+                                                    {c.title}
+                                                </Typography>
+                                                <RiskBadge level={c.max_risk_level} />
+                                            </div>
+
+                                            <div className="mt-auto flex items-center justify-between">
+                                                <div className="flex items-center gap-4">
+                                                    <span className="px-2.5 py-1 rounded-md bg-navy-base border border-slate-border/30 text-[10px] uppercase font-bold tracking-widest text-paper-dark/60">
+                                                        {c.risk_count} rủi ro
+                                                    </span>
+                                                    <Typography variant="caption" className="text-xs text-paper-dark/40 italic">
+                                                        {formatRelativeTime(c.created_at)}
+                                                    </Typography>
+                                                </div>
+                                                <div className="w-8 h-8 rounded-full border border-gold-primary/20 flex items-center justify-center text-gold-primary group-hover:bg-gold-primary group-hover:text-navy-base transition-all">
+                                                    <TrendingUp size={14} />
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </Link>
+                            </motion.div>
+                        ))
+                    )}
+                </AnimatePresence>
             </div>
         </div>
     )

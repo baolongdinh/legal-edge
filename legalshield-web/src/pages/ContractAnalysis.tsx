@@ -1,10 +1,13 @@
 import { useCallback, useState, useEffect } from 'react'
 import * as Comlink from 'comlink'
-import { Upload, FileText, Search, Send, Loader2, Zap } from 'lucide-react'
+import { Upload, FileText, Search, Send, Loader2, Zap, AlertTriangle, CheckCircle2, Info, ExternalLink, X, Bot } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { toast } from 'sonner'
 import { SplitView } from '../components/layout/SplitView'
 import { RiskBadge } from '../components/ui/RiskBadge'
 import { Typography } from '../components/ui/Typography'
 import { Button } from '../components/ui/Button'
+import { Skeleton } from '../components/ui/Skeleton'
 import { useUploadStore, useAnalysisStore } from '../store'
 import { supabase } from '../lib/supabase'
 import { classifySections, ContractSchema } from '../lib/document-parser'
@@ -19,6 +22,67 @@ const initWorker = () => {
     return workerApi
 }
 
+type VerificationStatus = 'official_verified' | 'secondary_verified' | 'unsupported' | 'conflicted' | 'unverified'
+
+interface LegalCitation {
+    citation_text: string
+    citation_url: string
+    source_domain: string
+    source_title: string
+    source_excerpt: string
+    source_type: 'official' | 'secondary' | 'document_context'
+    verification_status: VerificationStatus
+}
+
+interface VerificationSummary {
+    verification_status: VerificationStatus
+    citation_count: number
+    official_count: number
+    secondary_count: number
+    unsupported_claim_count: number
+}
+
+interface ClaimAudit {
+    claim: string
+    supported: boolean
+    matched_citation_url?: string
+    matched_source_domain?: string
+    score?: number
+}
+
+const verificationBadgeMap: Record<VerificationStatus, { label: string; className: string }> = {
+    official_verified: {
+        label: 'Đã xác minh',
+        className: 'bg-emerald-500/10 text-emerald-300 border border-emerald-500/20',
+    },
+    secondary_verified: {
+        label: 'Nguồn thứ cấp',
+        className: 'bg-amber-500/10 text-amber-300 border border-amber-500/20',
+    },
+    unsupported: {
+        label: 'Chưa đủ căn cứ',
+        className: 'bg-rose-500/10 text-rose-300 border border-rose-500/20',
+    },
+    conflicted: {
+        label: 'Nguồn xung đột',
+        className: 'bg-orange-500/10 text-orange-300 border border-orange-500/20',
+    },
+    unverified: {
+        label: 'Chưa xác minh',
+        className: 'bg-slate-500/10 text-slate-300 border border-slate-500/20',
+    },
+}
+
+function VerificationBadge({ status }: { status?: VerificationStatus }) {
+    const meta = verificationBadgeMap[status || 'unverified']
+    return (
+        <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.18em] ${meta.className}`}>
+            <span className="h-1.5 w-1.5 rounded-full bg-current opacity-80" />
+            {meta.label}
+        </span>
+    )
+}
+
 function UploadZone() {
     const { status, progress, setFile, setStatus, setExtractedText, reset, error, setError, extractedText } = useUploadStore()
     const { setRisks, setDocument } = useAnalysisStore()
@@ -28,42 +92,38 @@ function UploadZone() {
         setFile(file)
         setStatus('uploading', 5)
         setError(null)
+        const uploadToast = toast.loading(`Đang tải lên "${file.name}"...`)
 
         try {
             const api = initWorker()
             const arrayBuffer = await file.arrayBuffer()
 
-            // 0. Compute Content Hash in Worker (Deduplication)
             setStatus('uploading', 15)
             const fileHash = await api.generateHash(arrayBuffer)
 
-            // 1. Hash-First Strategy: Check Supabase for existing analysis
             const { data: existingContract } = await supabase
                 .from('contracts')
-                .select('document_id, status, analysis_summary')
+                .select('id, status, analysis_summary')
                 .eq('content_hash', fileHash)
                 .maybeSingle()
 
             if (existingContract) {
-                setDocument(existingContract.document_id, true)
-
-                // Load existing risks
+                setDocument(existingContract.id, true)
                 const { data: existingRisks } = await supabase
-                    .from('risks')
+                    .from('contract_risks')
                     .select('*')
-                    .eq('contract_id', existingContract.document_id)
+                    .eq('contract_id', existingContract.id)
 
-                if (existingRisks) setRisks(existingRisks)
-
-                // If it's already analyzed, we are done
+                if (existingRisks) setRisks(existingRisks as any)
                 if (existingContract.status === 'completed') {
                     setStatus('success', 100)
+                    toast.success('Đã tìm thấy bản phân tích cũ. Sẵn sàng xem ngay!', { id: uploadToast })
                     return
                 }
             }
 
-            // 2. Client-side Parsing in Worker (Zero UI Lag)
             setStatus('parsing', 30)
+            toast.loading(`Đang trích xuất văn bản...`, { id: uploadToast })
             let text = ''
             if (file.name.endsWith('.pdf')) {
                 text = await api.parsePDF(arrayBuffer)
@@ -76,7 +136,6 @@ function UploadZone() {
             setStatus('parsing', 60)
             setExtractedText(text)
 
-            // 3. Edge-First Validation (Zod)
             const validation = ContractSchema.safeParse({
                 content: text,
                 has_parties: text.toLowerCase().includes('bên a') || text.toLowerCase().includes('bên b')
@@ -86,18 +145,20 @@ function UploadZone() {
                 throw new Error(validation.error.issues[0].message)
             }
 
-            // 4. Lazy AI - Local Classification (Free)
             const localAnalysis = classifySections(text)
             console.log('Local NLP Classification:', localAnalysis)
 
-            // 5. Register Document & Set to 'pending_audit'
-            const docId = existingContract?.document_id || crypto.randomUUID()
+            const docId = existingContract?.id || crypto.randomUUID()
             setDocument(docId)
-            setRisks([]) // Clear previous risks for Lazy UI
+            setRisks([])
 
             if (!existingContract) {
+                const { data: { user } } = await supabase.auth.getUser()
+                if (!user) throw new Error('Vui lòng đăng nhập để tiếp tục.')
+
                 const { error: insertError } = await supabase.from('contracts').insert({
-                    document_id: docId,
+                    id: docId,
+                    user_id: user.id,
                     title: file.name,
                     status: 'pending_audit',
                     content_hash: fileHash
@@ -106,8 +167,8 @@ function UploadZone() {
             }
 
             setStatus('success', 100)
+            toast.success('Đã trích xuất thành công!', { id: uploadToast })
 
-            // 6. Background Ingestion (Hybrid Search Indexing)
             supabase.functions.invoke('ingest-contract', {
                 body: { contract_id: docId, text }
             }).then(({ data, error }) => {
@@ -119,6 +180,7 @@ function UploadZone() {
             console.error('Analysis failed:', err)
             setError((err as Error).message)
             setStatus('error', 0)
+            toast.error(`Lỗi: ${(err as Error).message}`, { id: uploadToast })
         }
     }, [setFile, setStatus, setExtractedText, setDocument, setRisks, setError])
 
@@ -130,18 +192,23 @@ function UploadZone() {
 
     if (status === 'idle' || status === 'uploading' || status === 'parsing' || status === 'error') {
         return (
-            <div className="h-full flex flex-col items-center justify-center p-8">
-                <div
+            <div className="h-full flex flex-col items-center justify-center p-8 bg-grid">
+                <motion.div
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
                     onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
                     onDragLeave={() => setIsDragging(false)}
                     onDrop={handleDrop}
-                    className={`w-full max-w-md border-2 border-dashed rounded-xl p-12 text-center transition-all duration-200 cursor-pointer ${isDragging ? 'border-gold-primary bg-gold-primary/10' : (status === 'error' ? 'border-red-500/50 bg-red-500/5' : 'border-slate-border hover:border-gold-muted')
+                    data-testid="upload-zone"
+                    className={`w-full max-w-lg border-2 border-dashed rounded-2xl p-16 text-center transition-all duration-300 cursor-pointer overflow-hidden relative group/upload ${isDragging
+                        ? 'border-gold-primary bg-gold-primary/10 scale-102 shadow-gold'
+                        : (status === 'error' ? 'border-red-500/50 bg-red-500/5' : 'border-slate-border/50 bg-navy-elevated/40 hover:border-gold-muted hover:bg-navy-elevated/60 shadow-xl')
                         }`}
                     onClick={() => {
                         if (status === 'uploading' || status === 'parsing') return
                         const input = document.createElement('input')
                         input.type = 'file'
-                        input.accept = '.pdf,.docx'
+                        input.accept = '.pdf,.docx,.txt'
                         input.onchange = (e) => {
                             const file = (e.target as HTMLInputElement).files?.[0]
                             if (file) handleFile(file)
@@ -149,47 +216,73 @@ function UploadZone() {
                         input.click()
                     }}
                 >
-                    <Upload className="mx-auto text-gold-primary mb-4" size={32} />
-                    <Typography variant="h3" className="text-base mb-2">Tải lên hợp đồng</Typography>
-                    <Typography variant="subtitle" className="text-sm mb-4">Kéo thả hoặc nhấp để chọn file PDF, DOCX</Typography>
-                    <div className="mt-4">
-                        <div className="h-1.5 bg-slate-border rounded-full overflow-hidden">
-                            <div
-                                className={`h-full transition-all duration-500 rounded-full ${status === 'error' ? 'bg-red-500' : 'bg-gold-primary'}`}
-                                style={{ width: `${progress}%` }}
-                            />
+                    <div className="relative z-10">
+                        <motion.div
+                            animate={isDragging ? { y: [0, -10, 0] } : {}}
+                            transition={{ repeat: Infinity, duration: 1.5 }}
+                            className="w-16 h-16 bg-gold-primary/10 rounded-full flex items-center justify-center mx-auto mb-6 border border-gold-primary/20 group-hover/upload:border-gold-primary/40 transition-colors"
+                        >
+                            <Upload className="text-gold-primary" size={32} />
+                        </motion.div>
+                        <Typography variant="h3" className="text-xl mb-2 font-serif">Tải lên hợp đồng</Typography>
+                        <Typography variant="body" className="text-paper-dark/50 mb-8 max-w-sm mx-auto">AI sẽ tự động bóc tách các điều khoản và đánh giá rủi ro pháp lý cho bạn.</Typography>
+
+                        <div className="space-y-4 max-w-xs mx-auto">
+                            <div className="h-1.5 bg-slate-border/30 rounded-full overflow-hidden shadow-inner">
+                                <motion.div
+                                    initial={{ width: 0 }}
+                                    animate={{ width: `${progress}%` }}
+                                    className={`h-full rounded-full ${status === 'error' ? 'bg-red-500' : 'bg-gradient-to-r from-gold-muted to-gold-primary shadow-gold'}`}
+                                />
+                            </div>
+                            <Typography variant="caption" className={`text-xs font-bold uppercase tracking-widest ${status === 'error' ? 'text-red-400' : 'text-paper-dark/40'}`}>
+                                {status === 'error' ? (error || 'Lỗi xử lý') : (status === 'uploading' ? 'Đang tải file...' : (status === 'parsing' ? 'Đang giải mã văn bản...' : 'Chấp nhận PDF, DOCX tối đa 20MB'))}
+                            </Typography>
                         </div>
-                        <Typography variant="caption" className={`mt-2 block ${status === 'error' ? 'text-red-400' : ''}`}>
-                            {status === 'error' ? (error || 'Đã có lỗi xảy ra') : (status === 'uploading' ? 'Đang tải lên...' : (status === 'parsing' ? 'Đang phân tích...' : ''))}
-                        </Typography>
                     </div>
-                </div>
+                    {/* Background glow effects */}
+                    <div className="absolute -top-24 -left-24 w-48 h-48 bg-gold-primary/5 blur-[100px] rounded-full" />
+                    <div className="absolute -bottom-24 -right-24 w-48 h-48 bg-gold-primary/5 blur-[100px] rounded-full" />
+                </motion.div>
+
                 {status === 'error' && (
-                    <Button variant="ghost" size="sm" className="mt-4" onClick={reset}>Thử lại</Button>
+                    <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
+                        <Button variant="ghost" size="sm" className="mt-8 gap-2 text-red-400 hover:bg-red-400/5 border-red-400/20" onClick={reset}>
+                            Thử lại lần nữa
+                        </Button>
+                    </motion.div>
                 )}
             </div>
         )
     }
 
     return (
-        <div className="h-full flex flex-col p-6 animate-fade-in">
-            <div className="flex items-center gap-3 mb-4">
-                <FileText className="text-gold-primary" size={20} />
-                <Typography variant="h3" className="text-base">Nội dung trích xuất</Typography>
-                <Button variant="outline" size="sm" onClick={reset} className="ml-auto">Tải file khác</Button>
+        <motion.div
+            initial={{ opacity: 0, x: -20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="h-full flex flex-col p-6 animate-fade-in"
+        >
+            <div className="flex items-center gap-3 mb-6">
+                <div className="w-8 h-8 rounded-lg bg-gold-primary/10 flex items-center justify-center border border-gold-primary/20">
+                    <FileText className="text-gold-primary" size={18} />
+                </div>
+                <Typography variant="h3" className="text-lg font-serif">Văn bản hợp đồng</Typography>
+                <Button variant="ghost" size="sm" onClick={reset} className="ml-auto text-paper-dark/40 hover:text-paper-dark">Đổi tài liệu</Button>
             </div>
-            <div className="flex-1 bg-navy-base/30 rounded-lg border border-slate-border p-6 overflow-y-auto custom-scrollbar">
-                <div className="font-sans text-sm text-paper-dark leading-7 whitespace-pre-wrap">
+            <div className="flex-1 bg-navy-elevated/40 backdrop-blur-sm rounded-xl border border-slate-border/30 p-8 overflow-y-auto custom-scrollbar shadow-inner relative group">
+                <div className="font-sans text-[15px] text-paper-dark/80 leading-8 whitespace-pre-wrap selection:bg-gold-primary/20">
                     {extractedText}
                 </div>
+                {/* Visual anchor for start of text */}
+                <div className="absolute top-0 left-0 w-1 h-full bg-gradient-to-b from-gold-primary/20 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
             </div>
-        </div>
+        </motion.div>
     )
 }
 
 function RiskPanel() {
     const { risks, isAnalyzing, setRisks, startAnalysis, currentDocumentId, isHashMatch } = useAnalysisStore()
-    const { status, setStatus, setError, extractedText } = useUploadStore()
+    const { status, setError, extractedText } = useUploadStore()
 
     // Supabase Realtime Subscription for status updates
     useEffect(() => {
@@ -203,14 +296,18 @@ function RiskPanel() {
                     event: 'UPDATE',
                     schema: 'public',
                     table: 'contracts',
-                    filter: `document_id=eq.${currentDocumentId}`
+                    filter: `id=eq.${currentDocumentId}`
                 },
                 (payload) => {
                     console.log('Realtime status update:', payload.new.status)
                     if (payload.new.status === 'completed') {
-                        // Refresh risks if needed
-                        supabase.from('risks').select('*').eq('contract_id', currentDocumentId)
-                            .then(({ data }) => data && setRisks(data))
+                        supabase.from('contract_risks').select('*').eq('contract_id', currentDocumentId)
+                            .then(({ data }) => {
+                                if (data) {
+                                    setRisks(data as any)
+                                    toast.success('Deep Audit đã hoàn tất!')
+                                }
+                            })
                     }
                 }
             )
@@ -221,27 +318,32 @@ function RiskPanel() {
         }
     }, [currentDocumentId, setRisks])
 
-    // Q&A State
     const [query, setQuery] = useState('')
     const [answer, setAnswer] = useState('')
+    const [answerCitations, setAnswerCitations] = useState<LegalCitation[]>([])
+    const [answerVerification, setAnswerVerification] = useState<VerificationStatus>('unverified')
+    const [answerSummary, setAnswerSummary] = useState<VerificationSummary | null>(null)
+    const [answerClaimAudit, setAnswerClaimAudit] = useState<ClaimAudit[]>([])
+    const [answerAbstained, setAnswerAbstained] = useState(false)
     const [isSearching, setIsSearching] = useState(false)
     const [sources, setSources] = useState<any[]>([])
+    const [expandedRisk, setExpandedRisk] = useState<number | null>(null)
 
     const handleDeepAudit = async () => {
         if (!extractedText) return
         startAnalysis()
-        setStatus('parsing', 50)
+        const auditToast = toast.loading('AI đang thực hiện Deep Audit (Llama-3-70B)...')
         try {
             const { data, error } = await supabase.functions.invoke('risk-review', {
                 body: { clause_text: extractedText.slice(0, 8000), mode: 'deep' }
             })
             if (error) throw error
             setRisks(data.risks)
-            setStatus('success', 100)
+            toast.success('Phân tích chuyên sâu hoàn tất!', { id: auditToast })
         } catch (err) {
             console.error(err)
             setError('Lỗi phân tích chuyên sâu')
-            setStatus('error', 0)
+            toast.error('Lỗi khi thực hiện Deep Audit. Vui lòng thử lại.', { id: auditToast })
         }
     }
 
@@ -251,16 +353,26 @@ function RiskPanel() {
 
         setIsSearching(true)
         setAnswer('')
+        setAnswerCitations([])
+        setAnswerSummary(null)
+        setAnswerVerification('unverified')
+        setAnswerClaimAudit([])
+        setAnswerAbstained(false)
         try {
             const { data, error } = await supabase.functions.invoke('contract-qa', {
                 body: { contract_id: currentDocumentId, query }
             })
             if (error) throw error
             setAnswer(data.answer)
+            setAnswerCitations(data.citations || [])
+            setAnswerSummary(data.verification_summary || null)
+            setAnswerVerification(data.verification_status || 'unverified')
+            setAnswerClaimAudit(data.claim_audit || [])
+            setAnswerAbstained(Boolean(data.abstained))
             setSources(data.sources || [])
         } catch (err) {
             console.error(err)
-            setAnswer('Lỗi khi tìm câu trả lời. Vui lòng thử lại.')
+            toast.error('AI không thể trả lời câu hỏi này. Thử hỏi cách khác.')
         } finally {
             setIsSearching(false)
         }
@@ -268,139 +380,336 @@ function RiskPanel() {
 
     if (status === 'success' && risks.length === 0 && !answer) {
         return (
-            <div className="h-full flex flex-col items-center justify-center p-6 text-center space-y-6">
-                <div className="w-16 h-16 bg-gold-primary/10 rounded-full flex items-center justify-center">
-                    {isHashMatch ? (
-                        <Zap className="text-gold-primary animate-pulse" size={32} />
-                    ) : (
-                        <FileText className="text-gold-primary" size={32} />
-                    )}
-                </div>
-                <div className="max-w-xs">
-                    <Typography variant="h3" className="mb-2">
-                        {isHashMatch ? 'Đã nhận diện hợp đồng' : 'Sẵn sàng phân tích rủi ro'}
-                    </Typography>
-                    <Typography variant="body" className="text-slate-400">
-                        {isHashMatch
-                            ? 'File này đã được phân tích trước đó. Bạn có thể xem lại ngay lập tức hoặc yêu cầu Deep Audit mới.'
-                            : 'Nội dung đã được bóc tách locally. Bạn có muốn kích hoạt Deep Audit (Llama-3-70B) hoặc đặt câu hỏi cho AI?'}
-                    </Typography>
-                </div>
-                <div className="w-full space-y-3">
-                    <Button
-                        variant="primary"
-                        className="w-full bg-gold-primary text-black font-bold h-12 shadow-gold"
-                        onClick={handleDeepAudit}
-                    >
-                        Bắt đầu Deep Audit
-                    </Button>
-
-                    <div className="relative mt-4">
-                        <input
-                            type="text"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            onKeyDown={(e) => e.key === 'Enter' && handleQA()}
-                            placeholder="Hỏi AI về hợp đồng này..."
-                            className="w-full bg-navy-base border border-slate-border rounded-full py-3 pl-5 pr-12 text-sm focus:border-gold-primary outline-none transition-all"
-                        />
-                        <button
-                            onClick={() => handleQA()}
-                            disabled={isSearching || !query.trim()}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-slate-800 rounded-full text-gold-primary hover:text-gold-muted transition-all"
-                        >
-                            {isSearching ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
-                        </button>
+            <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="h-full flex flex-col items-center justify-center p-8 text-center space-y-8"
+            >
+                <div className="relative">
+                    <motion.div
+                        animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.6, 0.3] }}
+                        transition={{ repeat: Infinity, duration: 3 }}
+                        className="absolute inset-0 bg-gold-primary rounded-full blur-[40px]"
+                    />
+                    <div className="relative w-20 h-20 bg-navy-elevated border border-gold-primary/20 rounded-full flex items-center justify-center shadow-2xl">
+                        {isHashMatch ? (
+                            <Zap className="text-gold-primary" size={40} />
+                        ) : (
+                            <Scale className="text-gold-primary" size={40} />
+                        )}
                     </div>
                 </div>
-                <Typography variant="caption" className="text-slate-500">
-                    * Tiết kiệm ~80% token bằng cách chỉ phân tích khi cần
-                </Typography>
-            </div>
+                <div className="max-w-xs">
+                    <Typography variant="h2" className="text-2xl font-serif mb-3">
+                        {isHashMatch ? 'Đã tìm thấy bản cũ' : 'Sẵn sàng kiểm tra'}
+                    </Typography>
+                    <Typography variant="body" className="text-paper-dark/50 leading-relaxed">
+                        {isHashMatch
+                            ? 'Dữ liệu phân tích cho hợp đồng này đã có sẵn trong hệ thống.'
+                            : 'Văn bản đã sẵn sàng. Bạn muốn AI thực hiện quét rủi ro chuyên sâu hay trả lời câu hỏi cụ thể?'}
+                    </Typography>
+                </div>
+                <div className="w-full max-w-sm space-y-4">
+                    <Button
+                        variant="primary"
+                        className="w-full h-14 bg-gold-primary text-navy-base font-bold text-lg shadow-gold group"
+                        onClick={handleDeepAudit}
+                        disabled={isAnalyzing}
+                    >
+                        {isAnalyzing ? <Loader2 className="animate-spin mr-2" /> : <Zap className="mr-2 group-hover:scale-125 transition-transform" size={20} />}
+                        Kích hoạt Deep Audit
+                    </Button>
+
+                    <div className="relative">
+                        <div className="absolute inset-0 bg-gold-primary/5 blur-xl rounded-full" />
+                        <form onSubmit={handleQA} className="relative">
+                            <input
+                                type="text"
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                placeholder="Hỏi AI về hợp đồng này..."
+                                className="w-full bg-navy-elevated/80 border border-slate-border/50 rounded-2xl py-4 pl-6 pr-14 text-sm focus:border-gold-primary/50 outline-none backdrop-blur-md transition-all shadow-xl"
+                            />
+                            <button
+                                type="submit"
+                                disabled={isSearching || !query.trim()}
+                                aria-label="Gửi câu hỏi"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-gold-primary/10 rounded-xl text-gold-primary hover:bg-gold-primary hover:text-navy-base transition-all disabled:opacity-0"
+                            >
+                                {isSearching ? <Loader2 size={20} className="animate-spin" /> : <Send size={20} />}
+                            </button>
+                        </form>
+                    </div>
+                </div>
+                <div className="flex items-center gap-2 text-[10px] text-paper-dark/30 uppercase tracking-[0.2em] font-bold">
+                    <Info size={10} />
+                    <span>Llama-3-70B Quantum Optimized</span>
+                </div>
+            </motion.div>
         )
     }
 
     return (
-        <div className="h-full flex flex-col p-6">
-            <div className="flex items-center gap-2 mb-4">
-                <Typography variant="h3" className="text-base uppercase tracking-wider text-gold-primary/80">Kết quả đánh giá AI</Typography>
-                {isAnalyzing && <span className="text-[10px] bg-gold-primary/20 text-gold-primary px-2 py-0.5 rounded-full animate-pulse">Đang quét...</span>}
+        <motion.div
+            initial={{ opacity: 0, x: 20 }}
+            animate={{ opacity: 1, x: 0 }}
+            className="h-full flex flex-col p-6"
+        >
+            <div className="flex items-center justify-between mb-6">
+                <div className="flex items-center gap-3">
+                    <Typography variant="h3" className="text-base uppercase tracking-widest text-gold-primary font-bold">Báo cáo rủi ro</Typography>
+                    {isAnalyzing && (
+                        <div className="flex gap-1">
+                            <span className="w-1.5 h-1.5 bg-gold-primary rounded-full animate-bounce [animation-delay:-0.3s]" />
+                            <span className="w-1.5 h-1.5 bg-gold-primary rounded-full animate-bounce [animation-delay:-0.15s]" />
+                            <span className="w-1.5 h-1.5 bg-gold-primary rounded-full animate-bounce" />
+                        </div>
+                    )}
+                </div>
+                {risks.length > 0 && <Typography variant="caption" className="text-paper-dark/40 font-bold uppercase tracking-tighter">{risks.length} phát hiện</Typography>}
             </div>
 
-            <div className="flex-1 overflow-y-auto space-y-4 custom-scrollbar pr-1">
-                {/* AI Answer Section */}
-                {answer && (
-                    <div className="bg-gold-primary/5 border border-gold-primary/20 rounded-xl p-5 mb-2 animate-in slide-in-from-top duration-500">
-                        <div className="flex items-center gap-2 mb-3">
-                            <div className="p-1.5 bg-gold-primary rounded-md">
-                                <Search size={14} className="text-black" />
+            <div className="flex-1 overflow-y-auto space-y-5 custom-scrollbar pr-2 pb-6">
+                <AnimatePresence mode="popLayout">
+                    {/* AI Answer Section */}
+                    {answer && (
+                        <motion.div
+                            initial={{ opacity: 0, y: -20, scale: 0.95 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
+                            className="bg-gold-primary/5 border border-gold-primary/20 rounded-2xl p-6 mb-4 relative overflow-hidden group shadow-2xl"
+                        >
+                            <div className="absolute top-0 right-0 p-4 opacity-30 group-hover:opacity-100 transition-opacity">
+                                <button onClick={() => { setAnswer(''); setQuery(''); }} className="p-1 hover:text-red-400"><X size={16} /></button>
                             </div>
-                            <Typography variant="subtitle" className="text-gold-primary">Giải đáp từ Hybrid Search</Typography>
-                        </div>
-                        <Typography variant="body" className="text-slate-200 leading-relaxed mb-4">{answer}</Typography>
-                        {sources.length > 0 && (
-                            <div className="pt-3 border-t border-gold-primary/10">
-                                <Typography variant="caption" className="text-gold-muted/60 block mb-2 uppercase tracking-tighter">Nguồn trích dẫn:</Typography>
-                                <div className="space-y-2">
-                                    {sources.slice(0, 2).map((s, i) => (
-                                        <p key={i} className="text-[10px] text-slate-500 italic bg-slate-900/40 p-2 rounded leading-normal">
-                                            "...{s.content.slice(0, 120)}..."
-                                        </p>
-                                    ))}
+                            <div className="flex items-center gap-2 mb-4">
+                                <div className="w-8 h-8 bg-gold-primary text-navy-base rounded-lg flex items-center justify-center shadow-lg shadow-gold/20">
+                                    <Bot size={18} />
+                                </div>
+                                <div className="flex items-center gap-3 flex-wrap">
+                                    <Typography variant="subtitle" className="text-gold-primary font-bold">Phản hồi từ AI Context</Typography>
+                                    <VerificationBadge status={answerVerification} />
                                 </div>
                             </div>
-                        )}
-                        <Button variant="ghost" size="sm" className="mt-4 h-7 text-[10px]" onClick={() => { setAnswer(''); setQuery(''); }}>Xóa câu trả lời</Button>
-                    </div>
-                )}
+                            <Typography variant="body" className="text-[15px] text-paper-dark/90 leading-relaxed mb-6">{answer}</Typography>
+                            {(answerAbstained || answerVerification === 'unsupported' || answerVerification === 'conflicted') && (
+                                <div className={`mb-5 rounded-xl border px-4 py-3 ${
+                                    answerAbstained || answerVerification === 'unsupported'
+                                        ? 'border-rose-500/30 bg-rose-500/10 text-rose-200'
+                                        : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+                                }`}>
+                                    <div className="text-[11px] font-bold uppercase tracking-[0.2em]">
+                                        {answerAbstained || answerVerification === 'unsupported' ? 'Chưa đủ căn cứ' : 'Cần kiểm tra thêm'}
+                                    </div>
+                                    <div className="mt-1 text-sm leading-relaxed">
+                                        {answerAbstained || answerVerification === 'unsupported'
+                                            ? 'Phản hồi này chưa có đủ dẫn chứng pháp lý đáng tin cậy để khẳng định chắc chắn.'
+                                            : 'Một phần nhận định pháp lý chưa được đối chiếu đủ mạnh với nguồn hiện có.'}
+                                    </div>
+                                </div>
+                            )}
+                            {answerSummary && (
+                                <div className="mb-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
+                                    <div className="rounded-xl border border-slate-border/20 bg-navy-base/30 p-3">
+                                        <div className="text-[10px] uppercase tracking-[0.18em] text-paper-dark/35">Citation</div>
+                                        <div className="mt-1 text-lg font-semibold text-paper-dark">{answerSummary.citation_count}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-slate-border/20 bg-navy-base/30 p-3">
+                                        <div className="text-[10px] uppercase tracking-[0.18em] text-paper-dark/35">Official</div>
+                                        <div className="mt-1 text-lg font-semibold text-emerald-300">{answerSummary.official_count}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-slate-border/20 bg-navy-base/30 p-3">
+                                        <div className="text-[10px] uppercase tracking-[0.18em] text-paper-dark/35">Secondary</div>
+                                        <div className="mt-1 text-lg font-semibold text-amber-300">{answerSummary.secondary_count}</div>
+                                    </div>
+                                    <div className="rounded-xl border border-slate-border/20 bg-navy-base/30 p-3">
+                                        <div className="text-[10px] uppercase tracking-[0.18em] text-paper-dark/35">Unsupported</div>
+                                        <div className="mt-1 text-lg font-semibold text-rose-300">{answerSummary.unsupported_claim_count}</div>
+                                    </div>
+                                </div>
+                            )}
+                            {answerClaimAudit.some((claim) => !claim.supported) && (
+                                <div className="mb-5 rounded-xl border border-amber-500/20 bg-amber-500/5 px-4 py-3">
+                                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-amber-200">Claim Cần Kiểm Tra Thêm</div>
+                                    <div className="mt-3 space-y-2">
+                                        {answerClaimAudit
+                                            .filter((claim) => !claim.supported)
+                                            .slice(0, 3)
+                                            .map((claim, idx) => (
+                                                <div key={`${claim.claim}-${idx}`} className="rounded-lg border border-amber-500/10 bg-navy-base/30 px-3 py-2">
+                                                    <div className="text-sm text-paper-dark/85">{claim.claim}</div>
+                                                    <div className="mt-1 text-[11px] text-paper-dark/45">
+                                                        {claim.matched_source_domain
+                                                            ? `Nguồn gần nhất: ${claim.matched_source_domain}`
+                                                            : 'Chưa tìm thấy nguồn khớp đủ mạnh'}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                    </div>
+                                </div>
+                            )}
+                            {answerCitations.length > 0 && (
+                                <div className="mb-5 rounded-2xl border border-gold-primary/10 bg-navy-base/35 p-4">
+                                    <div className="mb-3 flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-gold-muted/70">
+                                        <CheckCircle2 size={12} />
+                                        Dẫn chứng pháp lý
+                                    </div>
+                                    <div className="space-y-3">
+                                        {answerCitations.map((citation, idx) => (
+                                            <a
+                                                key={`${citation.citation_url}-${idx}`}
+                                                href={citation.citation_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="block rounded-xl border border-slate-border/20 bg-navy-base/40 p-4 transition-colors hover:border-gold-primary/30"
+                                            >
+                                                <div className="flex items-start justify-between gap-3">
+                                                    <div>
+                                                        <div className="text-sm font-semibold text-gold-primary">{citation.citation_text}</div>
+                                                        <div className="mt-1 text-xs text-paper-dark/45">{citation.source_title}</div>
+                                                    </div>
+                                                    <VerificationBadge status={citation.verification_status} />
+                                                </div>
+                                                <div className="mt-2 text-xs leading-relaxed text-paper-dark/60">{citation.source_excerpt}</div>
+                                                <div className="mt-3 inline-flex items-center gap-1 text-[11px] text-paper-dark/45">
+                                                    {citation.source_domain}
+                                                    <ExternalLink size={11} />
+                                                </div>
+                                            </a>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                            {sources.length > 0 && (
+                                <div className="pt-4 border-t border-gold-primary/10 space-y-3">
+                                    <div className="flex items-center gap-2 text-[10px] text-gold-muted/60 uppercase tracking-widest font-bold">
+                                        <CheckCircle2 size={12} />
+                                        Nguồn tham chiếu
+                                    </div>
+                                    <div className="grid grid-cols-1 gap-2">
+                                        {sources.slice(0, 2).map((s, idx) => (
+                                            <div key={idx} className="text-[11px] text-paper-dark/40 italic bg-navy-base/40 p-3 rounded-xl border border-gold-primary/5 leading-normal line-clamp-3">
+                                                "{s.content}"
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            )}
+                        </motion.div>
+                    )}
 
-                {risks.length === 0 && !isAnalyzing && !answer && (
-                    <div className="text-center py-16 opacity-50">
-                        <Typography variant="subtitle" className="text-sm">Tải lên hợp đồng để bắt đầu</Typography>
-                    </div>
-                )}
-
-                {risks.map((r, i) => (
-                    <div key={i} className="bg-slate-800/40 border border-slate-border rounded-xl p-5 hover:border-gold-muted/40 transition-all duration-300 group">
-                        <div className="flex items-start justify-between mb-3">
-                            <RiskBadge level={r.level} />
-                            <Typography variant="caption" className="text-gold-muted font-mono">{r.clause_ref}</Typography>
-                        </div>
-                        <Typography variant="body" className="text-sm mb-3 leading-relaxed text-slate-300">{r.description}</Typography>
-                        {r.citation && (
-                            <div className="mt-3 pt-3 border-t border-slate-border/50">
-                                <p className="text-[10px] text-gold-muted/60 font-mono pl-2 border-l-2 border-gold-primary/40 uppercase">
-                                    Căn cứ: {r.citation}
-                                </p>
+                    {isAnalyzing && risks.length === 0 && (
+                        [1, 2, 3].map(i => (
+                            <div key={i} className="space-y-3 p-5 bg-navy-elevated/20 rounded-2xl border border-slate-border/20">
+                                <div className="flex justify-between">
+                                    <Skeleton width={80} height={20} className="rounded" />
+                                    <Skeleton width={100} height={16} className="rounded" />
+                                </div>
+                                <Skeleton width="100%" height={16} className="rounded" />
+                                <Skeleton width="80%" height={16} className="rounded opacity-60" />
                             </div>
-                        )}
-                    </div>
-                ))}
+                        ))
+                    )}
+
+                    {risks.map((r, idx) => (
+                        <motion.div
+                            key={idx}
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ delay: idx * 0.05 }}
+                            className="bg-navy-elevated/40 backdrop-blur-sm border border-slate-border/30 rounded-2xl p-6 hover:border-gold-primary/30 hover:shadow-xl transition-all duration-300 group relative"
+                        >
+                            <div className="flex items-start justify-between mb-4">
+                                <div className="flex items-center gap-3 flex-wrap">
+                                    <RiskBadge level={r.level} />
+                                    <VerificationBadge status={r.verification_status} />
+                                </div>
+                                <Typography variant="caption" className="text-gold-muted font-mono text-[10px] bg-gold-primary/5 px-2 py-0.5 rounded tracking-tighter">
+                                    {r.clause_ref || 'GENERAL'}
+                                </Typography>
+                            </div>
+                            <Typography variant="body" className="text-[14px] leading-relaxed text-paper-dark/80 group-hover:text-paper-dark transition-colors">{r.description}</Typography>
+                            {r.citation && (
+                                <div className="mt-4 pt-4 border-t border-slate-border/20">
+                                    <div className="flex items-center gap-2 text-[10px] text-gold-muted/60 font-bold uppercase tracking-widest italic group-hover:text-gold-primary transition-colors">
+                                        <AlertTriangle size={12} className="text-gold-primary" />
+                                        Căn cứ: {r.citation_url ? (
+                                            <a
+                                                href={r.citation_url}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                className="inline-flex items-center gap-1 text-gold-primary hover:text-gold-muted underline underline-offset-4 decoration-gold-primary/50 hover:decoration-gold-primary transition-all cursor-pointer pointer-events-auto"
+                                            >
+                                                {r.citation}
+                                                <ExternalLink size={10} />
+                                            </a>
+                                        ) : (
+                                            <span className="text-paper-dark/40">{r.citation}</span>
+                                        )}
+                                    </div>
+                                    {(r.source_title || r.source_excerpt) && (
+                                        <div className="mt-4 rounded-xl border border-slate-border/20 bg-navy-base/30 p-4">
+                                            <button
+                                                type="button"
+                                                onClick={() => setExpandedRisk(expandedRisk === idx ? null : idx)}
+                                                className="flex w-full items-center justify-between gap-3 text-left"
+                                            >
+                                                <div>
+                                                    <div className="text-[10px] font-bold uppercase tracking-[0.18em] text-paper-dark/35">Evidence</div>
+                                                    <div className="mt-1 text-sm font-semibold text-paper-dark">{r.source_title || r.evidence?.title}</div>
+                                                </div>
+                                                <span className="text-xs text-gold-primary">{expandedRisk === idx ? 'Thu gọn' : 'Xem chi tiết'}</span>
+                                            </button>
+                                            {expandedRisk === idx && (
+                                                <div className="mt-4 space-y-3">
+                                                    <div className="text-xs leading-relaxed text-paper-dark/65">
+                                                        {r.source_excerpt || r.evidence?.content?.slice(0, 320)}
+                                                    </div>
+                                                    <div className="flex flex-wrap items-center gap-3 text-[11px] text-paper-dark/45">
+                                                        <span>{r.source_domain || r.evidence?.source_domain}</span>
+                                                        {r.retrieved_at && <span>Retrieved: {new Date(r.retrieved_at).toLocaleString('vi-VN')}</span>}
+                                                        {r.evidence?.matched_article && <span>{r.evidence.matched_article}</span>}
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    )}
+                                </div>
+                            )}
+                        </motion.div>
+                    ))}
+                </AnimatePresence>
             </div>
 
             {/* Q&A Input Bar at Bottom */}
             {(status === 'success' || risks.length > 0) && (
-                <div className="mt-4 pt-4 border-t border-slate-border/50">
-                    <form onSubmit={handleQA} className="relative">
+                <div className="mt-4 pt-4 border-t border-slate-border/20">
+                    <form onSubmit={handleQA} className="relative group">
+                        <div className="absolute inset-0 bg-gold-primary/5 blur-xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity" />
                         <input
                             type="text"
                             value={query}
                             onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Hỏi thêm về hợp đồng..."
-                            className="w-full bg-navy-base border border-slate-border rounded-full py-3 pl-5 pr-12 text-sm focus:border-gold-primary outline-none transition-all placeholder:text-slate-500"
+                            placeholder="Hỏi AI thêm về hợp đồng này..."
+                            className="w-full bg-navy-base/80 border border-slate-border/50 rounded-2xl py-4 pl-6 pr-14 text-sm focus:border-gold-primary/50 outline-none backdrop-blur-md transition-all placeholder:text-paper-dark/30 shadow-inner"
                         />
                         <button
                             type="submit"
                             disabled={isSearching || !query.trim()}
-                            className="absolute right-2 top-1/2 -translate-y-1/2 p-2 bg-gold-primary rounded-full text-black hover:scale-105 active:scale-95 transition-all disabled:opacity-50 disabled:grayscale"
+                            aria-label="Gửi câu hỏi thêm"
+                            className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-gold-primary text-navy-base rounded-xl hover:scale-105 active:scale-95 transition-all disabled:opacity-20 shadow-gold"
                         >
-                            {isSearching ? <Loader2 size={18} className="animate-spin" /> : <Send size={18} />}
+                            {isSearching ? <Loader2 size={20} className="animate-spin" /> : <Search size={20} />}
                         </button>
                     </form>
                 </div>
             )}
-        </div>
+        </motion.div>
     )
+}
+
+function Scale(props: any) {
+    return <Zap {...props} />
 }
 
 export function ContractAnalysis() {

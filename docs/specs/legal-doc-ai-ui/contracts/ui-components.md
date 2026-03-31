@@ -1,19 +1,39 @@
-# UI Contracts: Component Library
+# UI Design System: Premium Legal AI
 
-This defines the breakdown of raw Stitch HTML into reusable React components.
+LegalEdge utilizes a **"Midnight Gold"** aesthetic — a high-contrast, premium interface designed for professional legal environments.
 
-## 1. Base Elements (`/components/ui/`)
-- `Button.tsx`: Supports `variant="primary" | "ghost" | "outline"`. Primary maps to Champagne Gold `#C9A84C`.
-- `RiskBadge.tsx`: `level="critical" | "moderate" | "note"`. Maps to `#8B1A1A` for critical.
-- `Typography.tsx`: Reusable text abstractions ensuring Playfair Display for `variant="h1" | "h2"` and Inter for `variant="body" | "caption"`.
+## Design Principles
+- **Atmosphere**: Dark Mode by default (`#0A1628`). Use Glassmorphism (`backdrop-blur`) and thin borders (`0.5px`).
+- **Typography**: Playfair Display for headings (Authority/Trust), Inter for interface text (Precision).
+- **Accents**: Champagne Gold (`#C9A84C`) for primary CTAs and critical highlights.
+- **Motion**: Subtle micro-animations (0.2s duration) for interaction feedback. No generic pop-ups.
 
-## 2. Layout Components (`/components/layout/`)
-- `Sidebar.tsx`: The left navigation menu from the Dashboard/Profile logic.
-- `Topbar.tsx`: Horizontal header with Logo and Breadcrumbs/Context titles.
-- `SplitView.tsx`: Takes `leftPanel` and `rightPanel` props to handle the 55/45 (Analysis) or 25/75 (Chat) layouts seamlessly via Flexbox or CSS Grid.
+## 1. Core Foundations (`/components/ui/`)
 
-## 3. High-Order Composites (`/components/features/`)
-- `ContractPreview.tsx`: The visual A4 simulated document view.
-- `AnalysisCard.tsx`: The card displaying a specific risk and its legal citation.
-- `ChatThread.tsx`: The structured legal Q&A layout (no chat bubbles, uses formal inset blocks).
-- `ClauseAccordion.tsx`: Expandable list of clauses for the editor sidebar.
+### [NEW] `Dialog.tsx` (Overlay)
+Custom portal-based modal replacing `window.confirm`. 
+- **Style**: Centered, `backdrop-blur-md`, nested within a `Framer Motion` AnimatePresence.
+- **Variants**: `danger` (red accents for deletion), `info` (gold accents).
+
+### [NEW] `Toast.tsx` / `Notification.tsx`
+Floating notification system replacing `window.alert`.
+- **Placement**: Bottom-right or Top-center. 
+- **Logic**: Auto-dismiss after 4s. Slide-in-out animations.
+
+### [MODIFY] `Button.tsx`
+- **Hover**: Subtle vertical lift (`-2px`) and outer glow (`shadow-gold`).
+- **Loading**: Pulse animation on the gold background, not a generic spinner.
+
+## 2. Structural Patterns (`/components/layout/`)
+
+### `SplitView.tsx`
+Handles the core "Review & Chat" layout.
+- **Left**: Document view (White/Paper aesthetic for readability).
+- **Right**: Dark AI Panel (Console-style, code-like precision).
+
+## 3. Interaction Polish
+
+- **Page Transitions**: Smooth fade-in + slide-up on route change.
+- **Skeleton Loaders**: Shimmering dark blocks matching the background, used during AI inference/embedding.
+- **Card States**: Hovering over dashboard contracts triggers a scale transform and border-glow transition.
+

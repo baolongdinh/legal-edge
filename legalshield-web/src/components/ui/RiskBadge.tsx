@@ -28,12 +28,12 @@ export function RiskBadge({ level, label, className }: RiskBadgeProps) {
     return (
         <span
             className={clsx(
-                'inline-flex items-center gap-1.5 px-2.5 py-1 text-xs font-medium border rounded-full font-sans',
+                'inline-flex items-center gap-1.5 whitespace-nowrap leading-none px-2.5 py-1 text-xs font-medium border rounded-full font-sans',
                 config.classes,
                 className
             )}
         >
-            <span className="w-1.5 h-1.5 rounded-full bg-current" />
+            <span className="w-1.5 h-1.5 rounded-full bg-current shrink-0" />
             {label ?? config.label}
         </span>
     )

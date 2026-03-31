@@ -24,11 +24,29 @@ async function hmacSha512(key: string, message: string): Promise<string> {
         .join('')
 }
 
-serve(async (req) => {
+export const handler = async (req: Request): Promise<Response> => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
     try {
-        const { plan_id, return_url } = await req.json()
+        const authHeader = req.headers.get('Authorization')
+        if (!authHeader) return errorResponse('Missing Authorization', 401)
+
+        const supabaseAuth = createClient(
+            Deno.env.get('SUPABASE_URL') || 'http://localhost',
+            Deno.env.get('SUPABASE_ANON_KEY') || 'anon',
+            { global: { headers: { Authorization: authHeader } } }
+        )
+
+        const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
+        if (authError || !user) return errorResponse('Unauthorized', 401)
+
+        let body;
+        try {
+            body = await req.json()
+        } catch {
+            return errorResponse('Invalid JSON payload', 400)
+        }
+        const { plan_id, return_url } = body
 
         // 1. Resolve amount
         let amount = 0
@@ -59,6 +77,20 @@ serve(async (req) => {
             vnp_TxnRef: Date.now().toString(),
         }
 
+        // Pre-create pending transaction
+        const supabaseService = createClient(
+            Deno.env.get('SUPABASE_URL') || 'http://localhost',
+            Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || 'service'
+        )
+        const { error: txError } = await supabaseService.from('transactions').insert({
+            user_id: user.id,
+            order_id: params.vnp_TxnRef,
+            provider: 'vnpay',
+            amount,
+            status: 'pending'
+        })
+        if (txError) throw new Error('Failed to track transaction: ' + txError.message)
+
         // 3. Sort params alphabetically
         const sortedKeys = Object.keys(params).sort()
         const signData = sortedKeys
@@ -78,6 +110,8 @@ serve(async (req) => {
         return jsonResponse({ checkout_url })
 
     } catch (err) {
-        return errorResponse(err.message)
+        return errorResponse((err as Error).message)
     }
-})
+}
+
+serve(handler)

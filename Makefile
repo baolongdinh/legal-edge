@@ -2,13 +2,17 @@
 # LegalShield — Management Makefile
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-.PHONY: help deploy-supabase deploy-frontend dev
+.PHONY: help deploy-supabase deploy-frontend dev test test-frontend test-backend test-e2e
 
 help:
 	@echo "LegalShield Management Commands:"
 	@echo "  make dev             - Start frontend development server"
 	@echo "  make deploy-supabase - Push migrations, set secrets, and deploy Edge Functions"
 	@echo "  make deploy-frontend - Deploy React app to Vercel"
+	@echo "  make test            - Run all complete testing logic (Frontend, Backend, E2E)"
+	@echo "  make test-frontend   - Run Vitest for UI components"
+	@echo "  make test-backend    - Run Deno tests for Edge Functions"
+	@echo "  make test-e2e        - Run Playwright tests for complete browser workflows"
 
 dev:
 	cd legalshield-web && npm run dev
@@ -24,6 +28,10 @@ deploy-supabase:
 	npx supabase secrets set --project-ref "$$SUPABASE_PROJECT_ID" \
 		GEMINI_API_KEYS="$$GEMINI_API_KEYS" \
 		GROQ_API_KEYS="$$GROQ_API_KEYS" \
+		EXA_API_KEYS="$$EXA_API_KEYS" \
+		UPSTASH_REDIS_REST_URL="$$UPSTASH_REDIS_REST_URL" \
+		UPSTASH_REDIS_REST_TOKEN="$$UPSTASH_REDIS_REST_TOKEN" \
+		JINA_API_KEY="$$JINA_API_KEY" \
 		STRIPE_SECRET_KEY="$$STRIPE_SECRET_KEY" \
 		STRIPE_PRICE_PRO_MONTHLY="$$STRIPE_PRICE_PRO_MONTHLY" \
 		STRIPE_PRICE_ENTERPRISE_MONTHLY="$$STRIPE_PRICE_ENTERPRISE_MONTHLY" \
@@ -40,15 +48,17 @@ deploy-supabase:
 		R2_PUBLIC_DOMAIN="$$R2_PUBLIC_DOMAIN"
 	@echo "▶ Deploying all Edge Functions..."
 	@set -a && . ./supabase/.env && set +a && \
-	npx supabase functions deploy risk-review --project-ref "$$SUPABASE_PROJECT_ID" && \
-	npx supabase functions deploy generate-contract --project-ref "$$SUPABASE_PROJECT_ID" && \
-	npx supabase functions deploy parse-document --project-ref "$$SUPABASE_PROJECT_ID" && \
-	npx supabase functions deploy export-pdf --project-ref "$$SUPABASE_PROJECT_ID" && \
-	npx supabase functions deploy create-checkout-session --project-ref "$$SUPABASE_PROJECT_ID" && \
-	npx supabase functions deploy momo-payment --project-ref "$$SUPABASE_PROJECT_ID" && \
-	npx supabase functions deploy vnpay-payment --project-ref "$$SUPABASE_PROJECT_ID" && \
-	npx supabase functions deploy payment-webhook --project-ref "$$SUPABASE_PROJECT_ID"
-	@echo "✅ Supabase deployment complete!"
+	npx supabase functions deploy risk-review --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
+	npx supabase functions deploy generate-contract --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
+	npx supabase functions deploy parse-document --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
+	npx supabase functions deploy ingest-contract --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
+	npx supabase functions deploy legal-chat --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
+	npx supabase functions deploy export-pdf --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
+	npx supabase functions deploy create-checkout-session --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
+	npx supabase functions deploy momo-payment --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
+	npx supabase functions deploy vnpay-payment --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
+	npx supabase functions deploy payment-webhook --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
+	npx supabase functions deploy contract-qa --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt
 	@echo "✅ Supabase deployment complete!"
 
 # Deploy Frontend to Vercel
@@ -60,3 +70,18 @@ deploy-frontend:
 		--env VITE_SUPABASE_URL="$$VITE_SUPABASE_URL" \
 		--env VITE_SUPABASE_ANON_KEY="$$VITE_SUPABASE_ANON_KEY"
 
+# Testing Suites
+test-frontend:
+	@echo "▶ Running Frontend Unit Tests (Vitest)..."
+	cd legalshield-web && npx vitest run
+
+test-backend:
+	@echo "▶ Running Backend Edge Function Tests (Supabase CLI)..."
+	npx supabase functions test
+
+test-e2e:
+	@echo "▶ Running Playwright E2E Tests..."
+	cd legalshield-web && npx playwright test
+
+test: test-frontend test-backend test-e2e
+	@echo "✅ All test suites passed successfully!"

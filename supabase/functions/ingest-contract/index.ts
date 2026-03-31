@@ -1,56 +1,64 @@
-import { serve } from 'https://deno.land/std@0.168.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders } from '../shared/headers.ts'
+// Edge Function: POST /functions/v1/ingest-contract
+// Processes contract text, generates embeddings, and stores them for RAG
+// Security: Manual JWT verification via Supabase Auth API
 
-const GEMINI_API_KEY = Deno.env.get('GEMINI_API_KEYS')?.split(',')[0]
+import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { corsHeaders, errorResponse, jsonResponse, roundRobinKey, embedText } from '../shared/types.ts'
 
 serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
     try {
-        const { contract_id, text } = await req.json()
-        if (!contract_id || !text) throw new Error('Missing contract_id or text')
+        // 1. Manual JWT Verification
+        const authHeader = req.headers.get('Authorization')
+        if (!authHeader) return errorResponse('Yêu cầu không có quyền truy cập (Missing Auth)', 401)
 
-        const supabase = createClient(
+        const token = authHeader.replace('Bearer ', '')
+        const supabaseAdmin = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         )
 
-        // Simple chunking by paragraph/newline
+        const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
+        if (authError || !user) return errorResponse('Phiên đăng nhập không hợp lệ hoặc đã hết hạn.', 401)
+
+        // 2. Parse Body
+        const { contract_id, text } = await req.json()
+        if (!contract_id || !text) return errorResponse('Missing contract_id or text', 400)
+
+        const geminiKey = roundRobinKey('GEMINI_API_KEYS', 'GEMINI_API_KEY')
+
+        // 3. Chunking & Embedding
         const chunks = text.split(/\n\n+/).filter((c: string) => c.trim().length > 50)
 
-        // For each chunk, get embedding
-        for (const chunk of chunks) {
-            const response = await fetch(
-                `https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${GEMINI_API_KEY}`,
-                {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        content: { parts: [{ text: chunk }] },
-                        task_type: 'RETRIEVAL_DOCUMENT',
-                    }),
+        // Parallel embedding for better performance
+        const results = await Promise.all(chunks.map(async (chunk) => {
+            try {
+                const embedding = await embedText(chunk, geminiKey)
+                return {
+                    contract_id,
+                    content: chunk,
+                    embedding,
+                    metadata: { author_id: user.id }
                 }
-            )
+            } catch (e) {
+                console.error('Embedding failed for chunk:', e)
+                return null
+            }
+        }))
 
-            const resData = await response.json()
-            const embedding = resData.embedding.values
+        const validResults = results.filter(r => r !== null)
 
-            await supabase.from('contract_chunks').insert({
-                contract_id,
-                content: chunk,
-                embedding,
-            })
+        if (validResults.length > 0) {
+            const { error: insertError } = await supabaseAdmin.from('contract_chunks').insert(validResults)
+            if (insertError) throw insertError
         }
 
-        return new Response(JSON.stringify({ success: true, count: chunks.length }), {
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        return jsonResponse({ success: true, count: validResults.length }, 200)
 
     } catch (error) {
-        return new Response(JSON.stringify({ error: error.message }), {
-            status: 400,
-            headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        })
+        console.error('Ingestion error:', error)
+        return errorResponse((error as Error).message)
     }
 })

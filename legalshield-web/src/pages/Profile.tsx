@@ -2,32 +2,15 @@ import { User, Mail, Lock, CreditCard, Bell } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Typography } from '../components/ui/Typography'
 import { useUserStore, usePayment } from '../store'
-import { supabase } from '../lib/supabase'
 import { useEffect } from 'react'
 
 export function Profile() {
-    const { user, subscription, setUser, syncSubscription, apiCallsUsed, apiCallsLimit } = useUserStore()
+    const { user, subscription, syncUser, apiCallsUsed, apiCallsLimit } = useUserStore()
     const { processPayment, isLoading: isLoadingCheckout } = usePayment()
 
     useEffect(() => {
-        const syncUser = async () => {
-            const { data: { user: authUser } } = await supabase.auth.getUser()
-            if (authUser) {
-                // Get extended profile
-                const { data: profile } = await supabase.from('users').select('*').eq('id', authUser.id).single()
-
-                setUser({
-                    id: authUser.id,
-                    email: authUser.email!,
-                    name: profile?.full_name || authUser.user_metadata?.full_name || 'Người dùng'
-                })
-
-                // Sync full subscription data from DB
-                syncSubscription(authUser.id)
-            }
-        }
         syncUser()
-    }, [setUser, syncSubscription])
+    }, [syncUser])
 
     const planDisplay = { free: 'Miễn phí', pro: 'Pro', enterprise: 'Enterprise' }
 
@@ -37,6 +20,23 @@ export function Profile() {
 
                 {/* Account section */}
                 <section className="bg-navy-elevated rounded-xl border border-slate-border p-6">
+                    <div className="flex flex-col items-center mb-8 pt-2">
+                        <div className="w-20 h-20 rounded-full border-2 border-gold-primary/30 p-1 mb-3 relative group">
+                            {user?.avatarUrl ? (
+                                <img src={user.avatarUrl} alt={user.name} className="w-full h-full rounded-full object-cover" />
+                            ) : (
+                                <div className="w-full h-full rounded-full bg-navy-base flex items-center justify-center text-gold-primary text-2xl font-serif">
+                                    {user?.name?.[0] || 'U'}
+                                </div>
+                            )}
+                            <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer">
+                                <Typography variant="caption" className="text-[10px] text-white">Thay đổi</Typography>
+                            </div>
+                        </div>
+                        <Typography variant="h2" className="text-xl mb-1">{user?.name}</Typography>
+                        <Typography variant="caption" className="text-slate-muted">{user?.email}</Typography>
+                    </div>
+
                     <div className="flex items-center gap-3 mb-5">
                         <User size={18} className="text-gold-primary" />
                         <Typography variant="h3" className="text-base">Thông tin tài khoản</Typography>

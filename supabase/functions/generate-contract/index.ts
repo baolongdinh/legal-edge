@@ -3,15 +3,26 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders, embedText, errorResponse, jsonResponse, roundRobinKey } from '../shared/types.ts'
+import {
+    buildLegalAnswerPayload,
+    corsHeaders,
+    embedText,
+    errorResponse,
+    fetchWithRetry,
+    jsonResponse,
+    requiresLegalCitation,
+    retrieveLegalEvidence,
+    roundRobinKey,
+} from '../shared/types.ts'
 
-const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:streamGenerateContent'
+const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent'
+const GEMINI_JSON_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent'
 
 serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
     try {
-        const { prompt, template_id, user_id } = await req.json()
+        const { prompt, template_id, mode = 'draft', current_draft, selection_context, parameters, response_mode = 'stream' } = await req.json()
         if (!prompt) return errorResponse('Missing prompt', 400)
 
         const geminiKey = roundRobinKey('GEMINI_API_KEYS', 'GEMINI_API_KEY')
@@ -20,8 +31,14 @@ serve(async (req) => {
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
         )
 
+        const retrievalQuery = [
+            prompt,
+            selection_context ? `Đoạn cần xử lý:\n${selection_context}` : '',
+            current_draft ? `Bối cảnh bản thảo:\n${current_draft.slice(0, 4000)}` : '',
+        ].filter(Boolean).join('\n\n')
+
         // 1. Embed the user prompt
-        const queryEmbedding = await embedText(prompt, geminiKey)
+        const queryEmbedding = await embedText(retrievalQuery, geminiKey)
 
         // 2. Vector similarity search (top 5 law chunks)
         const { data: chunks, error } = await supabase.rpc('match_document_chunks', {
@@ -43,23 +60,82 @@ serve(async (req) => {
             templateContent = t?.content_md ?? ''
         }
 
-        // 5. Stream Gemini response
-        const systemPrompt = `Bạn là trợ lý pháp lý Việt Nam. Soạn thảo hợp đồng chuyên nghiệp dựa trên:
-- Mẫu hợp đồng (nếu có)
-- Yêu cầu của người dùng
-- Cơ sở pháp lý được cung cấp
+        const systemPrompt = `Bạn là trợ lý pháp lý Việt Nam cho workspace soạn thảo hợp đồng của LegalShield.
 
-Luôn trích dẫn điều luật cụ thể. Viết bằng tiếng Việt pháp lý chuẩn.`
+Nhiệm vụ:
+- mode=draft: tạo bản thảo hoặc khung hợp đồng hoàn chỉnh dựa trên yêu cầu, mẫu, và cơ sở pháp lý.
+- mode=clause_insert: tạo một điều khoản hoặc block nội dung để CHÈN vào bản thảo hiện có.
+- mode=rewrite: viết lại chính đoạn được chọn, không viết lại toàn bộ hợp đồng.
+
+Quy tắc:
+1. Chỉ dựa trên mẫu hợp đồng, ngữ cảnh bản thảo, và cơ sở pháp lý đã cho.
+2. Nếu đưa ra kết luận pháp lý cụ thể, phải bám sát điều luật được cung cấp.
+3. Không tạo tiêu đề/thành phần dư thừa khi mode=clause_insert hoặc mode=rewrite.
+4. Trả lời bằng tiếng Việt pháp lý rõ ràng, sẵn sàng để chèn vào bản thảo.
+5. Không thêm giải thích ngoài nội dung được yêu cầu.`
+
+        const instructionText = `Chế độ: ${mode}
+Yêu cầu người dùng: ${prompt}
+
+Tham số cấu trúc: ${parameters ? JSON.stringify(parameters, null, 2) : 'Không có'}
+
+Mẫu hợp đồng:
+${templateContent || 'Không có'}
+
+Bản thảo hiện tại:
+${current_draft || 'Chưa có'}
+
+Đoạn đang chọn:
+${selection_context || 'Không có'}
+
+Cơ sở pháp lý:
+${legalContext || 'Không có kết quả truy xuất phù hợp'}`
 
         const body = {
-            system_instruction: { parts: [{ text: systemPrompt }] },
             contents: [{
                 role: 'user',
                 parts: [{
-                    text: `Cơ sở pháp lý:\n${legalContext}\n\nMẫu hợp đồng:\n${templateContent}\n\nYêu cầu:\n${prompt}`
+                    text: `${systemPrompt}\n\n${instructionText}`
                 }]
             }],
             generationConfig: { temperature: 0.2, maxOutputTokens: 4096 },
+        }
+
+        if (response_mode === 'json') {
+            const generationRes = await fetchWithRetry(
+                GEMINI_JSON_URL,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(body),
+                },
+                { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
+            )
+
+            const generationData = await generationRes.json()
+            const content = generationData.candidates?.[0]?.content?.parts?.[0]?.text?.trim()
+            if (!content) throw new Error('Gemini returned empty content')
+
+            const evidenceQuery = [
+                prompt,
+                mode,
+                selection_context || '',
+                templateContent.slice(0, 800),
+            ].filter(Boolean).join('\n')
+
+            const evidence = await retrieveLegalEvidence(evidenceQuery, 4)
+            const requiresCitation = requiresLegalCitation(`${prompt}\n${content}`)
+            const payload = buildLegalAnswerPayload(content, evidence, requiresCitation)
+
+            return jsonResponse({
+                content: payload.answer,
+                citations: payload.citations,
+                evidence: payload.evidence,
+                verification_status: payload.verification_status,
+                verification_summary: payload.verification_summary,
+                claim_audit: payload.claim_audit ?? [],
+                abstained: payload.abstained,
+            })
         }
 
         const geminiRes = await fetch(`${GEMINI_URL}?key=${geminiKey}&alt=sse`, {

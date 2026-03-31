@@ -40,7 +40,7 @@ async function callFunction<T>(name: string, body: unknown): Promise<T> {
 
 // Risk analysis
 export async function analyzeRisks(clauseText: string, context?: string) {
-    return callFunction<{ risks: import('./store').RiskBadge[] }>('risk-review', {
+    return callFunction<{ risks: import('../store').RiskBadge[] }>('risk-review', {
         clause_text: clauseText,
         contract_context: context,
     })
@@ -56,6 +56,47 @@ export async function generateContractStream(prompt: string, templateId?: string
             Authorization: `Bearer ${session?.access_token ?? supabaseAnonKey}`,
         },
         body: JSON.stringify({ prompt, template_id: templateId }),
+    })
+}
+
+export async function generateContractSuggestion(body: {
+    prompt: string
+    template_id?: string
+    current_draft?: string
+    selection_context?: string
+    mode?: 'draft' | 'clause_insert' | 'rewrite'
+    parameters?: Record<string, unknown>
+}) {
+    return callFunction<{
+        content: string
+        citations: Array<{
+            citation_text: string
+            citation_url: string
+            source_domain: string
+            source_title: string
+            source_excerpt: string
+            source_type: 'official' | 'secondary' | 'document_context'
+            verification_status: 'official_verified' | 'secondary_verified' | 'unsupported' | 'conflicted' | 'unverified'
+        }>
+        verification_status: 'official_verified' | 'secondary_verified' | 'unsupported' | 'conflicted' | 'unverified'
+        verification_summary: {
+            requires_citation: boolean
+            verification_status: 'official_verified' | 'secondary_verified' | 'unsupported' | 'conflicted' | 'unverified'
+            citation_count: number
+            official_count: number
+            secondary_count: number
+            unsupported_claim_count: number
+        }
+        claim_audit?: Array<{
+            claim: string
+            supported: boolean
+            matched_citation_url?: string
+            matched_source_domain?: string
+            score?: number
+        }>
+    }>('generate-contract', {
+        ...body,
+        response_mode: 'json',
     })
 }
 

@@ -45,3 +45,5 @@ _agents/
 _agent/
 AGENTS.md
 CLAUDE.md
+
+playwright-report/

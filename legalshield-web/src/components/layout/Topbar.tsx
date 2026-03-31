@@ -1,4 +1,4 @@
-import { Bell, User } from 'lucide-react'
+import { Bell, User, LogOut } from 'lucide-react'
 import { useUserStore } from '../../store'
 import { Typography } from '../ui/Typography'
 
@@ -8,7 +8,7 @@ interface TopbarProps {
 }
 
 export function Topbar({ title, subtitle }: TopbarProps) {
-    const { user, subscription } = useUserStore()
+    const { user, subscription, logout } = useUserStore()
 
     const planLabel: Record<typeof subscription, string> = {
         free: 'Miễn phí',
@@ -42,12 +42,29 @@ export function Topbar({ title, subtitle }: TopbarProps) {
                     <Bell size={18} />
                 </button>
 
-                {/* Avatar */}
-                <button className="flex items-center gap-2 p-1 rounded-lg hover:bg-navy-hover transition-colors">
-                    <div className="w-8 h-8 rounded-full bg-gold-primary/20 border border-gold-primary/40 flex items-center justify-center text-gold-primary">
-                        <User size={15} />
+                {/* Avatar / Profile */}
+                <button
+                    onClick={() => window.location.href = '/profile'}
+                    className="flex items-center gap-2 p-1 rounded-lg hover:bg-navy-hover transition-colors"
+                >
+                    <div className="w-8 h-8 rounded-full bg-gold-primary/20 border border-gold-primary/40 flex items-center justify-center text-gold-primary overflow-hidden">
+                        {user?.avatarUrl ? (
+                            <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
+                        ) : (
+                            <User size={15} />
+                        )}
                     </div>
-                    <span className="hidden md:block text-sm text-paper-dark">{user?.name ?? 'Người dùng'}</span>
+                    <span className="hidden md:block text-sm text-paper-dark font-medium">{user?.name ?? 'Người dùng'}</span>
+                </button>
+
+                {/* Logout */}
+                <div className="h-6 w-px bg-slate-border mx-1 hidden sm:block" />
+                <button
+                    onClick={logout}
+                    title="Đăng xuất"
+                    className="p-2 text-slate-muted hover:text-red-400 transition-colors rounded-lg hover:bg-red-400/10"
+                >
+                    <LogOut size={18} />
                 </button>
             </div>
         </header>

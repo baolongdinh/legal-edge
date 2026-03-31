@@ -1,0 +1,28 @@
+[
+  {
+    "id": "official_max_penalty",
+    "question": "Theo luật Việt Nam, mức phạt vi phạm hợp đồng thương mại tối đa là bao nhiêu?",
+    "expected_status": "official_verified",
+    "expected_domain": "vbpl.vn",
+    "expected_article": "Điều 301 Luật Thương mại 2005"
+  },
+  {
+    "id": "secondary_only_summary",
+    "question": "Tóm tắt nhanh quy định về phạt vi phạm theo nguồn pháp lý thứ cấp.",
+    "expected_status": "secondary_verified",
+    "expected_domain": "luatvietnam.vn",
+    "expected_article": "Điều 301 Luật Thương mại 2005"
+  },
+  {
+    "id": "unsupported_wrong_article",
+    "question": "Điều 328 Bộ luật Dân sự có tự động áp dụng cho mọi tranh chấp thương mại không?",
+    "expected_status": "unsupported",
+    "must_abstain": true
+  },
+  {
+    "id": "mixed_supported_and_unsupported",
+    "question": "Mức phạt vi phạm tối đa là 8%, đồng thời mọi tranh chấp thương mại đều mặc định theo Điều 328 Bộ luật Dân sự, đúng không?",
+    "expected_status": "conflicted",
+    "must_surface_claim_audit": true
+  }
+]

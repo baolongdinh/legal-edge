@@ -24,6 +24,24 @@ export interface RiskBadge {
     level: 'critical' | 'moderate' | 'note'
     description: string
     citation: string
+    citation_url?: string
+    citation_text?: string
+    source_domain?: string
+    source_title?: string
+    source_excerpt?: string
+    source_type?: 'official' | 'secondary' | 'document_context'
+    verification_status?: 'official_verified' | 'secondary_verified' | 'unsupported' | 'conflicted' | 'unverified'
+    retrieved_at?: string
+    evidence?: {
+        title: string
+        url: string
+        content: string
+        source_domain: string
+        source_type: 'official' | 'secondary' | 'document_context'
+        retrieved_at: string
+        matched_article?: string
+        score?: number
+    }
 }
 
 interface AnalysisState {
@@ -103,7 +121,9 @@ interface UserState {
     apiCallsLimit: number
     setUser: (user: UserState['user']) => void
     setSubscription: (plan: UserState['subscription']) => void
+    syncUser: () => Promise<void>
     syncSubscription: (userId: string) => Promise<void>
+    logout: () => Promise<void>
 }
 
 export const useUserStore = create<UserState>((set) => ({
@@ -113,6 +133,42 @@ export const useUserStore = create<UserState>((set) => ({
     apiCallsLimit: 10,
     setUser: (user) => set({ user }),
     setSubscription: (subscription) => set({ subscription }),
+    syncUser: async () => {
+        const { data: { user: authUser } } = await supabase.auth.getUser()
+        if (!authUser) {
+            set({ user: null, subscription: 'free', apiCallsUsed: 0, apiCallsLimit: 10 })
+            return
+        }
+
+        const { data: profile } = await supabase
+            .from('users')
+            .select('full_name, avatar_url')
+            .eq('id', authUser.id)
+            .maybeSingle()
+
+        set({
+            user: {
+                id: authUser.id,
+                email: authUser.email!,
+                name: profile?.full_name || authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Người dùng',
+                avatarUrl: profile?.avatar_url || authUser.user_metadata?.avatar_url || authUser.user_metadata?.avatar
+            }
+        })
+
+        const { data: subscription } = await supabase
+            .from('subscriptions')
+            .select('plan, api_calls_used, api_calls_limit')
+            .eq('user_id', authUser.id)
+            .maybeSingle()
+
+        if (subscription) {
+            set({
+                subscription: subscription.plan as any,
+                apiCallsUsed: subscription.api_calls_used,
+                apiCallsLimit: subscription.api_calls_limit
+            })
+        }
+    },
     syncSubscription: async (userId: string) => {
         const { data } = await supabase
             .from('subscriptions')
@@ -127,6 +183,11 @@ export const useUserStore = create<UserState>((set) => ({
                 apiCallsLimit: data.api_calls_limit
             })
         }
+    },
+    logout: async () => {
+        await supabase.auth.signOut()
+        set({ user: null, subscription: 'free', apiCallsUsed: 0, apiCallsLimit: 10 })
+        window.location.href = '/'
     }
 }))
 
@@ -182,30 +243,101 @@ export const usePayment = () => {
 // --- Clause Editor State ---
 export interface Clause {
     id: string
-    category: 'bảo mật' | 'bồi thường' | 'tranh chấp' | 'thanh toán' | 'chung'
+    category: string
     title: string
     content: string
+    kind?: 'full_template' | 'clause_snippet'
+    source_type?: 'curated' | 'ai_generated' | 'user_saved'
 }
 
 interface EditorState {
+    activeDraftId: string | null
+    draftTitle: string
     activeDraft: string
     clauseLibrary: Clause[]
     searchQuery: string
+    recentClauseIds: string[]
     setDraft: (content: string) => void
+    setDraftDocument: (payload: { id?: string | null; title?: string; content?: string }) => void
+    setDraftTitle: (title: string) => void
     setSearch: (query: string) => void
-    insertClause: (clauses: Clause[], clauseId: string) => void
+    setClauseLibrary: (clauses: Clause[]) => void
+    rememberClauseUse: (clauseId: string) => void
+    insertClause: (clauses: Clause[], clauseId: string, target?: 'append' | 'selection_replace' | 'cursor_insert', selection?: { start: number; end: number }) => void
+    resetDraft: () => void
 }
 
-export const useEditorStore = create<EditorState>((set) => ({
-    activeDraft: '',
-    clauseLibrary: [],
-    searchQuery: '',
-    setDraft: (content) => set({ activeDraft: content }),
-    setSearch: (query) => set({ searchQuery: query }),
-    insertClause: (clauses, clauseId) => {
-        const clause = clauses.find((c) => c.id === clauseId)
-        if (clause) {
-            set((s) => ({ activeDraft: s.activeDraft + '\n\n' + clause.content }))
+export const useEditorStore = create<EditorState>()(
+    persist(
+        (set) => ({
+            activeDraftId: null,
+            draftTitle: 'Bản thảo hợp đồng',
+            activeDraft: '',
+            clauseLibrary: [],
+            searchQuery: '',
+            recentClauseIds: [],
+            setDraft: (content) => set({ activeDraft: content }),
+            setDraftDocument: ({ id, title, content }) => set((state) => ({
+                activeDraftId: id ?? state.activeDraftId,
+                draftTitle: title ?? state.draftTitle,
+                activeDraft: content ?? state.activeDraft,
+            })),
+            setDraftTitle: (draftTitle) => set({ draftTitle }),
+            setSearch: (query) => set({ searchQuery: query }),
+            setClauseLibrary: (clauseLibrary) => set({ clauseLibrary }),
+            rememberClauseUse: (clauseId) => set((state) => ({
+                recentClauseIds: [clauseId, ...state.recentClauseIds.filter((id) => id !== clauseId)].slice(0, 12),
+            })),
+            insertClause: (clauses, clauseId, target = 'append', selection) => {
+                const clause = clauses.find((c) => c.id === clauseId)
+                if (!clause) return
+
+                set((state) => {
+                    const normalizedClause = clause.content.trim()
+                    const currentDraft = state.activeDraft || ''
+
+                    if (
+                        (target === 'selection_replace' || target === 'cursor_insert') &&
+                        selection &&
+                        selection.start >= 0 &&
+                        selection.end >= selection.start
+                    ) {
+                        const insertText = target === 'cursor_insert'
+                            ? `${selection.start > 0 ? '\n\n' : ''}${normalizedClause}\n\n`
+                            : normalizedClause
+                        return {
+                            activeDraft: `${currentDraft.slice(0, selection.start)}${insertText}${currentDraft.slice(selection.end)}`.trim(),
+                            recentClauseIds: [clauseId, ...state.recentClauseIds.filter((id) => id !== clauseId)].slice(0, 12),
+                        }
+                    }
+
+                    const nextDraft = currentDraft.trim()
+                        ? `${currentDraft.trim()}\n\n${normalizedClause}`
+                        : normalizedClause
+
+                    return {
+                        activeDraft: nextDraft,
+                        recentClauseIds: [clauseId, ...state.recentClauseIds.filter((id) => id !== clauseId)].slice(0, 12),
+                    }
+                })
+            },
+            resetDraft: () => set({
+                activeDraftId: null,
+                draftTitle: 'Bản thảo hợp đồng',
+                activeDraft: '',
+                searchQuery: '',
+            }),
+        }),
+        {
+            name: 'legalshield-editor-storage',
+            storage: createJSONStorage(() => storage),
+            partialize: (state) => ({
+                activeDraftId: state.activeDraftId,
+                draftTitle: state.draftTitle,
+                activeDraft: state.activeDraft,
+                searchQuery: state.searchQuery,
+                recentClauseIds: state.recentClauseIds,
+            }),
         }
-    },
-}))
+    )
+)

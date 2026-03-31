@@ -23,6 +23,9 @@ interface RiskBadge {
   level: 'critical' | 'moderate' | 'note';
   description: string;
   citation: string;
+  citationUrl?: string;
+  verificationStatus?: 'official_verified' | 'secondary_verified' | 'unsupported' | 'conflicted' | 'unverified';
+  sourceDomain?: string;
 }
 
 interface AnalysisState {
@@ -65,6 +68,31 @@ interface UserState {
   
   refreshAuth: () => Promise<void>;
   upgradePlan: (planId: string) => Promise<void>; // Triggers checkout-session
+}
+```
+
+## 6. Verified Legal Advisory Response
+```typescript
+interface LegalCitation {
+  citation_text: string;
+  citation_url: string;
+  source_domain: string;
+  source_title: string;
+  source_excerpt: string;
+  source_type: 'official' | 'secondary' | 'document_context';
+  verification_status: 'official_verified' | 'secondary_verified' | 'unsupported' | 'conflicted' | 'unverified';
+}
+
+interface LegalAnswerPayload {
+  answer: string;
+  citations: LegalCitation[];
+  evidence: Array<{
+    title: string;
+    url: string;
+    source_domain: string;
+    source_type: 'official' | 'secondary' | 'document_context';
+  }>;
+  verification_status: 'official_verified' | 'secondary_verified' | 'unsupported' | 'conflicted' | 'unverified';
 }
 ```
 

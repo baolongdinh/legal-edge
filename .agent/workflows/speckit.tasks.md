@@ -271,3 +271,80 @@ Every task MUST strictly follow this format:
   - Within each story: Tests (if requested) → Models → Services → Endpoints → Integration
   - Each phase should be a complete, independently testable increment
 - **Final Phase**: Polish & Cross-Cutting Concerns
+
+### Core AI Legal Citation Tasks
+
+If the feature includes AI legal advisory, legal Q&A, contract review, risk analysis, RAG, or any requirement to cite laws/regulations/case references, task generation MUST include an explicit core-logic task set for citation accuracy and source verification. Do not treat this as optional polish.
+
+Required task themes:
+
+1. **Source policy & allowlist**
+   - Add tasks to define authoritative legal-source tiers and allowed domains.
+   - Tier 1 should prefer official sources (`moj.gov.vn`, `chinhphu.vn`, official government/legal portals).
+   - Tier 2 may include reputable legal aggregators (`thuvienphapluat.vn`, `luatvietnam.vn`, `lawnet.vn`) only as fallback or cross-check sources.
+
+2. **Citation contract**
+   - Add tasks to formalize a citation schema in API/contracts/data model.
+   - Each AI legal claim that cites law must carry structured fields such as:
+     - `citation_text`
+     - `citation_url`
+     - `source_domain`
+     - `source_title`
+     - `source_excerpt`
+     - `source_type`
+     - `verification_status`
+     - `retrieved_at`
+   - Tasks must cover both backend response shape and frontend rendering rules.
+
+3. **Retrieval-first answer pipeline**
+   - Add tasks so the implementation retrieves legal sources before synthesis whenever the answer contains legal interpretation, legal obligation, penalties, time limits, procedures, or article references.
+   - Task breakdown should separate:
+     - retrieval/query rewrite
+     - source filtering/ranking
+     - evidence extraction
+     - answer synthesis from evidence only
+
+4. **Claim-to-evidence grounding**
+   - Add tasks to force the model to answer from retrieved evidence, not from parametric memory.
+   - Include tasks for sentence-level or bullet-level mapping from answer claims to supporting citations.
+   - If no reliable source exists, tasks must require the system to abstain or explicitly mark the answer as unverified.
+
+5. **Citation verification & anti-hallucination guardrails**
+   - Add tasks for post-generation validation:
+     - reject non-allowlisted domains
+     - reject dead or malformed URLs
+     - verify cited article text/title appears in retrieved evidence
+     - drop or downgrade unsupported claims
+   - If the feature already uses Exa or web search, tasks must include a verification layer beyond simple search result insertion.
+
+6. **Caching & cost control**
+   - Add tasks for exact-match and semantic caching of verified legal evidence/results.
+   - Cache the retrieval/evidence layer separately from final prose where possible.
+   - Prefer cheap models for routing, query rewrite, classification, and verification; reserve expensive models for final synthesis only when needed.
+
+7. **Observability & QA**
+   - Add tasks for logging citation coverage, verification failures, unsupported-claim rate, cache hit rate, and per-answer tool cost.
+   - Add evaluation tasks using a gold-set of legal questions with expected citation URLs.
+
+8. **UX fallback behavior**
+   - Add tasks to render citations clearly in the UI and show verification state.
+   - Add explicit fallback tasks for:
+     - no authoritative source found
+     - conflicting sources found
+     - source found but article text not matched
+   - The UI should prefer “không đủ căn cứ để khẳng định” over confident uncited advice.
+
+When generating tasks for these features, include at least:
+- one foundational task for source policy / citation schema
+- one backend core-logic task for retrieval and verification
+- one task for cache/cost optimization
+- one integration task for frontend citation rendering
+- one evaluation/QA task for legal-answer correctness
+
+Example task patterns:
+- [ ] T0XX Define legal source allowlist and citation verification contract in `docs/...` and `supabase/functions/shared/...`
+- [ ] T0XX [US1] Implement retrieval-first legal evidence pipeline in `supabase/functions/legal-chat/index.ts`
+- [ ] T0XX [P] [US1] Add citation verification and unsupported-claim filtering in `supabase/functions/shared/types.ts`
+- [ ] T0XX [US1] Persist verified evidence/cache for repeated legal queries in `supabase/...`
+- [ ] T0XX [US1] Render citation links and verification badges in `legalshield-web/src/pages/...`
+- [ ] T0XX [US1] Add evaluation fixtures for citation accuracy and abstention behavior in `tests/...`

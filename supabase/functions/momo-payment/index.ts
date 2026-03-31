@@ -27,6 +27,18 @@ serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
     try {
+        const authHeader = req.headers.get('Authorization')
+        if (!authHeader) return errorResponse('Missing Authorization', 401)
+
+        const supabaseAuth = createClient(
+            Deno.env.get('SUPABASE_URL')!,
+            Deno.env.get('SUPABASE_ANON_KEY')!,
+            { global: { headers: { Authorization: authHeader } } }
+        )
+
+        const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
+        if (authError || !user) return errorResponse('Unauthorized', 401)
+
         const { plan_id, redirect_url, ipn_url } = await req.json()
 
         // 1. Resolve amount based on plan (Real values should come from DB or config)
@@ -55,6 +67,17 @@ serve(async (req) => {
         // 3. Create raw signature string (Order of fields MATTERS)
         const rawSignature = `accessKey=${accessKey}&amount=${amount}&extraData=${extraData}&ipnUrl=${ipn_url}&orderId=${orderId}&orderInfo=${orderInfo}&partnerCode=${partnerCode}&redirectUrl=${redirect_url}&requestId=${requestId}&requestType=${requestType}`
         const signature = await hmacSha256(secretKey, rawSignature)
+
+        // Pre-create pending transaction
+        const supabaseService = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!)
+        const { error: txError } = await supabaseService.from('transactions').insert({
+            user_id: user.id,
+            order_id: orderId,
+            provider: 'momo',
+            amount,
+            status: 'pending'
+        })
+        if (txError) throw new Error('Failed to track transaction: ' + txError.message)
 
         // 4. Request to MoMo
         const payload = {

@@ -22,3 +22,19 @@ enable_confirmations = true
 [storage]
 
 [functions]
+
+[functions.legal-chat]
+enabled = true
+verify_jwt = false
+
+[functions.parse-document]
+verify_jwt = false
+
+[functions.risk-review]
+verify_jwt = false
+
+[functions.contract-qa]
+verify_jwt = false
+
+[functions.ingest-contract]
+verify_jwt = false
