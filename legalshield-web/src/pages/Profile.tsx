@@ -3,6 +3,7 @@ import { Button } from '../components/ui/Button'
 import { Typography } from '../components/ui/Typography'
 import { useUserStore, usePayment } from '../store'
 import { useEffect } from 'react'
+import { clsx } from 'clsx'
 
 export function Profile() {
     const { user, subscription, syncUser, apiCallsUsed, apiCallsLimit } = useUserStore()
@@ -22,19 +23,23 @@ export function Profile() {
                 <section className="bg-navy-elevated rounded-xl border border-slate-border p-6">
                     <div className="flex flex-col items-center mb-8 pt-2">
                         <div className="w-20 h-20 rounded-full border-2 border-gold-primary/30 p-1 mb-3 relative group">
-                            {user?.avatarUrl ? (
-                                <img src={user.avatarUrl} alt={user.name} className="w-full h-full rounded-full object-cover" />
-                            ) : (
-                                <div className="w-full h-full rounded-full bg-navy-base flex items-center justify-center text-gold-primary text-2xl font-serif">
-                                    {user?.name?.[0] || 'U'}
-                                </div>
+                            <div className="absolute inset-1 rounded-full bg-navy-base flex items-center justify-center text-gold-primary text-2xl font-serif z-0">
+                                {user?.name?.[0] || 'U'}
+                            </div>
+                            {user?.avatarUrl && (
+                                <img
+                                    src={user.avatarUrl}
+                                    alt={user.name}
+                                    className="w-full h-full rounded-full object-cover relative z-10"
+                                    onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                />
                             )}
-                            <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer">
+                            <div className="absolute inset-0 rounded-full bg-black/40 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity cursor-pointer z-20">
                                 <Typography variant="caption" className="text-[10px] text-white">Thay đổi</Typography>
                             </div>
                         </div>
                         <Typography variant="h2" className="text-xl mb-1">{user?.name}</Typography>
-                        <Typography variant="caption" className="text-slate-muted">{user?.email}</Typography>
+                        <Typography variant="caption" className="text-slate-muted">@{user?.username || user?.email?.split('@')[0]}</Typography>
                     </div>
 
                     <div className="flex items-center gap-3 mb-5">
@@ -43,15 +48,18 @@ export function Profile() {
                     </div>
                     <div className="space-y-4">
                         {[
-                            { label: 'Họ và tên', icon: User, value: user?.name ?? '', type: 'text' },
-                            { label: 'Email', icon: Mail, value: user?.email ?? '', type: 'email' },
-                        ].map(({ label, icon: Icon, value, type }) => (
+                            { label: 'Họ và tên', icon: User, value: user?.name ?? '', type: 'text', readOnly: false },
+                            { label: 'Tên đăng nhập', icon: Mail, value: user?.username ?? user?.email?.split('@')[0] ?? '', type: 'text', readOnly: true },
+                        ].map(({ label, icon: Icon, value, type, readOnly }) => (
                             <div key={label}>
                                 <label className="block text-xs font-medium text-gold-muted mb-1.5 uppercase tracking-wider font-sans">{label}</label>
                                 <div className="relative">
                                     <Icon size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-muted" />
-                                    <input type={type} defaultValue={value}
-                                        className="w-full pl-9 pr-3 py-2.5 text-sm bg-navy-base border border-slate-border rounded-md text-paper-dark focus:outline-none focus:border-gold-primary transition-colors" />
+                                    <input type={type} defaultValue={value} readOnly={readOnly}
+                                        className={clsx(
+                                            "w-full pl-9 pr-3 py-2.5 text-sm bg-navy-base border border-slate-border rounded-md text-paper-dark focus:outline-none focus:border-gold-primary transition-colors",
+                                            readOnly && "opacity-60 cursor-not-allowed"
+                                        )} />
                                 </div>
                             </div>
                         ))}

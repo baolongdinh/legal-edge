@@ -17,7 +17,7 @@ export function Topbar({ title, subtitle }: TopbarProps) {
     }
 
     return (
-        <header className="h-16 flex items-center justify-between px-6 border-b border-slate-border bg-navy-base/80 backdrop-blur-sm">
+        <header className="h-16 flex items-center justify-between px-4 md:px-6 border-b border-slate-border bg-navy-base/80 backdrop-blur-sm">
             {/* Page title */}
             <div>
                 <Typography variant="h3" className="text-lg">
@@ -47,11 +47,15 @@ export function Topbar({ title, subtitle }: TopbarProps) {
                     onClick={() => window.location.href = '/profile'}
                     className="flex items-center gap-2 p-1 rounded-lg hover:bg-navy-hover transition-colors"
                 >
-                    <div className="w-8 h-8 rounded-full bg-gold-primary/20 border border-gold-primary/40 flex items-center justify-center text-gold-primary overflow-hidden">
-                        {user?.avatarUrl ? (
-                            <img src={user.avatarUrl} alt={user.name} className="w-full h-full object-cover" />
-                        ) : (
-                            <User size={15} />
+                    <div className="w-8 h-8 rounded-full bg-gold-primary/20 border border-gold-primary/40 flex items-center justify-center text-gold-primary overflow-hidden relative">
+                        <User size={15} className="absolute inset-0 m-auto text-gold-primary" />
+                        {user?.avatarUrl && (
+                            <img
+                                src={user.avatarUrl}
+                                alt={user.name}
+                                className="w-full h-full object-cover relative z-10 bg-navy-base"
+                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                            />
                         )}
                     </div>
                     <span className="hidden md:block text-sm text-paper-dark font-medium">{user?.name ?? 'Người dùng'}</span>

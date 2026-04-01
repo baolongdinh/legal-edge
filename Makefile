@@ -11,7 +11,7 @@ COLOR_YELLOW := \033[1;33m
 COLOR_GREEN := \033[1;32m
 COLOR_RESET := \033[0m
 
-.PHONY: help dev install-frontend deploy deploy-frontend-vercel deploy-supabase crawl-templates init-templates test test-frontend test-backend test-e2e
+.PHONY: help dev install-frontend deploy deploy-frontend-vercel deploy-supabase crawl-templates promote-templates snapshot-templates refine-templates render-template-pdfs publish-template-assets sync-templates init-templates test test-frontend test-backend test-e2e
 
 help:
 	@echo "LegalShield Management Commands:"
@@ -19,7 +19,13 @@ help:
 	@echo "  make deploy                - Deploy frontend production to Vercel"
 	@echo "  make deploy-supabase       - Push migrations, set secrets, and deploy Edge Functions"
 	@echo "  make crawl-templates       - Crawl candidate legal templates from the web into repo JSON"
-	@echo "  make init-templates        - Seed repo templates into public.templates via REST upsert"
+	@echo "  make promote-templates     - Promote crawled JSON into templates/library markdown + manifest entries"
+	@echo "  make snapshot-templates    - Fetch and store original source artifacts for promoted web templates"
+	@echo "  make refine-templates      - Clean promoted template content from captured source HTML"
+	@echo "  make render-template-pdfs  - Render clean PDF deliverables for templates without original DOC/PDF files"
+	@echo "  make publish-template-assets - Copy template files into frontend public assets for runtime viewing"
+	@echo "  make sync-templates        - Run crawl -> promote -> snapshot -> refine -> render -> publish -> init as one end-to-end template pipeline"
+	@echo "  make init-templates        - Seed repo templates into public.templates and synchronize existing rows"
 	@echo "  make test                  - Run all complete testing logic (Frontend, Backend, E2E)"
 	@echo "  make test-frontend         - Run Vitest for UI components"
 	@echo "  make test-backend          - Run Deno tests for Edge Functions"
@@ -102,9 +108,36 @@ crawl-templates:
 	@set -a && . $(SUPABASE_ENV) && set +a && \
 	node ./scripts/crawl_templates.mjs
 
+promote-templates:
+	@echo "▶ Promoting crawled templates into templates/library ..."
+	@set -a && . $(SUPABASE_ENV) && set +a && \
+	node ./scripts/promote_templates.mjs
+
+snapshot-templates:
+	@echo "▶ Capturing original source artifacts for promoted templates ..."
+	@set -a && . $(SUPABASE_ENV) && set +a && \
+	node ./scripts/snapshot_template_sources.mjs
+
+refine-templates:
+	@echo "▶ Refining promoted template content from captured sources ..."
+	@set -a && . $(SUPABASE_ENV) && set +a && \
+	node ./scripts/refine_promoted_templates.mjs
+
+render-template-pdfs:
+	@echo "▶ Rendering clean PDF versions for HTML-only templates ..."
+	@set -a && . $(SUPABASE_ENV) && set +a && \
+	node ./scripts/render_template_pdfs.mjs
+
+publish-template-assets:
+	@echo "▶ Publishing template file assets to frontend public directory ..."
+	node ./scripts/publish_template_assets.mjs
+
+sync-templates: crawl-templates promote-templates snapshot-templates refine-templates render-template-pdfs publish-template-assets init-templates
+	@echo "✅ Template crawl/promote/init pipeline completed"
+
 init-templates:
 	@echo "▶ Seeding repo templates into public.templates ..."
-	@set -a && . $(SUPABASE_ENV) && set +a && \
+	@set -a && . $(SUPABASE_ENV) && . $(WEB_ENV) && set +a && \
 	node ./scripts/init_templates.mjs
 
 # Testing Suites

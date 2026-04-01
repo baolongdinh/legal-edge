@@ -1,13 +1,8 @@
-// Edge Function: POST /functions/v1/export-pdf
-// Converts contract HTML to A4 PDF using Puppeteer (via browserless.io or Deno Puppeteer)
-
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import { deleteFromCloudinary, uploadToCloudinary } from '../shared/cloudinary.ts'
 import { corsHeaders, errorResponse, jsonResponse } from '../shared/types.ts'
-
-const BROWSERLESS_TOKEN = Deno.env.get('BROWSERLESS_TOKEN') ?? ''
-const BROWSERLESS_URL = 'https://chrome.browserless.io/pdf'
+import { PDFDocument, StandardFonts, rgb } from 'https://esm.sh/pdf-lib@1.17.1'
 
 serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -25,49 +20,90 @@ serve(async (req) => {
         const { data: { user }, error: authError } = await supabase.auth.getUser()
         if (authError || !user) return errorResponse('Unauthorized', 401)
 
-        const { contract_id, html_content } = await req.json()
+        const { contract_id, html_content, title } = await req.json()
         if (!html_content) return errorResponse('Missing html_content', 400)
 
-        let previousPdfMeta: { pdf_public_id: string | null; pdf_resource_type: 'image' | 'raw' | 'video' | null } | null = null
+        // Get previous PDF meta if existing
+        let previousPdfMeta: { pdf_public_id: string | null; pdf_resource_type: string | null } | null = null
         if (contract_id) {
             const { data } = await supabase
                 .from('contracts')
                 .select('pdf_public_id, pdf_resource_type')
                 .eq('id', contract_id)
                 .maybeSingle()
-            if (data) previousPdfMeta = data as typeof previousPdfMeta
+            if (data) previousPdfMeta = data
         }
 
-        // Wrap content in styled A4 HTML
-        const fullHtml = `<!DOCTYPE html>
-<html lang="vi">
-<head>
-  <meta charset="UTF-8">
-  <style>
-    @import url('https://fonts.googleapis.com/css2?family=Times+New+Roman&display=swap');
-    body { font-family: 'Times New Roman', Times, serif; font-size: 13pt; line-height: 1.8; margin: 2cm 2.5cm; color: #111; }
-    h1 { text-align: center; font-size: 16pt; text-transform: uppercase; margin-bottom: 24pt; }
-    p { margin: 6pt 0; text-align: justify; }
-  </style>
-</head>
-<body>${html_content}</body>
-</html>`
+        // Local PDF generation using pdf-lib (no API key needed)
+        const pdfDoc = await PDFDocument.create()
+        const font = await pdfDoc.embedFont(StandardFonts.TimesRoman)
+        const fontBold = await pdfDoc.embedFont(StandardFonts.TimesRomanBold)
 
-        // Render PDF via Browserless.io (headless Chrome as a service)
-        const pdfRes = await fetch(`${BROWSERLESS_URL}?token=${BROWSERLESS_TOKEN}`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                html: fullHtml,
-                options: { format: 'A4', printBackground: true, margin: { top: '2cm', bottom: '2cm', left: '2.5cm', right: '2.5cm' } },
-            }),
-        })
+        const pageWidth = 595.28 // A4
+        const pageHeight = 841.89
+        const margin = 50
+        const lineHeight = 16
 
-        if (!pdfRes.ok) throw new Error(`PDF render error: ${await pdfRes.text()}`)
-        const pdfBuffer = await pdfRes.arrayBuffer()
+        let page = pdfDoc.addPage([pageWidth, pageHeight])
+        let y = pageHeight - margin
+
+        // Simple HTML to Text parser for our specific format (<h1> and <p>)
+        const lines: { text: string; isBold: boolean }[] = []
+
+        // Extract Title
+        const h1Match = html_content.match(/<h1>(.*?)<\/h1>/)
+        if (h1Match) {
+            lines.push({ text: h1Match[1].toUpperCase(), isBold: true })
+            lines.push({ text: '', isBold: false })
+        }
+
+        // Extract Paragraphs
+        const pMatches = html_content.matchAll(/<p>(.*?)<\/p>/g)
+        for (const match of pMatches) {
+            let text = match[1]
+                .replace(/&amp;/g, '&')
+                .replace(/&lt;/g, '<')
+                .replace(/&gt;/g, '>')
+                .replace(/<br\s*\/?>/g, '\n')
+
+            // Simple word wrap
+            const words = text.split(' ')
+            let currentLine = ''
+            for (const word of words) {
+                if ((currentLine + word).length > 85) {
+                    lines.push({ text: currentLine, isBold: false })
+                    currentLine = word + ' '
+                } else {
+                    currentLine += word + ' '
+                }
+            }
+            lines.push({ text: currentLine, isBold: false })
+            lines.push({ text: '', isBold: false }) // Paragraph spacing
+        }
+
+        // Draw text
+        for (const line of lines) {
+            if (y < margin + lineHeight) {
+                page = pdfDoc.addPage([pageWidth, pageHeight])
+                y = pageHeight - margin
+            }
+
+            if (line.text.trim()) {
+                page.drawText(line.text, {
+                    x: margin,
+                    y,
+                    size: line.isBold ? 14 : 12,
+                    font: line.isBold ? fontBold : font,
+                    color: rgb(0, 0, 0),
+                })
+            }
+            y -= lineHeight
+        }
+
+        const pdfBytes = await pdfDoc.save()
 
         const uploaded = await uploadToCloudinary({
-            file: new Uint8Array(pdfBuffer),
+            file: new Uint8Array(pdfBytes),
             fileName: `${contract_id ?? Date.now()}.pdf`,
             mimeType: 'application/pdf',
             publicIdPrefix: `legalshield/pdfs/${user.id}`,
@@ -98,7 +134,7 @@ serve(async (req) => {
                 .eq('id', contract_id)
         }
 
-        return jsonResponse({ pdf_url: finalUrl, size_kb: Math.round(pdfBuffer.byteLength / 1024) })
+        return jsonResponse({ pdf_url: finalUrl, size_kb: Math.round(pdfBytes.byteLength / 1024) })
     } catch (err) {
         return errorResponse((err as Error).message)
     }

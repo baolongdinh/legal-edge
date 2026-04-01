@@ -3,58 +3,67 @@
 // Security: Manual JWT verification via Supabase Auth API
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
+  authenticateRequest,
+  buildCacheKey,
   buildAbstainPayload,
+  buildCompactDocumentContext,
   buildLegalAnswerPayload,
   checkRateLimit,
+  compactText,
   corsHeaders,
   errorResponse,
   fetchWithRetry,
   getCachedLegalAnswer,
+  isStandaloneQuestion,
   jsonResponse,
+  logTelemetry,
+  normalizeLegalQuery,
   persistAnswerAudit,
   persistVerifiedEvidence,
   requiresLegalCitation,
   retrieveLegalEvidence,
   setCachedLegalAnswer,
-  simpleHash,
 } from '../shared/types.ts'
 
 export const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    // 1. Manual JWT Verification (High Security)
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) return errorResponse('Yêu cầu không có quyền truy cập (Missing Auth)', 401)
-
-    const token = authHeader.replace('Bearer ', '')
-    const supabaseAdmin = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
-    )
-
-    const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
-    if (authError || !user) {
-      console.error('Auth validation failed:', authError)
-      return errorResponse('Phiên đăng nhập không hợp lệ hoặc đã hết hạn.', 401)
-    }
+    const { user } = await authenticateRequest(req)
 
     // 2. Parse Request Body
-    const { message, history = [], document_context } = await req.json()
+    const {
+      message,
+      history = [],
+      document_context,
+      context_summary,
+      context_excerpts = [],
+      document_hash,
+    } = await req.json()
     if (!message) return errorResponse('Thiếu nội dung tin nhắn', 400)
 
     const { allowed } = await checkRateLimit(user.id, 'legal-chat', 8, 60)
     if (!allowed) return errorResponse('Bạn đã gửi quá nhanh. Vui lòng thử lại sau ít phút.', 429)
 
+    const compactDocumentContext = buildCompactDocumentContext(
+      typeof context_summary === 'string' ? context_summary : undefined,
+      Array.isArray(context_excerpts) ? context_excerpts : [],
+      typeof document_context === 'string' ? document_context : undefined,
+    )
+    const normalizedMessage = normalizeLegalQuery(message)
+    const canUseCache = isStandaloneQuestion(message) || history.length === 0
     const needsCitation = requiresLegalCitation(message)
     const evidence = needsCitation ? await retrieveLegalEvidence(message, 4) : []
     if (needsCitation && evidence.length > 0) {
       await persistVerifiedEvidence(message, evidence)
     }
-    const answerCacheKey = needsCitation && !document_context
-      ? `cache:legal_answer:legal-chat:${simpleHash(message)}`
+    const answerCacheKey = canUseCache
+      ? buildCacheKey(
+        'cache:legal_answer:legal-chat',
+        normalizedMessage,
+        document_hash || 'global',
+      )
       : null
 
     if (answerCacheKey) {
@@ -77,7 +86,7 @@ export const handler = async (req: Request): Promise<Response> => {
 
     let systemPrompt = `Bạn là Trợ lý Pháp lý AI cao cấp của LegalShield Việt Nam. 
 Nhiệm vụ của bạn là giải đáp các thắc mắc về luật pháp Việt Nam một cách chuyên nghiệp, chính xác.
-Tên người dùng đang chat với bạn: ${user.user_metadata?.full_name || 'Người dùng'}.
+Tên người dùng đang chat với bạn: ${user.user_metadata?.full_name || user.email || 'Người dùng'}.
 
 Quy tắc ứng xử:
 1. Luôn sử dụng tiếng Việt trang trọng, lịch sự.
@@ -88,8 +97,8 @@ Quy tắc ứng xử:
 6. Mỗi kết luận pháp lý quan trọng phải bám sát chứng cứ đã cung cấp.
 7. Ngắn gọn, súc tích nhưng đầy đủ ý.`
 
-    if (document_context) {
-      systemPrompt += `\n\nBỐI CẢNH TÀI LIỆU: Người dùng đã tải lên một tài liệu với nội dung sau. Hãy ưu tiên trả lời dựa trên thông tin này nếu câu hỏi có liên quan:\n"""\n${document_context}\n"""`
+    if (compactDocumentContext) {
+      systemPrompt += `\n\nBỐI CẢNH TÀI LIỆU: Người dùng đã tải lên một tài liệu. Hãy ưu tiên trả lời dựa trên tóm tắt và các đoạn liên quan sau nếu câu hỏi có liên quan:\n"""\n${compactDocumentContext}\n"""`
     }
 
     if (evidence.length > 0) {
@@ -126,14 +135,23 @@ Quy tắc ứng xử:
     const data = await response.json()
     const rawReply = data.candidates?.[0]?.content?.parts?.[0]?.text || "Xin lỗi, tôi không thể tìm thấy câu trả lời phù hợp."
     const payload = buildLegalAnswerPayload(rawReply, evidence, needsCitation)
+    logTelemetry('legal-chat', 'completed', {
+      has_document_context: Boolean(compactDocumentContext),
+      document_context_chars: compactDocumentContext?.length ?? 0,
+      prompt_chars: compactText(systemPrompt, 8000).length,
+      cacheable: Boolean(answerCacheKey),
+      evidence_count: evidence.length,
+    })
     await persistAnswerAudit({
       functionName: 'legal-chat',
       userId: user.id,
       question: message,
       payload,
       metadata: {
-        has_document_context: Boolean(document_context),
+        has_document_context: Boolean(compactDocumentContext),
+        document_hash: document_hash ?? null,
         history_count: history.length,
+        normalized_message: normalizedMessage,
       },
     })
     if (answerCacheKey && !payload.abstained) {
@@ -143,7 +161,11 @@ Quy tắc ứng xử:
     return jsonResponse({ reply: payload.answer, ...payload }, 200)
   } catch (err) {
     console.error('Chat function error:', err)
-    return errorResponse((err as Error).message)
+    const message = (err as Error).message
+    const status = message === 'Missing Authorization' || message === 'Invalid Authorization header' || message === 'Unauthorized'
+      ? 401
+      : 500
+    return errorResponse(message, status)
   }
 }
 

@@ -5,6 +5,8 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
+  authenticateRequest,
+  buildCacheKey,
   corsHeaders,
   errorResponse,
   fetchWithRetry,
@@ -15,8 +17,12 @@ import {
   roundRobinKey,
   embedText,
   checkRateLimit,
+  hasHighRiskSignals,
   exaSearch,
+  getCachedLegalAnswer,
+  logTelemetry,
   summarizeVerification,
+  setCachedLegalAnswer,
   validateJSONCitations,
 } from '../shared/types.ts'
 
@@ -26,17 +32,7 @@ export const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
   try {
-    const authHeader = req.headers.get('Authorization')
-    if (!authHeader) return errorResponse('Missing Authorization', 401)
-
-    const supabaseAuth = createClient(
-      Deno.env.get('SUPABASE_URL') || '',
-      Deno.env.get('SUPABASE_ANON_KEY') || '',
-      { global: { headers: { Authorization: authHeader } } }
-    )
-
-    const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
-    if (authError || !user) return errorResponse('Unauthorized', 401)
+    const { user } = await authenticateRequest(req)
 
     const body = await req.json()
     const { clause_text, contract_context, mode = 'fast' } = body
@@ -47,11 +43,54 @@ export const handler = async (req: Request): Promise<Response> => {
     if (!allowed) return errorResponse('Rate limit exceeded. Please try again later.', 429)
 
     const exaKey = roundRobinKey('EXA_API_KEYS', 'EXA_API_KEY')
+    const clauseHash = buildCacheKey('risk-review:clause', mode, clause_text)
+    const cachedExact = await getCachedLegalAnswer<any>(clauseHash)
+    if (cachedExact) {
+      return jsonResponse({ ...cachedExact, cached: true }, 200, 3600)
+    }
 
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
+
+    const { data: exactMatch } = await supabaseClient
+      .from('semantic_cache')
+      .select('result_json')
+      .eq('content_hash', clauseHash)
+      .maybeSingle()
+
+    if (exactMatch?.result_json) {
+      await setCachedLegalAnswer(clauseHash, exactMatch.result_json, 60 * 60)
+      return jsonResponse({ ...exactMatch.result_json, cached: true }, 200, 3600)
+    }
+
+    if (mode === 'fast' && clause_text.length < 600 && !hasHighRiskSignals(clause_text)) {
+      const screenedResponse = {
+        risks: [
+          {
+            clause_ref: 'Điều khoản hiện tại',
+            level: 'note',
+            description: 'Chưa phát hiện tín hiệu rủi ro mạnh ở bước sàng lọc nhanh. Nên dùng Deep Audit nếu điều khoản này liên quan tới phạt vi phạm, bồi thường, chấm dứt hoặc nghĩa vụ thanh toán.',
+            citation: 'Screened locally',
+            verification_status: 'unverified',
+          },
+        ],
+        evidence: [],
+        verification_status: 'unverified',
+        verification_summary: {
+          requires_citation: false,
+          verification_status: 'unverified',
+          citation_count: 0,
+          official_count: 0,
+          secondary_count: 0,
+          unsupported_claim_count: 0,
+        },
+        screened: true,
+      }
+      await setCachedLegalAnswer(clauseHash, screenedResponse, 60 * 30)
+      return jsonResponse(screenedResponse, 200, 600)
+    }
 
     // 1. Semantic Cache Check
     const embedding = await embedText(clause_text)
@@ -224,15 +263,27 @@ export const handler = async (req: Request): Promise<Response> => {
     })
 
     // 5. Save to Semantic Cache
-    await supabaseClient.from('semantic_cache').insert({
+    await supabaseClient.from('semantic_cache').upsert({
+      content_hash: clauseHash,
       content_text: clause_text,
       embedding: embedding,
       result_json: responsePayload,
+    }, { onConflict: 'content_hash' })
+    await setCachedLegalAnswer(clauseHash, responsePayload, 60 * 60)
+    logTelemetry('risk-review', 'completed', {
+      mode,
+      evidence_count: flattenedEvidence.length,
+      risk_count: (risks.risks || []).length,
+      clause_chars: clause_text.length,
     })
 
     return jsonResponse(responsePayload, 200, 3600)
   } catch (err) {
-    return errorResponse((err as Error).message)
+    const message = (err as Error).message
+    const status = message === 'Missing Authorization' || message === 'Invalid Authorization header' || message === 'Unauthorized'
+      ? 401
+      : 500
+    return errorResponse(message, status)
   }
 }
 

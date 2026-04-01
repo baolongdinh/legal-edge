@@ -250,6 +250,24 @@ export function ChatAI() {
             const accessToken = await getAccessToken()
             if (!accessToken) throw new Error('Vui lòng đăng nhập để sử dụng tính năng này.')
 
+            // Cửa sổ trượt lai (Hybrid Sliding Window): 
+            // - Lấy tối đa 10 tin nhắn gần nhất từ lịch sử.
+            // - 2 tin nhắn cuối cùng (thường là 1 User, 1 AI): Giữ nguyên văn 100%.
+            // - 8 tin nhắn trước đó: Ý định của User giữ 100%. Câu trả lời của AI thu gọn tối đa.
+            // *Lưu ý: Không thể xoá hẳn tin nhắn của AI vì Gemini API bắt buộc chuỗi lịch sử phải xen kẽ (User -> Model).
+            const recentMessages = messages.slice(-10);
+            const optimizedHistory = recentMessages.map((m, index) => {
+                const isVeryRecent = index >= recentMessages.length - 2;
+
+                if (isVeryRecent || m.role === 'user') {
+                    // Giữ nguyên toàn bộ text
+                    return { role: m.role, content: m.content } as any;
+                }
+
+                // Ép câu trả lời cũ của AI thành 1 dòng siêu ngắn (chống lỗi xen kẽ + tiết kiệm 99% token)
+                return { role: m.role, content: "[Đã phản hồi chi tiết]" } as any;
+            });
+
             const payload: {
                 message: string
                 history: Message[]
@@ -258,7 +276,7 @@ export function ChatAI() {
                 document_hash?: string
             } = {
                 message: userMsg,
-                history: messages.slice(-5).map(m => ({ role: m.role, content: m.content } as any))
+                history: optimizedHistory
             }
             if (documentContext) {
                 payload.context_summary = documentContext.summary

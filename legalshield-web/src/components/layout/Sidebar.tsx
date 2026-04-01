@@ -1,3 +1,4 @@
+import { useEffect } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
@@ -17,11 +18,26 @@ export function Sidebar() {
     const { pathname } = useLocation()
     const { sidebarExpanded, toggleSidebar } = useUIStore()
 
+    // Auto-collapse on mobile screens
+    useEffect(() => {
+        const handleResize = () => {
+            if (window.innerWidth < 768 && sidebarExpanded) {
+                toggleSidebar()
+            }
+        }
+
+        // Check on mount
+        handleResize()
+
+        window.addEventListener('resize', handleResize)
+        return () => window.removeEventListener('resize', handleResize)
+    }, [sidebarExpanded, toggleSidebar])
+
     return (
         <aside
             className={clsx(
                 'flex flex-col h-full bg-navy-elevated border-r border-slate-border transition-all duration-300',
-                sidebarExpanded ? 'w-56' : 'w-16'
+                sidebarExpanded ? 'w-56' : 'w-14 md:w-16'
             )}
         >
             {/* Logo */}
@@ -45,6 +61,7 @@ export function Sidebar() {
                             title={!sidebarExpanded ? label : undefined}
                             className={clsx(
                                 'flex items-center gap-3 px-3 py-2.5 rounded-md text-sm font-medium transition-all duration-200',
+                                !sidebarExpanded && 'justify-center px-0',
                                 active
                                     ? 'bg-gold-primary/15 text-gold-primary border border-gold-primary/25'
                                     : 'text-slate-muted hover:bg-navy-hover hover:text-paper-dark'

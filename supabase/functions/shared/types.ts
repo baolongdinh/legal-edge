@@ -3,6 +3,18 @@
 import { Redis } from 'https://esm.sh/@upstash/redis@1.28.0'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 
+export interface AuthenticatedUser {
+    id: string
+    email?: string | null
+    user_metadata?: Record<string, unknown>
+}
+
+export interface AuthenticatedRequestContext {
+    authHeader: string
+    token: string
+    user: AuthenticatedUser
+}
+
 export interface GeminiEmbedPayload {
     model: string
     content: { parts: { text: string }[] }
@@ -135,6 +147,20 @@ const LAW_TITLE_PATTERNS = [
     /(thông tư\s+[^\n,.]{4,120})/gi,
 ]
 
+const RISK_SIGNAL_HINTS = [
+    'phat',
+    'boi thuong',
+    'don phuong',
+    'cham dut',
+    'bao mat',
+    'doc quyen',
+    'so huu tri tue',
+    'thanh toan',
+    'nghia vu',
+    'trach nhiem',
+    'vi pham',
+]
+
 // ---------------------------------------------------------
 // Embedding Providers (Jina AI & Gemini)
 // ---------------------------------------------------------
@@ -175,37 +201,40 @@ export async function voyageEmbed(text: string, _unused?: string, dims = 512): P
  * Global embedText helper with Jina-first strategy to avoid Gemini 429 limits.
  */
 export async function embedText(text: string, _fallbackGeminiKey?: string, dims = 512): Promise<number[]> {
-    // 1. Try Jina AI first
-    try {
-        return await jinaEmbed(text, '', dims)
-    } catch (e) {
-        console.warn('Jina Embed failed after all retries, trying Voyage...')
+    const primaryProvider = (Deno.env.get('EMBEDDING_PROVIDER') ?? 'jina').toLowerCase()
+    const providers = primaryProvider === 'voyage'
+        ? ['voyage', 'jina', 'gemini']
+        : primaryProvider === 'gemini'
+            ? ['gemini', 'jina', 'voyage']
+            : ['jina', 'voyage', 'gemini']
+
+    for (const provider of providers) {
+        try {
+            if (provider === 'jina') return await jinaEmbed(text, '', dims)
+            if (provider === 'voyage') return await voyageEmbed(text, '', dims)
+
+            const VERSION = 'v1beta'
+            const MODEL = 'gemini-embedding-2-preview'
+            const res = await fetchWithRetry(
+                `https://generativelanguage.googleapis.com/${VERSION}/models/${MODEL}:embedContent`,
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        content: { parts: [{ text }] },
+                        outputDimensionality: dims,
+                    }),
+                },
+                { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
+            )
+            const data = await res.json()
+            return data.embedding.values as number[]
+        } catch (error) {
+            console.warn(`${provider} embedding failed:`, (error as Error).message)
+        }
     }
 
-    // 2. Try Voyage AI
-    try {
-        return await voyageEmbed(text, '', dims)
-    } catch (e) {
-        console.warn('Voyage Embed failed after all retries, falling back to Gemini...')
-    }
-
-    // 3. Fallback to Gemini gemini-embedding-2-preview
-    const VERSION = 'v1beta'
-    const MODEL = 'gemini-embedding-2-preview'
-    const res = await fetchWithRetry(
-        `https://generativelanguage.googleapis.com/${VERSION}/models/${MODEL}:embedContent`,
-        {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                content: { parts: [{ text }] },
-                outputDimensionality: dims,
-            }),
-        },
-        { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
-    )
-    const data = await res.json()
-    return data.embedding.values as number[]
+    throw new Error('All embedding providers failed')
 }
 
 // ---------------------------------------------------------
@@ -247,6 +276,48 @@ export function normalizeLegalQuery(input: string): string {
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/\s+/g, ' ')
         .trim()
+}
+
+export function buildCacheKey(namespace: string, ...parts: Array<string | number | boolean | null | undefined>): string {
+    const normalized = parts
+        .filter((part) => part !== null && part !== undefined && String(part).trim() !== '')
+        .map((part) => String(part).trim())
+        .join(':')
+    return `${namespace}:${simpleHash(normalized || namespace)}`
+}
+
+export function compactText(text: string, maxChars = 1200): string {
+    return text.replace(/\s+/g, ' ').trim().slice(0, maxChars)
+}
+
+export function buildCompactDocumentContext(summary?: string, excerpts: string[] = [], fallbackText?: string): string | null {
+    const trimmedSummary = compactText(summary ?? '', 1400)
+    const trimmedExcerpts = excerpts
+        .map((excerpt) => compactText(excerpt, 700))
+        .filter(Boolean)
+        .slice(0, 3)
+
+    if (!trimmedSummary && trimmedExcerpts.length === 0 && !fallbackText) return null
+
+    return [
+        trimmedSummary ? `TÓM TẮT TÀI LIỆU:\n${trimmedSummary}` : '',
+        trimmedExcerpts.length > 0
+            ? `ĐOẠN LIÊN QUAN NHẤT:\n${trimmedExcerpts.map((item, index) => `[${index + 1}] ${item}`).join('\n')}`
+            : '',
+        !trimmedSummary && trimmedExcerpts.length === 0 && fallbackText
+            ? `TÀI LIỆU RÚT GỌN:\n${compactText(fallbackText, 2400)}`
+            : '',
+    ].filter(Boolean).join('\n\n')
+}
+
+export function isStandaloneQuestion(input: string): boolean {
+    const normalized = normalizeLegalQuery(input)
+    return !['noi tren', 'o tren', 'cai nay', 'van de nay', 'tiep theo', 'them nua', 'giai thich them'].some((hint) => normalized.includes(hint))
+}
+
+export function hasHighRiskSignals(input: string): boolean {
+    const normalized = normalizeLegalQuery(input)
+    return RISK_SIGNAL_HINTS.some((hint) => normalized.includes(hint))
 }
 
 export function simpleHash(input: string): string {
@@ -327,7 +398,7 @@ export function rewriteLegalQuery(input: string): string[] {
 
 export async function retrieveLegalEvidence(query: string, numResults = 5): Promise<LegalSourceEvidence[]> {
     const redis = getRedisClient()
-    const cacheKey = `cache:legal_evidence:${simpleHash(`${normalizeLegalQuery(query)}:${numResults}`)}`
+    const cacheKey = buildCacheKey('cache:legal_evidence', normalizeLegalQuery(query), numResults)
     if (redis) {
         const cached = await redis.get<LegalSourceEvidence[]>(cacheKey)
         if (cached && Array.isArray(cached) && cached.length > 0) {
@@ -384,10 +455,11 @@ export async function fetchWithRetry(
         listEnvVar: string,
         fallbackEnvVar: string,
         maxRetries?: number,
-        backoffBase?: number
+        backoffBase?: number,
+        timeoutMs?: number
     }
 ): Promise<Response> {
-    const { listEnvVar, fallbackEnvVar, maxRetries = 5, backoffBase = 1000 } = config
+    const { listEnvVar, fallbackEnvVar, maxRetries = 5, backoffBase = 1000, timeoutMs = 20_000 } = config
     let lastError: Error | null = null
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -415,7 +487,11 @@ export async function fetchWithRetry(
             }
 
             finalOptions.headers = finalHeaders
+            const controller = new AbortController()
+            const timeout = setTimeout(() => controller.abort(`Timeout after ${timeoutMs}ms`), timeoutMs)
+            finalOptions.signal = controller.signal
             const response = await fetch(finalUrl, finalOptions)
+            clearTimeout(timeout)
 
             // Success or Client Error (except 429) -> Return
             if (response.ok) return response
@@ -461,6 +537,91 @@ export function roundRobinKey(listEnvVar: string, fallbackEnvVar: string): strin
     _counters[listEnvVar] = idx + 1
 
     return keys[idx]
+}
+
+export async function mapWithConcurrency<T, R>(
+    items: T[],
+    limit: number,
+    worker: (item: T, index: number) => Promise<R>
+): Promise<R[]> {
+    const results: R[] = new Array(items.length)
+    let nextIndex = 0
+
+    const runWorker = async () => {
+        while (nextIndex < items.length) {
+            const currentIndex = nextIndex++
+            results[currentIndex] = await worker(items[currentIndex], currentIndex)
+        }
+    }
+
+    await Promise.all(
+        Array.from(
+            { length: Math.max(1, Math.min(limit, items.length || 1)) },
+            () => runWorker()
+        )
+    )
+
+    return results
+}
+
+export async function authenticateRequest(req: Request): Promise<AuthenticatedRequestContext> {
+    const authHeader = req.headers.get('Authorization')
+    if (!authHeader) throw new Error('Missing Authorization')
+
+    const token = authHeader.replace(/^Bearer\s+/i, '').trim()
+    if (!token) throw new Error('Invalid Authorization header')
+
+    const url = Deno.env.get('SUPABASE_URL') ?? ''
+    const key = Deno.env.get('SB_PUBLISHABLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? ''
+    const supabaseAuth = createClient(url, key, {
+        global: { headers: { Authorization: authHeader } },
+    })
+
+    const authApi = supabaseAuth.auth as unknown as {
+        getClaims?: (jwt: string) => Promise<{ data?: { claims?: Record<string, unknown> }, error?: { message?: string } }>
+    }
+
+    if (typeof authApi.getClaims === 'function') {
+        try {
+            const { data, error } = await authApi.getClaims(token)
+            if (!error && data?.claims?.sub) {
+                return {
+                    authHeader,
+                    token,
+                    user: {
+                        id: String(data.claims.sub),
+                        email: (data.claims.email as string | undefined) ?? null,
+                        user_metadata: (data.claims.user_metadata as Record<string, unknown> | undefined) ?? {},
+                    },
+                }
+            }
+        } catch (error) {
+            console.warn('getClaims failed, falling back to getUser:', (error as Error).message)
+        }
+    }
+
+    const { data: { user }, error } = await supabaseAuth.auth.getUser()
+    if (error || !user) throw new Error('Unauthorized')
+
+    return {
+        authHeader,
+        token,
+        user: {
+            id: user.id,
+            email: user.email ?? null,
+            user_metadata: user.user_metadata ?? {},
+        },
+    }
+}
+
+export function logTelemetry(functionName: string, stage: string, metadata: Record<string, unknown> = {}) {
+    console.log(JSON.stringify({
+        type: 'telemetry',
+        function: functionName,
+        stage,
+        ts: new Date().toISOString(),
+        ...metadata,
+    }))
 }
 
 /**
@@ -800,6 +961,12 @@ export async function setCachedLegalAnswer(cacheKey: string, payload: unknown, t
     const redis = getRedisClient()
     if (!redis) return
     await redis.set(cacheKey, payload, { ex: ttlSeconds })
+}
+
+export async function deleteCachedValue(cacheKey: string): Promise<void> {
+    const redis = getRedisClient()
+    if (!redis) return
+    await redis.del(cacheKey)
 }
 
 export async function persistVerifiedEvidence(query: string, evidence: LegalSourceEvidence[]): Promise<void> {

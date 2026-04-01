@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { Button } from '../components/ui/Button'
 import { Typography } from '../components/ui/Typography'
-import { Scale, ShieldCheck, BookOpenCheck, Zap, X, ArrowRight, Shield } from 'lucide-react'
+import { Scale, ShieldCheck, BookOpenCheck, Zap, X, ArrowRight, Shield, User, Loader2 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const features = [
@@ -17,8 +17,10 @@ export function Landing() {
     const navigate = useNavigate()
     const [isAuthModalOpen, setIsAuthModalOpen] = useState(false)
     const [authMode, setAuthMode] = useState<'signin' | 'signup'>('signin')
-    const [email, setEmail] = useState('')
+    const [fullName, setFullName] = useState('')
+    const [username, setUsername] = useState('')
     const [password, setPassword] = useState('')
+    const [confirmPassword, setConfirmPassword] = useState('')
     const [loading, setLoading] = useState(false)
     const [error, setError] = useState<string | null>(null)
 
@@ -32,22 +34,65 @@ export function Landing() {
         e.preventDefault()
         setLoading(true)
         setError(null)
-        const authToast = toast.loading(authMode === 'signin' ? 'Đang xác thực...' : 'Đang tạo tài khoản...')
-        try {
-            const { error } = authMode === 'signin'
-                ? await supabase.auth.signInWithPassword({ email, password })
-                : await supabase.auth.signUp({ email, password })
 
-            if (error) throw error
-            if (authMode === 'signup') {
-                toast.success('Vui lòng kiểm tra email để xác nhận tài khoản!', { id: authToast })
-                setAuthMode('signin')
-            } else {
-                toast.success('Chào mừng trở lại!', { id: authToast })
-                navigate('/dashboard')
+        const authToast = toast.loading(authMode === 'signin' ? 'Đang đăng nhập...' : 'Đang tạo tài khoản...')
+
+        try {
+            if (authMode === 'signup' && password !== confirmPassword) {
+                throw new Error('Mật khẩu xác nhận không khớp')
             }
+
+            // Check if username already exists in public.users to give a clear error before signup
+            if (authMode === 'signup') {
+                const { data: existingUser } = await supabase
+                    .from('users')
+                    .select('id')
+                    .eq('username', username.trim())
+                    .maybeSingle()
+
+                if (existingUser) {
+                    throw new Error('Tên đăng nhập này đã tồn tại. Vui lòng chọn tên khác.')
+                }
+            }
+
+            // Using a fake internal email for username-based auth
+            const internalEmail = `${username.toLowerCase().trim()}@legalshield.local`
+
+            const { error: authError } = authMode === 'signin'
+                ? await supabase.auth.signInWithPassword({
+                    email: internalEmail,
+                    password
+                })
+                : await supabase.auth.signUp({
+                    email: internalEmail,
+                    password,
+                    options: {
+                        data: {
+                            full_name: fullName,
+                            username: username.trim()
+                        }
+                    }
+                })
+
+            if (authError) {
+                if (authError.message.includes('User already registered') || authError.message.includes('already exists')) {
+                    throw new Error('Tên đăng nhập này đã tồn tại. Vui lòng chọn tên khác.')
+                }
+                if (authError.message.includes('Invalid login credentials')) {
+                    throw new Error('Tên đăng nhập hoặc mật khẩu không chính xác.')
+                }
+                throw authError
+            }
+
+            toast.success(authMode === 'signin' ? 'Đăng nhập thành công!' : 'Tạo tài khoản thành công!', { id: authToast })
+            navigate('/dashboard')
         } catch (err) {
-            const msg = (err as Error).message
+            let msg = (err as Error).message
+            if (msg.includes('Email not confirmed')) {
+                msg = 'Tài khoản chưa được xác nhận. Vui lòng tắt "Confirm Email" trong Supabase Auth Settings.'
+            } else if (msg.includes('Error sending confirmation email')) {
+                msg = 'Lỗi hệ thống: Không thể gửi mail xác nhận. Vui lòng tắt "Confirm Email" trong Supabase Auth Settings để dùng Username.'
+            }
             setError(msg)
             toast.error(msg, { id: authToast })
         } finally {
@@ -216,21 +261,37 @@ export function Landing() {
 
                             <div className="relative mb-8">
                                 <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-slate-border/30"></div></div>
-                                <div className="relative flex justify-center text-[10px]"><span className="px-3 bg-navy-elevated/80 backdrop-blur-sm text-paper-dark/30 uppercase tracking-[0.3em] font-bold">Hoặc Email</span></div>
+                                <div className="relative flex justify-center text-[10px]"><span className="px-3 bg-navy-elevated/80 backdrop-blur-sm text-paper-dark/30 uppercase tracking-[0.3em] font-bold">Hoặc dùng tài khoản</span></div>
                             </div>
 
-                            <form onSubmit={handleAuth} className="space-y-6">
+                            <form onSubmit={handleAuth} className="space-y-4">
                                 <div className="group">
-                                    <label className="block text-[10px] font-bold text-gold-muted/60 mb-2 uppercase tracking-widest transition-colors group-focus-within:text-gold-primary">Email</label>
-                                    <input
-                                        type="email"
-                                        value={email}
-                                        onChange={(e) => setEmail(e.target.value)}
-                                        placeholder="user@example.vn"
-                                        required
-                                        className="w-full h-11 px-4 bg-navy-base/50 border border-slate-border/50 rounded-xl text-paper-dark focus:outline-none focus:border-gold-primary/50 transition-all font-medium placeholder:text-paper-dark/20 shadow-inner"
-                                    />
+                                    <label className="block text-[10px] font-bold text-gold-muted/60 mb-2 uppercase tracking-widest transition-colors group-focus-within:text-gold-primary">Tên đăng nhập</label>
+                                    <div className="relative">
+                                        <User size={18} className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-muted" />
+                                        <input
+                                            type="text"
+                                            value={username}
+                                            onChange={(e) => setUsername(e.target.value)}
+                                            className="w-full h-11 pl-10 pr-4 py-3 bg-navy-base/50 border border-slate-border/50 rounded-xl text-paper-dark focus:outline-none focus:border-gold-primary/50 transition-all font-sans placeholder:text-paper-dark/20 shadow-inner"
+                                            placeholder="username"
+                                            required
+                                        />
+                                    </div>
                                 </div>
+                                {authMode === 'signup' && (
+                                    <div className="group">
+                                        <label className="block text-[10px] font-bold text-gold-muted/60 mb-2 uppercase tracking-widest transition-colors group-focus-within:text-gold-primary">Họ và tên</label>
+                                        <input
+                                            type="text"
+                                            value={fullName}
+                                            onChange={(e) => setFullName(e.target.value)}
+                                            placeholder="Nguyễn Văn A"
+                                            required={authMode === 'signup'}
+                                            className="w-full h-11 px-4 bg-navy-base/50 border border-slate-border/50 rounded-xl text-paper-dark focus:outline-none focus:border-gold-primary/50 transition-all font-medium placeholder:text-paper-dark/20 shadow-inner"
+                                        />
+                                    </div>
+                                )}
                                 <div className="group">
                                     <label className="block text-[10px] font-bold text-gold-muted/60 mb-2 uppercase tracking-widest transition-colors group-focus-within:text-gold-primary">Mật khẩu</label>
                                     <input
@@ -242,48 +303,45 @@ export function Landing() {
                                         className="w-full h-11 px-4 bg-navy-base/50 border border-slate-border/50 rounded-xl text-paper-dark focus:outline-none focus:border-gold-primary/50 transition-all font-medium placeholder:text-paper-dark/20 shadow-inner"
                                     />
                                 </div>
+                                {authMode === 'signup' && (
+                                    <div className="group">
+                                        <label className="block text-[10px] font-bold text-gold-muted/60 mb-2 uppercase tracking-widest transition-colors group-focus-within:text-gold-primary">Nhập lại mật khẩu</label>
+                                        <input
+                                            type="password"
+                                            value={confirmPassword}
+                                            onChange={(e) => setConfirmPassword(e.target.value)}
+                                            placeholder="••••••••"
+                                            required={authMode === 'signup'}
+                                            className="w-full h-11 px-4 bg-navy-base/50 border border-slate-border/50 rounded-xl text-paper-dark focus:outline-none focus:border-gold-primary/50 transition-all font-medium placeholder:text-paper-dark/20 shadow-inner"
+                                        />
+                                    </div>
+                                )}
 
                                 {error && <p className="text-xs text-red-400 bg-red-400/5 p-3 rounded-xl border border-red-400/10 italic text-center animate-shake">{error}</p>}
 
-                                <Button className="w-full h-12 shadow-gold text-navy-base font-bold text-lg" disabled={loading}>
-                                    {loading ? <Loader2 className="animate-spin" /> : (authMode === 'signin' ? 'Đăng nhập' : 'Đăng ký')}
+                                <Button
+                                    type="submit"
+                                    className="w-full h-12 bg-gradient-to-r from-gold-muted via-gold-primary to-gold-muted text-navy-base font-bold text-sm tracking-widest uppercase hover:opacity-90 transition-all shadow-lg shadow-gold-primary/20"
+                                    disabled={loading}
+                                >
+                                    {loading ? <Loader2 className="animate-spin" /> : (authMode === 'signin' ? 'Đăng nhập ngay' : 'Tạo tài khoản')}
                                 </Button>
-                            </form>
 
-                            <div className="mt-8 pt-8 border-t border-slate-border/20 text-center">
-                                <Typography variant="caption" className="text-paper-dark/40 font-medium">
-                                    {authMode === 'signin' ? 'Chưa sở hữu tài khoản?' : 'Đã là hội viên?'}
+                                <div className="text-center pt-2">
                                     <button
+                                        type="button"
                                         onClick={() => setAuthMode(authMode === 'signin' ? 'signup' : 'signin')}
-                                        className="ml-1.5 text-gold-primary hover:text-gold-muted underline transition-colors font-bold uppercase tracking-tighter"
+                                        className="text-xs text-paper-dark/40 hover:text-gold-primary transition-colors font-medium border-b border-transparent hover:border-gold-primary/30 pb-0.5"
+                                        disabled={loading}
                                     >
-                                        {authMode === 'signin' ? 'Tham gia ngay' : 'Đăng nhập'}
+                                        {authMode === 'signin' ? 'Chưa có tài khoản? Đăng ký ngay' : 'Đã có tài khoản? Đăng nhập'}
                                     </button>
-                                </Typography>
-                            </div>
+                                </div>
+                            </form>
                         </motion.div>
                     </motion.div>
                 )}
             </AnimatePresence>
         </div>
-    )
-}
-
-function Loader2(props: any) {
-    return (
-        <svg
-            xmlns="http://www.w3.org/2000/svg"
-            width="24"
-            height="24"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            {...props}
-        >
-            <path d="M21 12a9 9 0 1 1-6.219-8.56" />
-        </svg>
     )
 }

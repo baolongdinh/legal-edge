@@ -11,7 +11,7 @@ interface UIState {
 }
 
 export const useUIStore = create<UIState>((set) => ({
-    sidebarExpanded: true,
+    sidebarExpanded: typeof window !== 'undefined' ? window.innerWidth >= 768 : true,
     activeModal: 'none',
     toggleSidebar: () => set((s) => ({ sidebarExpanded: !s.sidebarExpanded })),
     setModal: (modal) => set({ activeModal: modal }),
@@ -115,7 +115,7 @@ export const useUploadStore = create<UploadState>((set) => ({
 
 // --- User / Billing State ---
 interface UserState {
-    user: { id: string; email: string; name: string; avatarUrl?: string } | null
+    user: { id: string; email: string; name: string; username?: string; avatarUrl?: string } | null
     subscription: 'free' | 'pro' | 'enterprise'
     apiCallsUsed: number
     apiCallsLimit: number
@@ -150,7 +150,8 @@ export const useUserStore = create<UserState>((set) => ({
             user: {
                 id: authUser.id,
                 email: authUser.email!,
-                name: profile?.full_name || authUser.user_metadata?.full_name || authUser.email?.split('@')[0] || 'Người dùng',
+                name: profile?.full_name || authUser.user_metadata?.full_name || authUser.user_metadata?.username || authUser.email?.split('@')[0] || 'Người dùng',
+                username: authUser.user_metadata?.username || authUser.email?.split('@')[0],
                 avatarUrl: profile?.avatar_url || authUser.user_metadata?.avatar_url || authUser.user_metadata?.avatar
             }
         })

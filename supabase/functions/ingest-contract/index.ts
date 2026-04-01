@@ -4,38 +4,61 @@
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
-import { corsHeaders, errorResponse, jsonResponse, roundRobinKey, embedText } from '../shared/types.ts'
+import {
+    authenticateRequest,
+    corsHeaders,
+    embedText,
+    errorResponse,
+    jsonResponse,
+    logTelemetry,
+    mapWithConcurrency,
+} from '../shared/types.ts'
 
 serve(async (req) => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
     try {
-        // 1. Manual JWT Verification
-        const authHeader = req.headers.get('Authorization')
-        if (!authHeader) return errorResponse('Yêu cầu không có quyền truy cập (Missing Auth)', 401)
-
-        const token = authHeader.replace('Bearer ', '')
+        const { user } = await authenticateRequest(req)
         const supabaseAdmin = createClient(
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         )
 
-        const { data: { user }, error: authError } = await supabaseAdmin.auth.getUser(token)
-        if (authError || !user) return errorResponse('Phiên đăng nhập không hợp lệ hoặc đã hết hạn.', 401)
-
         // 2. Parse Body
         const { contract_id, text } = await req.json()
         if (!contract_id || !text) return errorResponse('Missing contract_id or text', 400)
 
-        const geminiKey = roundRobinKey('GEMINI_API_KEYS', 'GEMINI_API_KEY')
+        const { count: existingChunkCount } = await supabaseAdmin
+            .from('contract_chunks')
+            .select('id', { count: 'exact', head: true })
+            .eq('contract_id', contract_id)
+
+        if ((existingChunkCount ?? 0) > 0) {
+            return jsonResponse({
+                job_id: contract_id,
+                status: 'already_indexed',
+                processed_chunks: existingChunkCount,
+                queued_chunks: existingChunkCount,
+                failed_chunks: 0,
+            }, 200)
+        }
 
         // 3. Chunking & Embedding
-        const chunks = text.split(/\n\n+/).filter((c: string) => c.trim().length > 50)
+        const chunks = text
+            .split(/\n\n+/)
+            .map((chunk: string) => chunk.trim())
+            .filter((chunk: string) => chunk.length > 80)
+            .slice(0, 80)
 
-        // Parallel embedding for better performance
-        const results = await Promise.all(chunks.map(async (chunk) => {
+        await supabaseAdmin
+            .from('contracts')
+            .update({ status: 'processing_ingest' })
+            .eq('id', contract_id)
+
+        const concurrency = Number(Deno.env.get('INGEST_CONCURRENCY') ?? '3')
+        const results = await mapWithConcurrency(chunks, concurrency, async (chunk) => {
             try {
-                const embedding = await embedText(chunk, geminiKey)
+                const embedding = await embedText(chunk, '', 512)
                 return {
                     contract_id,
                     content: chunk,
@@ -43,22 +66,53 @@ serve(async (req) => {
                     metadata: { author_id: user.id }
                 }
             } catch (e) {
-                console.error('Embedding failed for chunk:', e)
+                console.error('Embedding failed for chunk:', (e as Error).message)
                 return null
             }
-        }))
+        })
 
         const validResults = results.filter(r => r !== null)
+        const failedChunks = chunks.length - validResults.length
 
         if (validResults.length > 0) {
-            const { error: insertError } = await supabaseAdmin.from('contract_chunks').insert(validResults)
-            if (insertError) throw insertError
+            for (let i = 0; i < validResults.length; i += 20) {
+                const { error: insertError } = await supabaseAdmin
+                    .from('contract_chunks')
+                    .insert(validResults.slice(i, i + 20))
+                if (insertError) throw insertError
+            }
         }
 
-        return jsonResponse({ success: true, count: validResults.length }, 200)
+        await supabaseAdmin
+            .from('contracts')
+            .update({
+                status: 'pending_audit',
+                analysis_summary: `Indexed ${validResults.length}/${chunks.length} chunks`,
+            })
+            .eq('id', contract_id)
+
+        logTelemetry('ingest-contract', 'completed', {
+            contract_id,
+            queued_chunks: chunks.length,
+            processed_chunks: validResults.length,
+            failed_chunks: failedChunks,
+            concurrency,
+        })
+
+        return jsonResponse({
+            job_id: contract_id,
+            status: failedChunks > 0 ? 'completed_with_errors' : 'completed',
+            processed_chunks: validResults.length,
+            queued_chunks: chunks.length,
+            failed_chunks: failedChunks,
+        }, 200)
 
     } catch (error) {
         console.error('Ingestion error:', error)
-        return errorResponse((error as Error).message)
+        const message = (error as Error).message
+        const status = message === 'Missing Authorization' || message === 'Invalid Authorization header' || message === 'Unauthorized'
+            ? 401
+            : 500
+        return errorResponse(message, status)
     }
 })

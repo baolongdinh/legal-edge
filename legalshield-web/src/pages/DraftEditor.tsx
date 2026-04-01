@@ -16,7 +16,7 @@ import { toast } from 'sonner'
 import { Button } from '../components/ui/Button'
 import { Typography } from '../components/ui/Typography'
 import { useEditorStore, type DraftIntakeQuestion } from '../store'
-import { generateContractSuggestion, exportToPDF, supabase } from '../lib/supabase'
+import { generateContractSuggestion, supabase } from '../lib/supabase'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -165,6 +165,7 @@ export function DraftEditor() {
     } = useEditorStore()
 
     const [step, setStep] = useState<Step>('input')
+    const [clarifyCount, setClarifyCount] = useState(0)
     const [isLoading, setIsLoading] = useState(false)
     const [isExporting, setIsExporting] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
@@ -184,6 +185,7 @@ export function DraftEditor() {
 
         setIsLoading(true)
         setStep('researching')
+        setClarifyCount(0)
         setResearchCitations([])
         setResult(null)
         clearIntake()
@@ -233,8 +235,6 @@ export function DraftEditor() {
         }
     }, [draftRequest, draftTitle, clearIntake, setDraft, setDraftTitle, setIntakePack])
 
-    // ── Step 3 → 4: Submit clarification answers ─────────────────────────────
-
     const handleSubmitClarification = useCallback(async () => {
         const missing = intakeQuestions.filter((q) => q.required && !intakeAnswers[q.id]?.trim())
         if (missing.length > 0) {
@@ -246,25 +246,40 @@ export function DraftEditor() {
         setStep('researching')
 
         try {
+            // Trust AI more, but keep a safety net at 10 rounds
+            const force_generation = clarifyCount >= 10
             const response = await generateContractSuggestion({
                 prompt: draftRequest.trim(),
                 mode: 'draft',
                 intake_answers: intakeAnswers,
+                parameters: { force_generation },
             })
 
             if (response.citations?.length) {
                 setResearchCitations(response.citations.slice(0, 4))
             }
 
+            // Small pause for effect
             await new Promise((r) => setTimeout(r, 700))
 
             setResult({ ...response, citations: response.citations || [] })
-            setDraft(response.content)
-            if (!draftTitle || draftTitle === 'Bản thảo hợp đồng') {
-                setDraftTitle(response.document_label || 'Hợp đồng')
+
+            if (response.status === 'needs_clarification' || response.status === 'document_type_mismatch') {
+                setClarifyCount((prev) => prev + 1)
+                setIntakePack({
+                    questions: response.clarification_pack?.questions ?? [],
+                    documentType: response.document_type ?? null,
+                    documentLabel: response.document_label ?? null,
+                })
+                setStep('clarify')
+            } else {
+                setDraft(response.content)
+                if (!draftTitle || draftTitle === 'Bản thảo hợp đồng') {
+                    setDraftTitle(response.document_label || 'Hợp đồng')
+                }
+                clearIntake()
+                setStep('result')
             }
-            clearIntake()
-            setStep('result')
         } catch (err) {
             console.error(err)
             toast.error('Không thể tạo hợp đồng. Vui lòng thử lại.')
@@ -272,7 +287,7 @@ export function DraftEditor() {
         } finally {
             setIsLoading(false)
         }
-    }, [intakeQuestions, intakeAnswers, draftRequest, draftTitle, clearIntake, setDraft, setDraftTitle])
+    }, [intakeQuestions, intakeAnswers, draftRequest, clarifyCount, draftTitle, clearIntake, setDraft, setDraftTitle, setIntakePack])
 
     // ── Save draft ────────────────────────────────────────────────────────────
 
@@ -315,33 +330,72 @@ export function DraftEditor() {
         }
     }, [activeDraft, activeDraftId, draftTitle, setDraftDocument])
 
-    // ── Export PDF ────────────────────────────────────────────────────────────
-
     const handleExport = useCallback(async () => {
         if (!activeDraft.trim()) return
         setIsExporting(true)
         try {
-            const html = `<h1>${draftTitle || 'HỢP ĐỒNG'}</h1>${activeDraft
-                .split('\n')
-                .filter(Boolean)
-                .map((l) => `<p>${l.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</p>`)
-                .join('')
-                }`
-            const payload = await exportToPDF(html, activeDraftId || undefined)
-            window.open(payload.pdf_url, '_blank', 'noopener,noreferrer')
-            toast.success(`Đã tạo PDF (${payload.size_kb} KB).`)
-        } catch {
-            toast.error('Không thể xuất PDF.')
+            // We use a dedicated print-friendly approach to ensure perfect Vietnamese font support
+            // jsPDF standard fonts don't support Unicode accents, and embedding fonts is heavy.
+            // window.print() is the most reliable way to get high-quality PDF with perfect text and fonts.
+
+            const printableContent = `
+                <div style="font-family: 'Times New Roman', Times, serif; font-size: 13pt; line-height: 1.8; margin: 2cm 2.5cm; color: #111; text-align: justify; white-space: pre-wrap;">
+                    <h1 style="text-align: center; font-size: 16pt; text-transform: uppercase; margin-bottom: 24pt;">${draftTitle || 'HỢP ĐỒNG'}</h1>
+                    ${activeDraft
+                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Simple markdown bold
+                    .replace(/\n\n/g, '<br/><br/>')
+                    .replace(/\n/g, '<br/>')
+                }
+                </div>
+            `;
+
+            const printFrame = document.createElement('iframe');
+            printFrame.style.position = 'fixed';
+            printFrame.style.right = '0';
+            printFrame.style.bottom = '0';
+            printFrame.style.width = '0';
+            printFrame.style.height = '0';
+            printFrame.style.border = '0';
+            document.body.appendChild(printFrame);
+
+            const doc = printFrame.contentWindow?.document || printFrame.contentDocument;
+            if (doc) {
+                doc.open();
+                doc.write(`
+                    <html>
+                        <head>
+                            <title>${draftTitle || 'Hợp đồng'}</title>
+                            <style>
+                                @page { size: A4; margin: 0; }
+                                body { margin: 0; padding: 0; }
+                            </style>
+                        </head>
+                        <body onload="window.focus(); window.print();">${printableContent}</body>
+                    </html>
+                `);
+                doc.close();
+
+                // Cleanup after a delay to allow the print dialog to open
+                setTimeout(() => {
+                    document.body.removeChild(printFrame);
+                }, 1000);
+            }
+
+            toast.success('Đã chuẩn bị bản in / PDF.')
+        } catch (err) {
+            console.error('Export failed:', err)
+            toast.error((err as Error).message || 'Không thể xuất PDF.')
         } finally {
             setIsExporting(false)
         }
-    }, [activeDraft, activeDraftId, draftTitle])
+    }, [activeDraft, draftTitle])
 
     // ── Reset ─────────────────────────────────────────────────────────────────
 
     const handleReset = () => {
         resetDraft()
         setStep('input')
+        setClarifyCount(0)
         setResult(null)
         setResearchCitations([])
         setSaveState('saved')
@@ -512,14 +566,21 @@ export function DraftEditor() {
                             </div>
                         )}
 
-                        {/* Clarification questions */}
                         <div className="space-y-5">
                             {intakeQuestions.map((q) => (
-                                <div key={q.id} className="space-y-2">
-                                    <label className="text-sm font-medium text-paper-dark flex items-center gap-1">
-                                        {q.label}
-                                        {q.required && <span className="text-rose-400 text-xs">*</span>}
-                                    </label>
+                                <div key={q.id} className="space-y-2 group relative">
+                                    <div className="flex items-center justify-between">
+                                        <label className="text-sm font-medium text-paper-dark flex items-center gap-1">
+                                            {q.label}
+                                            {q.required && <span className="text-rose-400 text-xs">*</span>}
+                                        </label>
+                                        <button
+                                            onClick={() => setIntakeAnswer(q.id, 'Tôi sẽ tự điền thông tin này sau (hãy để trống .....)')}
+                                            className="text-[10px] text-slate-muted hover:text-gold-primary uppercase tracking-wider font-semibold transition-colors"
+                                        >
+                                            Để điền sau
+                                        </button>
+                                    </div>
                                     <textarea
                                         value={intakeAnswers[q.id] ?? ''}
                                         onChange={(e) => setIntakeAnswer(q.id, e.target.value)}
@@ -577,7 +638,7 @@ export function DraftEditor() {
                                         placeholder="TÊN HỢP ĐỒNG"
                                     />
                                     <p className="text-center text-xs text-slate-500 mt-2">
-                                        Soạn thảo bởi AI pháp lý LegalEdge • Căn cứ pháp luật Việt Nam
+                                        Soạn thảo bởi AI pháp lý LegalShield • Căn cứ pháp luật Việt Nam
                                     </p>
                                 </div>
 

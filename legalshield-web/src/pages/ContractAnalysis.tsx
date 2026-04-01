@@ -1,6 +1,6 @@
 import { useCallback, useState, useEffect } from 'react'
 import * as Comlink from 'comlink'
-import { Upload, FileText, Search, Send, Loader2, Zap, AlertTriangle, CheckCircle2, Info, ExternalLink, X, Bot } from 'lucide-react'
+import { Upload, FileText, Search, Send, Loader2, Zap, AlertTriangle, CheckCircle2, Info, ExternalLink, X, Bot, Shield } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { SplitView } from '../components/layout/SplitView'
@@ -196,6 +196,12 @@ function UploadZone() {
         if (file) handleFile(file)
     }
 
+    const resetAll = () => {
+        reset()
+        setRisks([])
+        setDocument('', false)
+    }
+
     if (status === 'idle' || status === 'uploading' || status === 'parsing' || status === 'error') {
         return (
             <div className="h-full flex flex-col items-center justify-center p-8 bg-grid">
@@ -253,7 +259,7 @@ function UploadZone() {
 
                 {status === 'error' && (
                     <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
-                        <Button variant="ghost" size="sm" className="mt-8 gap-2 text-red-400 hover:bg-red-400/5 border-red-400/20" onClick={reset}>
+                        <Button variant="ghost" size="sm" className="mt-8 gap-2 text-red-400 hover:bg-red-400/5 border-red-400/20" onClick={resetAll}>
                             Thử lại lần nữa
                         </Button>
                     </motion.div>
@@ -273,7 +279,7 @@ function UploadZone() {
                     <FileText className="text-gold-primary" size={18} />
                 </div>
                 <Typography variant="h3" className="text-lg font-serif">Văn bản hợp đồng</Typography>
-                <Button variant="ghost" size="sm" onClick={reset} className="ml-auto text-paper-dark/40 hover:text-paper-dark">Đổi tài liệu</Button>
+                <Button variant="ghost" size="sm" onClick={resetAll} className="ml-auto text-paper-dark/40 hover:text-paper-dark">Đổi tài liệu</Button>
             </div>
             <div className="flex-1 bg-navy-elevated/40 backdrop-blur-sm rounded-xl border border-slate-border/30 p-8 overflow-y-auto custom-scrollbar shadow-inner relative group">
                 <div className="font-sans text-[15px] text-paper-dark/80 leading-8 whitespace-pre-wrap selection:bg-gold-primary/20">
@@ -380,6 +386,17 @@ function RiskPanel() {
         } finally {
             setIsSearching(false)
         }
+    }
+
+    if (status === 'idle' || status === 'uploading' || status === 'parsing' || status === 'error' || !currentDocumentId) {
+        return (
+            <div className="h-full flex flex-col items-center justify-center p-8 text-center space-y-4 opacity-30">
+                <Shield className="text-paper-dark/20" size={48} strokeWidth={1} />
+                <Typography variant="caption" className="text-xs tracking-[.3em] uppercase font-bold text-paper-dark/40">
+                    {status === 'error' ? 'Có lỗi xảy ra khi tải tài liệu' : 'Báo cáo rủi ro sẽ hiển thị tại đây'}
+                </Typography>
+            </div>
+        )
     }
 
     if (status === 'success' && risks.length === 0 && !answer) {
@@ -497,11 +514,10 @@ function RiskPanel() {
                             </div>
                             <Typography variant="body" className="text-[15px] text-paper-dark/90 leading-relaxed mb-6">{answer}</Typography>
                             {(answerAbstained || answerVerification === 'unsupported' || answerVerification === 'conflicted') && (
-                                <div className={`mb-5 rounded-xl border px-4 py-3 ${
-                                    answerAbstained || answerVerification === 'unsupported'
-                                        ? 'border-rose-500/30 bg-rose-500/10 text-rose-200'
-                                        : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
-                                }`}>
+                                <div className={`mb-5 rounded-xl border px-4 py-3 ${answerAbstained || answerVerification === 'unsupported'
+                                    ? 'border-rose-500/30 bg-rose-500/10 text-rose-200'
+                                    : 'border-amber-500/30 bg-amber-500/10 text-amber-100'
+                                    }`}>
                                     <div className="text-[11px] font-bold uppercase tracking-[0.2em]">
                                         {answerAbstained || answerVerification === 'unsupported' ? 'Chưa đủ căn cứ' : 'Cần kiểm tra thêm'}
                                     </div>
@@ -717,6 +733,16 @@ function Scale(props: any) {
 }
 
 export function ContractAnalysis() {
+    const { clearRisks } = useAnalysisStore()
+    const { status } = useUploadStore()
+
+    // Clear analysis on initial mount if not in a success state
+    useEffect(() => {
+        if (status === 'idle' || status === 'error') {
+            clearRisks()
+        }
+    }, [status, clearRisks])
+
     return (
         <SplitView
             ratio="55/45"

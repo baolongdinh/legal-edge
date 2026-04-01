@@ -1,6 +1,8 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
 import {
+    authenticateRequest,
+    buildCacheKey,
     buildAbstainPayload,
     buildLegalAnswerPayload,
     checkRateLimit,
@@ -10,29 +12,20 @@ import {
     fetchWithRetry,
     getCachedLegalAnswer,
     jsonResponse,
+    logTelemetry,
+    normalizeLegalQuery,
     persistAnswerAudit,
     persistVerifiedEvidence,
     requiresLegalCitation,
     retrieveLegalEvidence,
     setCachedLegalAnswer,
-    simpleHash,
 } from '../shared/types.ts'
 
 export const handler = async (req: Request): Promise<Response> => {
     if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
     try {
-        const authHeader = req.headers.get('Authorization')
-        if (!authHeader) return errorResponse('Missing Authorization', 401)
-
-        const supabaseAuth = createClient(
-            Deno.env.get('SUPABASE_URL')!,
-            Deno.env.get('SUPABASE_ANON_KEY')!,
-            { global: { headers: { Authorization: authHeader } } }
-        )
-
-        const { data: { user }, error: authError } = await supabaseAuth.auth.getUser()
-        if (authError || !user) return errorResponse('Unauthorized', 401)
+        const { user } = await authenticateRequest(req)
 
         const { contract_id, query } = await req.json()
         if (!contract_id || !query) return errorResponse('Missing contract_id or query', 400)
@@ -46,31 +39,46 @@ export const handler = async (req: Request): Promise<Response> => {
             Deno.env.get('SUPABASE_URL') ?? '',
             Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
         )
+        const normalizedQuery = normalizeLegalQuery(query)
+        const rewriteCacheKey = buildCacheKey('cache:contract-qa:rewrite', contract_id, normalizedQuery)
+        const retrievalCacheKey = buildCacheKey('cache:contract-qa:retrieval', contract_id, normalizedQuery)
+        const answerCacheKey = buildCacheKey('cache:legal_answer:contract-qa', contract_id, normalizedQuery)
 
-        const queryEmbeddingRes = await fetchWithRetry(
-            'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent',
-            {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    contents: [{ parts: [{ text: `Rút gọn câu hỏi sau thành truy vấn semantic search ngắn gọn, giữ nguyên ý pháp lý cốt lõi:\n${query}` }] }]
-                })
-            },
-            { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
-        )
-        const queryRewriteData = await queryEmbeddingRes.json()
-        const rewrittenQuery = queryRewriteData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || query
+        let rewrittenQuery = await getCachedLegalAnswer<string>(rewriteCacheKey)
+        if (!rewrittenQuery) {
+            const queryEmbeddingRes = await fetchWithRetry(
+                'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent',
+                {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        contents: [{ parts: [{ text: `Rút gọn câu hỏi sau thành truy vấn semantic search ngắn gọn, giữ nguyên ý pháp lý cốt lõi:\n${query}` }] }]
+                    })
+                },
+                { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
+            )
+            const queryRewriteData = await queryEmbeddingRes.json()
+            rewrittenQuery = queryRewriteData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || query
+            await setCachedLegalAnswer(rewriteCacheKey, rewrittenQuery, 60 * 60 * 12)
+        }
 
-        const queryEmbedding = await embedText(rewrittenQuery)
+        let chunks = await getCachedLegalAnswer<any[]>(retrievalCacheKey)
+        let retrievalCached = Boolean(chunks)
+        if (!chunks) {
+            const queryEmbedding = await embedText(rewrittenQuery)
 
-        const { data: chunks, error: searchError } = await supabase.rpc('hybrid_search_contracts', {
-            p_contract_id: contract_id,
-            p_query: rewrittenQuery,
-            p_query_embedding: queryEmbedding,
-            p_match_count: 5
-        })
+            const { data, error: searchError } = await supabase.rpc('hybrid_search_contracts', {
+                p_contract_id: contract_id,
+                p_query: rewrittenQuery,
+                p_query_embedding: queryEmbedding,
+                p_match_count: 5
+            })
 
-        if (searchError) throw searchError
+            if (searchError) throw searchError
+            chunks = data || []
+            await setCachedLegalAnswer(retrievalCacheKey, chunks, 60 * 60)
+            retrievalCached = false
+        }
 
         const internalContext = (chunks && chunks.length > 0)
             ? chunks.map((c: any) => c.content).join('\n\n---\n\n')
@@ -81,20 +89,16 @@ export const handler = async (req: Request): Promise<Response> => {
         if (needsCitation && externalEvidence.length > 0) {
             await persistVerifiedEvidence(query, externalEvidence)
         }
-        const answerCacheKey = needsCitation
-            ? `cache:legal_answer:contract-qa:${contract_id}:${simpleHash(query)}`
-            : null
-
-        if (answerCacheKey) {
-            const cachedPayload = await getCachedLegalAnswer<any>(answerCacheKey)
-            if (cachedPayload) {
-                return jsonResponse({
-                    answer: cachedPayload.answer,
-                    sources: chunks || [],
-                    ...cachedPayload,
-                    cached: true,
-                })
-            }
+        const cachedPayload = await getCachedLegalAnswer<any>(answerCacheKey)
+        if (cachedPayload) {
+            return jsonResponse({
+                answer: cachedPayload.answer,
+                sources: chunks || [],
+                rewritten_query: rewrittenQuery,
+                retrieval_cached: retrievalCached,
+                ...cachedPayload,
+                cached: true,
+            })
         }
 
         if (needsCitation && externalEvidence.length === 0) {
@@ -157,19 +161,33 @@ ${query}`
             metadata: {
                 contract_id,
                 source_chunk_count: chunks?.length ?? 0,
+                retrieval_cached: retrievalCached,
+                rewritten_query: rewrittenQuery,
             },
         })
-        if (answerCacheKey && !payload.abstained) {
+        if (!payload.abstained) {
             await setCachedLegalAnswer(answerCacheKey, payload, 60 * 60)
         }
+        logTelemetry('contract-qa', 'completed', {
+            contract_id,
+            retrieval_cached: retrievalCached,
+            source_chunk_count: chunks?.length ?? 0,
+            needs_citation: needsCitation,
+        })
 
         return jsonResponse({
             answer: payload.answer,
             sources: chunks || [],
+            rewritten_query: rewrittenQuery,
+            retrieval_cached: retrievalCached,
             ...payload,
         })
     } catch (error) {
-        return errorResponse((error as Error).message, 400)
+        const message = (error as Error).message
+        const status = message === 'Missing Authorization' || message === 'Invalid Authorization header' || message === 'Unauthorized'
+            ? 401
+            : 400
+        return errorResponse(message, status)
     }
 }
 

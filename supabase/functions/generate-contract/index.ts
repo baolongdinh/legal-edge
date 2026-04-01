@@ -15,6 +15,8 @@ import {
     retrieveLegalEvidence,
     roundRobinKey,
 } from '../shared/types.ts'
+import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from 'https://esm.sh/docx@8.2.2'
+import { PDFDocument, StandardFonts, rgb } from 'https://esm.sh/pdf-lib@1.17.1'
 
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:streamGenerateContent'
 const GEMINI_JSON_URL = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent'
@@ -278,33 +280,68 @@ function mergeIntakeText(prompt: string, intakeAnswers?: Record<string, string>)
     return [prompt, answerText].filter(Boolean).join('\n')
 }
 
-function scorePromptCompleteness(input: string): number {
-    const normalized = normalizeVietnamese(input)
-    const checks = [
-        /(ben a|ben b|vo|chong|cong ty|ca nhan|nguoi dai dien|dia chi|cccd|mst)/.test(normalized),
-        /(dich vu|cong viec|hang hoa|tai san|thong tin mat|pham vi|muc dich|doi tuong)/.test(normalized),
-        /(gia|thanh toan|phi|dat coc|cap duong|boi thuong|dong|vnd|trieu|ty)/.test(normalized),
-        /(ngay|thang|nam|thoi han|tien do|tu ngay|den ngay|ban giao)/.test(normalized),
-        /(phat|bao mat|chap dut|tranh chap|nuoi con|tai san chung|no chung)/.test(normalized),
-    ]
+async function checkAICompleteness(prompt: string, answers: Record<string, string>, documentLabel: string, geminiKey: string, legalRequirements?: string) {
+    const systemPrompt = `Bạn là chuyên gia phân tích yêu cầu pháp lý Việt Nam.
+Nhiệm vụ: Đánh giá xem yêu cầu và các câu trả lời hiện tại đã đủ để soạn một bản thảo chuyên nghiệp (loại: ${documentLabel}) chưa.
 
-    return checks.filter(Boolean).length
+QUY TẮC VỀ THÔNG TIN CÁ NHÂN:
+- KHÔNG hỏi các thông tin cá nhân cụ thể như: Họ tên, Ngày sinh, Số CMND/CCCD, Địa chỉ thường trú, Chỗ ở hiện tại...
+- Các thông tin này hãy mặc định để trống dạng (.....) trong bản thảo để người dùng tự điền sau.
+- CHỈ tập trung đặt câu hỏi về các THÔNG TIN ẢNH HƯỞNG ĐẾN CẤU TRÚC/NỘI DUNG của văn bản.
+  Ví dụ: Trong đơn ly hôn, hãy hỏi về: Tình trạng hôn nhân, có con chung hay không, có tài sản chung/nợ chung không? Vì những điều này làm thay đổi format đơn.
+
+${legalRequirements ? `CƠ SỞ PHÁP LÝ CHO LOẠI TÀI LIỆU NÀY:
+${legalRequirements}
+
+Hãy dựa trên cơ sở pháp lý trên để đặt các câu hỏi còn thiếu (nhưng vẫn phải tuân thủ quy tắc KHÔNG hỏi thông tin cá nhân ở trên).` : ''}
+
+QUY TẮC QUAN TRỌNG:
+1. Nếu đã đủ các thông tin cốt lõi ảnh hưởng đến logic/cấu trúc, trả về JSON: { "status": "COMPLETE" }
+2. Nếu thiếu, hãy đặt 2-4 câu hỏi TẬP TRUNG vào những gì chưa biết và cần thiết để xác định format.
+3. Nếu người dùng bảo "để trống", "không có", hoặc "điền sau" cho một thông tin, hãy coi đó là ĐÃ PHẢN HỒI và KHÔNG hỏi lại câu đó nữa.
+4. KHÔNG bao giờ hỏi lại những gì đã có trong 'Câu trả lời hiện tại'.
+5. Trả về JSON theo định dạng:
+{
+  "status": "NEEDS_INFO",
+  "questions": [
+    { "id": "unique_id", "label": "Tên câu hỏi ngắn gọn", "placeholder": "Ví dụ điền...", "required": true }
+  ]
+}
+`
+
+    const userContent = `Yêu cầu của người dùng: ${prompt}\n\ncâu trả lời hiện tại: ${JSON.stringify(answers, null, 2)}`
+
+    try {
+        const res = await fetch(GEMINI_JSON_URL + `?key=${geminiKey}`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                contents: [{ parts: [{ text: `${systemPrompt}\n\n${userContent}` }] }],
+                generationConfig: {
+                    responseMimeType: 'application/json',
+                    temperature: 0.1
+                }
+            })
+        })
+
+        if (!res.ok) return { status: 'COMPLETE' }
+        const data = await res.json()
+        const text = data.candidates?.[0]?.content?.parts?.[0]?.text
+        if (!text) return { status: 'COMPLETE' }
+        return JSON.parse(text)
+    } catch (err) {
+        console.error('AI Completeness Check Failed:', err)
+        return { status: 'COMPLETE' }
+    }
 }
 
-function buildClarificationPack(rule: DocumentRule, prompt: string, intakeAnswers?: Record<string, string>) {
-    const merged = normalizeVietnamese(mergeIntakeText(prompt, intakeAnswers))
-    const questions = rule.questions.filter((question) => {
-        const label = normalizeVietnamese(question.label)
-        const placeholder = normalizeVietnamese(question.placeholder)
-        return !(merged.includes(label.slice(0, 12)) || merged.includes(placeholder.slice(0, 12)))
-    })
-
+function buildClarificationPack(rule: DocumentRule, prompt: string, aiQuestions?: ClarificationQuestion[]) {
     return {
         title: `Làm rõ thông tin để soạn ${toReadableLabel(rule, prompt)}`,
         description: rule.isContract
-            ? 'Tôi cần thêm một số thông tin cốt lõi để soạn đúng loại hợp đồng, giảm việc hỏi qua lại nhiều lần.'
-            : 'Yêu cầu này không phải hợp đồng dân sự thông thường. Tôi đã chuyển về đúng loại hồ sơ/tài liệu và gom các thông tin còn thiếu để bạn trả lời một lần.',
-        questions: questions.length > 0 ? questions : rule.questions,
+            ? 'Hãy giúp tôi làm rõ một vài chi tiết để bản soạn thảo sát với thực tế nhất.'
+            : 'Để chuẩn bị hồ sơ chính xác, tôi cần bạn bổ sung các thông tin sau (chỉ cần điền 1 lần).',
+        questions: aiQuestions?.length ? aiQuestions : rule.questions,
     }
 }
 
@@ -334,7 +371,8 @@ serve(async (req) => {
             selection_context,
             intake_answers,
             parameters,
-            response_mode = 'stream'
+            response_mode = 'stream',
+            type
         } = await req.json() as {
             prompt: string
             template_id?: string
@@ -344,8 +382,154 @@ serve(async (req) => {
             intake_answers?: Record<string, string>
             parameters?: Record<string, unknown>
             response_mode?: 'stream' | 'json'
+            type?: string
         }
         if (!prompt) return errorResponse('Missing prompt', 400)
+
+        async function generateContractText() {
+            const geminiKey = roundRobinKey('GEMINI_API_KEYS', 'GEMINI_API_KEY')
+            const geminiRes = await fetch(GEMINI_JSON_URL + `?key=${geminiKey}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{
+                        parts: [{
+                            text: `Tạo hợp đồng theo luật Việt Nam dựa trên yêu cầu: ${prompt}. Trả về nội dung đầy đủ, chuẩn pháp lý, có bố cục chương mục rõ ràng.`
+                        }]
+                    }],
+                    generationConfig: {
+                        temperature: 0.1,
+                        maxOutputTokens: 8192,
+                    }
+                })
+            })
+
+            if (!geminiRes.ok) throw new Error('Failed to generate contract')
+            const geminiData = await geminiRes.json()
+            const contractText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
+            if (!contractText) throw new Error('Empty contract content from generator')
+            return contractText
+        }
+
+        function wrapTextForPDF(text: string, maxChars = 90) {
+            const lines: string[] = []
+            text.split('\n').forEach((rawLine) => {
+                let current = rawLine
+                while (current.length > maxChars) {
+                    lines.push(current.slice(0, maxChars))
+                    current = current.slice(maxChars)
+                }
+                lines.push(current)
+            })
+            return lines
+        }
+
+        if (type === 'docx' || type === 'pdf' || type === 'both') {
+            const supabase = createClient(
+                Deno.env.get('SUPABASE_URL')!,
+                Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!
+            )
+            const contractText = await generateContractText()
+            const result: any = { content: contractText }
+
+            if (type === 'docx' || type === 'both') {
+                const doc = new Document({
+                    sections: [{
+                        properties: {},
+                        children: [
+                            new Paragraph({
+                                text: 'CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM',
+                                heading: HeadingLevel.TITLE,
+                                alignment: AlignmentType.CENTER,
+                            }),
+                            new Paragraph({
+                                text: 'Độc lập - Tự do - Hạnh phúc',
+                                alignment: AlignmentType.CENTER,
+                            }),
+                            new Paragraph({
+                                text: '-------------------',
+                                alignment: AlignmentType.CENTER,
+                            }),
+                            new Paragraph({
+                                text: 'HỢP ĐỒNG',
+                                heading: HeadingLevel.HEADING_1,
+                                alignment: AlignmentType.CENTER,
+                            }),
+                            new Paragraph({ text: '' }),
+                            ...contractText.split('\n').map(line => new Paragraph({
+                                children: [new TextRun({ text: line || ' ', size: 24 })],
+                                spacing: { after: 120 }
+                            })),
+                        ],
+                    }],
+                })
+
+                const buffer = await Packer.toBuffer(doc)
+                const fileName = `contract-${Date.now()}.docx`
+                const { error: uploadError } = await supabase.storage
+                    .from('user-contracts')
+                    .upload(fileName, buffer, {
+                        contentType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+                    })
+                if (uploadError) throw new Error('Failed to upload DOCX')
+                const { data: urlData } = supabase.storage
+                    .from('user-contracts')
+                    .getPublicUrl(fileName)
+                result.docxUrl = urlData.publicUrl
+            }
+
+            if (type === 'pdf' || type === 'both') {
+                const pdfDoc = await PDFDocument.create()
+                const font = await pdfDoc.embedFont(StandardFonts.TimesRoman)
+                const pageWidth = 595.28
+                const pageHeight = 841.89
+                const margin = 50
+                const lineHeight = 14
+                let page = pdfDoc.addPage([pageWidth, pageHeight])
+                let y = pageHeight - margin
+
+                const headerText = 'HỢP ĐỒNG'
+                page.drawText(headerText, {
+                    x: margin,
+                    y: y,
+                    size: 18,
+                    font,
+                    color: rgb(0, 0, 0),
+                })
+                y -= 30
+
+                const lines = wrapTextForPDF(contractText, 95)
+                for (const line of lines) {
+                    if (y < margin + lineHeight) {
+                        page = pdfDoc.addPage([pageWidth, pageHeight])
+                        y = pageHeight - margin
+                    }
+                    page.drawText(line || ' ', {
+                        x: margin,
+                        y,
+                        size: 12,
+                        font,
+                        color: rgb(0.11, 0.11, 0.11),
+                    })
+                    y -= lineHeight
+                }
+
+                const pdfBytes = await pdfDoc.save()
+                const fileName = `contract-${Date.now()}.pdf`
+                const { error: pdfUploadError } = await supabase.storage
+                    .from('user-contracts')
+                    .upload(fileName, pdfBytes, {
+                        contentType: 'application/pdf',
+                    })
+                if (pdfUploadError) throw new Error('Failed to upload PDF')
+                const { data: urlData } = supabase.storage
+                    .from('user-contracts')
+                    .getPublicUrl(fileName)
+                result.pdfUrl = urlData.publicUrl
+            }
+
+            return jsonResponse(result)
+        }
 
         const geminiKey = roundRobinKey('GEMINI_API_KEYS', 'GEMINI_API_KEY')
         const supabase = createClient(
@@ -358,52 +542,35 @@ serve(async (req) => {
         const documentLabel = toReadableLabel(documentRule, mergedPrompt)
         const isExplicitContractRequest = normalizeVietnamese(prompt).includes('hop dong')
             || normalizeVietnamese(prompt).includes('hợp đồng')
+
         const mismatchReason = !documentRule.isContract && isExplicitContractRequest
             ? `Yêu cầu của bạn nghe giống "${documentLabel}" hơn là một hợp đồng dân sự thông thường.`
             : undefined
-        const completenessScore = scorePromptCompleteness(mergedPrompt)
-        const templateReferences = await searchTemplateReferences(documentRule, prompt).catch(() => [])
 
-        if (response_mode === 'json' && mode === 'draft' && mismatchReason) {
-            return jsonResponse({
-                status: 'document_type_mismatch',
-                document_type: documentRule.type,
-                document_label: documentLabel,
-                mismatch_reason: mismatchReason,
-                clarification_pack: buildClarificationPack(documentRule, mergedPrompt, intake_answers),
-                template_references: templateReferences,
-                content: [
-                    `Tôi nhận thấy yêu cầu này phù hợp hơn với loại tài liệu "${documentLabel}" thay vì một hợp đồng thông thường.`,
-                    '',
-                    mismatchReason,
-                    '',
-                    'Bạn chỉ cần điền một lần vào bộ câu hỏi bên dưới, sau đó tôi sẽ soạn bản nháp đúng loại hồ sơ/tài liệu cho bạn.'
-                ].join('\n'),
-                citations: [],
-                verification_status: 'unverified',
-                verification_summary: {
-                    requires_citation: false,
-                    verification_status: 'unverified',
-                    citation_count: 0,
-                    official_count: 0,
-                    secondary_count: 0,
-                    unsupported_claim_count: 0,
-                },
-                claim_audit: [],
-            })
+        const templateReferences = await searchTemplateReferences(documentRule, prompt).catch(() => [])
+        const force_generation = parameters?.force_generation === true
+
+        let aiCheck: { status: string, questions?: ClarificationQuestion[] } = { status: 'COMPLETE' }
+        if (!force_generation && response_mode === 'json' && mode === 'draft') {
+            // Real-time legal requirement search to ground AI questions
+            const legalRequirementSearchQuery = `nội dung bắt buộc của ${documentLabel} theo pháp luật Việt Nam mới nhất 2024 2025`
+            const legalReqs = await exaSearch(legalRequirementSearchQuery, '', 3).catch(() => [])
+            const legalContext = legalReqs.map((r: { title: string; content: string }) => `[${r.title}]\n${r.content}`).join('\n\n')
+
+            aiCheck = await checkAICompleteness(prompt, intake_answers ?? {}, documentLabel, geminiKey, legalContext)
         }
 
-        if (response_mode === 'json' && mode === 'draft' && completenessScore < 3) {
+        if (!force_generation && response_mode === 'json' && mode === 'draft' && (aiCheck.status === 'NEEDS_INFO' || mismatchReason) && aiCheck.questions?.length) {
             return jsonResponse({
                 status: 'needs_clarification',
                 document_type: documentRule.type,
                 document_label: documentLabel,
-                clarification_pack: buildClarificationPack(documentRule, mergedPrompt, intake_answers),
+                clarification_pack: buildClarificationPack(documentRule, prompt, aiCheck.questions),
                 template_references: templateReferences,
                 content: [
-                    `Tôi có thể hỗ trợ soạn ${documentLabel}, nhưng hiện thông tin đầu vào chưa đủ để tạo bản nháp dùng được.`,
+                    `Tôi có thể hỗ trợ soạn ${documentLabel}, nhưng tôi cần thêm một vài chi tiết để đảm bảo quyền lợi tốt nhất cho bạn.`,
                     '',
-                    'Tôi đã gom các câu hỏi cần thiết thành một bộ điền một lần. Sau khi bạn trả lời đủ, tôi sẽ tạo bản nháp hoàn chỉnh hơn.'
+                    'Bạn chỉ cần điền nhanh bộ câu hỏi bên dưới, sau đó tôi sẽ tạo bản nháp hoàn chỉnh ngay.'
                 ].join('\n'),
                 citations: [],
                 verification_status: 'unverified',
