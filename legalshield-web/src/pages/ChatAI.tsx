@@ -7,7 +7,7 @@ import { Button } from '../components/ui/Button'
 import { Typography } from '../components/ui/Typography'
 import { Skeleton } from '../components/ui/Skeleton'
 import { Dialog } from '../components/ui/Dialog'
-import { supabase } from '../lib/supabase'
+import { getAccessToken, invokeEdgeFunction } from '../lib/supabase'
 import { clsx } from 'clsx'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -49,6 +49,50 @@ interface Message {
     abstained?: boolean
 }
 
+interface DocumentContextState {
+    text: string
+    summary: string
+    hash: string
+}
+
+const MAX_SUMMARY_CHARS = 1200
+const MAX_EXCERPTS = 3
+const MAX_EXCERPT_CHARS = 500
+
+function compactText(text: string, maxChars: number) {
+    return text.replace(/\s+/g, ' ').trim().slice(0, maxChars)
+}
+
+function summarizeDocument(text: string) {
+    const paragraphs = text
+        .split(/\n+/)
+        .map((part) => part.trim())
+        .filter((part) => part.length > 30)
+    return compactText(paragraphs.slice(0, 4).join(' '), MAX_SUMMARY_CHARS)
+}
+
+function selectRelevantExcerpts(text: string, query: string) {
+    const tokens = query.toLowerCase().split(/\s+/).filter((token) => token.length >= 4)
+    const candidates = text
+        .split(/\n+/)
+        .map((part) => part.trim())
+        .filter((part) => part.length > 60)
+        .map((part) => ({
+            part,
+            score: tokens.reduce((score, token) => score + (part.toLowerCase().includes(token) ? 1 : 0), 0),
+        }))
+        .sort((a, b) => b.score - a.score || b.part.length - a.part.length)
+
+    return candidates
+        .slice(0, MAX_EXCERPTS)
+        .map((item) => compactText(item.part, MAX_EXCERPT_CHARS))
+}
+
+async function hashText(text: string) {
+    const buffer = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text))
+    return Array.from(new Uint8Array(buffer)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
+}
+
 export function ChatAI() {
     const [messages, setMessages] = useState<Message[]>([
         {
@@ -61,7 +105,7 @@ export function ChatAI() {
     const [loading, setLoading] = useState(false)
     const [isParsing, setIsParsing] = useState(false)
     const [file, setFile] = useState<File | null>(null)
-    const [documentContext, setDocumentContext] = useState<string>('')
+    const [documentContext, setDocumentContext] = useState<DocumentContextState | null>(null)
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false)
     const scrollRef = useRef<HTMLDivElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
@@ -82,21 +126,10 @@ export function ChatAI() {
         }
         formData.append('mode', 'ephemeral')
 
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL
-        const res = await fetch(`${supabaseUrl}/functions/v1/parse-document`, {
-            method: 'POST',
-            headers: {
-                Authorization: `Bearer ${accessToken}`
-            },
-            body: formData
+        const functionData = await invokeEdgeFunction<{ text_content?: string; error?: string; code?: string }>('parse-document', {
+            body: formData,
+            headers: { Authorization: `Bearer ${accessToken}` }
         })
-
-        const functionData = await res.json().catch(() => ({}))
-        if (!res.ok) {
-            const message = functionData.error || 'Không thể đọc tài liệu từ máy chủ.'
-            const code = functionData.code ? ` (${functionData.code})` : ''
-            throw new Error(`${message}${code}`)
-        }
 
         if (!functionData?.text_content) {
             throw new Error('Máy chủ không trả về nội dung tài liệu.')
@@ -136,14 +169,14 @@ export function ChatAI() {
         }
 
         setFile(selected)
-        setDocumentContext('')
+        setDocumentContext(null)
         setIsParsing(true)
 
         const parseToast = toast.loading(`Đang phân tích "${selected.name}"...`)
 
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            if (!session) throw new Error('Vui lòng đăng nhập.')
+            const accessToken = await getAccessToken()
+            if (!accessToken) throw new Error('Vui lòng đăng nhập.')
 
             const extension = selected.name.split('.').pop()?.toLowerCase()
             let textContent = ''
@@ -157,14 +190,18 @@ export function ChatAI() {
                     toast.loading(`Đang chuyển sang phân tích máy chủ cho "${selected.name}"...`, { id: parseToast })
                 }
 
-                textContent = await parseDocumentViaServer(selected, session.access_token)
+                textContent = await parseDocumentViaServer(selected, accessToken)
             }
 
             if (!textContent?.trim()) {
                 throw new Error('Không trích xuất được nội dung từ tài liệu.')
             }
 
-            setDocumentContext(textContent)
+            setDocumentContext({
+                text: textContent,
+                summary: summarizeDocument(textContent),
+                hash: await hashText(textContent),
+            })
             toast.success(`Đã đọc xong "${selected.name}". Bạn có thể đặt câu hỏi ngay.`, { id: parseToast })
         } catch (err) {
             console.error('Lỗi phân tích tài liệu:', err)
@@ -183,7 +220,7 @@ export function ChatAI() {
 
     const clearFile = () => {
         setFile(null)
-        setDocumentContext('')
+        setDocumentContext(null)
         if (fileInputRef.current) {
             fileInputRef.current.value = ''
         }
@@ -210,25 +247,31 @@ export function ChatAI() {
         setLoading(true)
 
         try {
-            const { data: { session } } = await supabase.auth.getSession()
-            if (!session) throw new Error('Vui lòng đăng nhập để sử dụng tính năng này.')
+            const accessToken = await getAccessToken()
+            if (!accessToken) throw new Error('Vui lòng đăng nhập để sử dụng tính năng này.')
 
-            const payload: { message: string; history: Message[]; document_context?: string } = {
+            const payload: {
+                message: string
+                history: Message[]
+                context_summary?: string
+                context_excerpts?: string[]
+                document_hash?: string
+            } = {
                 message: userMsg,
                 history: messages.slice(-5).map(m => ({ role: m.role, content: m.content } as any))
             }
             if (documentContext) {
-                payload.document_context = documentContext
+                payload.context_summary = documentContext.summary
+                payload.context_excerpts = selectRelevantExcerpts(documentContext.text, userMsg)
+                payload.document_hash = documentContext.hash
             }
 
-            const { data, error } = await supabase.functions.invoke('legal-chat', {
+            const data = await invokeEdgeFunction<any>('legal-chat', {
                 body: payload,
                 headers: {
-                    Authorization: `Bearer ${session.access_token}`
+                    Authorization: `Bearer ${accessToken}`
                 }
             })
-
-            if (error) throw error
 
             const assistantMessage: Message = {
                 id: (Date.now() + 1).toString(),

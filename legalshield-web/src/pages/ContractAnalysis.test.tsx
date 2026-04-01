@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { ContractAnalysis } from './ContractAnalysis'
-import { supabase } from '../lib/supabase'
+import { getCurrentUser, invokeEdgeFunction, supabase } from '../lib/supabase'
 import { MemoryRouter } from 'react-router-dom'
+import { useAnalysisStore, useUploadStore } from '../store'
 
 // Mock idb-keyval
 vi.mock('idb-keyval', () => ({
@@ -69,7 +70,9 @@ vi.mock('../lib/supabase', () => ({
         functions: { invoke: vi.fn() },
         channel: vi.fn(() => ({ on: vi.fn().mockReturnThis(), subscribe: vi.fn().mockReturnThis() })),
         removeChannel: vi.fn()
-    }
+    },
+    getCurrentUser: vi.fn(),
+    invokeEdgeFunction: vi.fn(),
 }))
 
 const dropFile = (element: Element, file: File) => {
@@ -92,7 +95,16 @@ const dropFile = (element: Element, file: File) => {
 describe('ContractAnalysis Component', () => {
     beforeEach(() => {
         vi.clearAllMocks()
+        useUploadStore.getState().reset()
+        useAnalysisStore.getState().clearRisks()
         vi.mocked(supabase.auth.getUser).mockResolvedValue({ data: { user: { id: 'user1' } }, error: null } as any)
+        vi.mocked(getCurrentUser).mockResolvedValue({ id: 'user1' } as any)
+        vi.mocked(invokeEdgeFunction).mockResolvedValue({
+            processed_chunks: 1,
+            queued_chunks: 1,
+            failed_chunks: 0,
+            status: 'completed'
+        } as any)
     })
 
     it('renders and handles upload', async () => {
@@ -112,15 +124,14 @@ describe('ContractAnalysis Component', () => {
         vi.mocked(supabase.from).mockImplementation(() => createMockSupabase(null, null) as any)
         render(<MemoryRouter><ContractAnalysis /></MemoryRouter>)
 
-        const file = new File(['content'], 'test.txt', { type: 'text/plain' })
+        const file = new File([longMockText], 'test.txt', { type: 'text/plain' })
         dropFile(screen.getByTestId('upload-zone'), file)
 
         const input = await screen.findByPlaceholderText("Hỏi AI về hợp đồng này...")
         fireEvent.change(input, { target: { value: 'Hợp đồng này nói về gì?' } })
 
-        vi.mocked(supabase.functions.invoke).mockResolvedValue({
-            data: { answer: 'Đây là hợp đồng lao động.', sources: [] },
-            error: null
+        vi.mocked(invokeEdgeFunction).mockResolvedValue({
+            answer: 'Đây là hợp đồng lao động.', sources: []
         } as any)
 
         fireEvent.click(screen.getByLabelText('Gửi câu hỏi'))
@@ -131,14 +142,13 @@ describe('ContractAnalysis Component', () => {
         vi.mocked(supabase.from).mockImplementation(() => createMockSupabase(null, null) as any)
         render(<MemoryRouter><ContractAnalysis /></MemoryRouter>)
 
-        const file = new File(['content'], 'test.txt', { type: 'text/plain' })
+        const file = new File([longMockText], 'test.txt', { type: 'text/plain' })
         dropFile(screen.getByTestId('upload-zone'), file)
 
         await waitFor(() => screen.getByText(/Kích hoạt Deep Audit/i))
 
-        vi.mocked(supabase.functions.invoke).mockResolvedValue({
-            data: { risks: [{ level: 'critical', description: 'Rủi ro bảo mật', citation: 'Điều 5' }] },
-            error: null
+        vi.mocked(invokeEdgeFunction).mockResolvedValueOnce({
+            risks: [{ level: 'critical', description: 'Rủi ro bảo mật', citation: 'Điều 5' }]
         } as any)
 
         fireEvent.click(screen.getByText(/Kích hoạt Deep Audit/i))
@@ -147,9 +157,8 @@ describe('ContractAnalysis Component', () => {
         const input = screen.getByPlaceholderText("Hỏi AI thêm về hợp đồng này...")
         fireEvent.change(input, { target: { value: 'Chi tiết rủi ro?' } })
 
-        vi.mocked(supabase.functions.invoke).mockResolvedValue({
-            data: { answer: 'Rủi ro ở điều khoản bảo mật.', sources: [] },
-            error: null
+        vi.mocked(invokeEdgeFunction).mockResolvedValue({
+            answer: 'Rủi ro ở điều khoản bảo mật.', sources: []
         } as any)
 
         fireEvent.click(screen.getByLabelText('Gửi câu hỏi thêm'))

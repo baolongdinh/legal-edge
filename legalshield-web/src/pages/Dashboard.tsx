@@ -26,6 +26,14 @@ interface DashboardStat {
     tone?: 'default' | 'danger' | 'accent'
 }
 
+interface DashboardStatsRow {
+    total_contracts: number
+    analyzed_count: number
+    pending_audit_count: number
+    total_risks: number
+    last_updated: string | null
+}
+
 function formatRelativeTime(dateStr: string) {
     const date = new Date(dateStr)
     const now = new Date()
@@ -96,45 +104,23 @@ export function Dashboard() {
 
     async function fetchData() {
         try {
-            const { data: contractsData, error: contractsError } = await supabase
-                .from('contracts')
-                .select(`
-                    id, title, created_at, status,
-                    contract_risks ( level )
-                `)
-                .order('created_at', { ascending: false })
+            const [{ data: statsData, error: statsError }, { data: contractsData, error: contractsError }] = await Promise.all([
+                supabase.rpc('get_my_stats'),
+                supabase.rpc('list_my_contract_summaries', { p_limit: 24, p_offset: 0 }),
+            ])
 
+            if (statsError) throw statsError
             if (contractsError) throw contractsError
 
-            const formatted: ContractWithRisks[] = (contractsData || []).map(c => {
-                const risks = c.contract_risks as any[]
-                const levels = risks.map(r => r.level)
-                let maxLevel: any = 'note'
-                if (levels.includes('critical')) maxLevel = 'critical'
-                else if (levels.includes('moderate')) maxLevel = 'moderate'
-
-                return {
-                    id: c.id,
-                    title: c.title,
-                    created_at: c.created_at,
-                    status: c.status,
-                    risk_count: risks.length,
-                    max_risk_level: maxLevel
-                }
-            })
-
+            const statsRow = (statsData as DashboardStatsRow[] | null)?.[0]
+            const formatted: ContractWithRisks[] = (contractsData || []) as ContractWithRisks[]
             setContracts(formatted)
 
-            const totalContracts = formatted.length
-            const completedAnalyses = formatted.filter((c) => c.status === 'completed' || c.risk_count > 0).length
-            const totalRisks = formatted.reduce((sum, contract) => sum + contract.risk_count, 0)
-            const pendingAudits = formatted.filter((c) => c.status === 'pending_audit').length
-
             setStats([
-                { label: 'Hợp đồng đã tải lên', value: totalContracts.toString(), icon: FileText },
-                { label: 'Bản phân tích hoàn tất', value: completedAnalyses.toString(), icon: Sparkles },
-                { label: 'Rủi ro đã phát hiện', value: totalRisks.toString(), icon: AlertTriangle, tone: 'danger' },
-                { label: 'Đang chờ audit', value: pendingAudits.toString(), icon: TrendingUp, tone: 'accent' },
+                { label: 'Hợp đồng đã tải lên', value: String(statsRow?.total_contracts ?? formatted.length), icon: FileText },
+                { label: 'Bản phân tích hoàn tất', value: String(statsRow?.analyzed_count ?? 0), icon: Sparkles },
+                { label: 'Rủi ro đã phát hiện', value: String(statsRow?.total_risks ?? 0), icon: AlertTriangle, tone: 'danger' },
+                { label: 'Đang chờ audit', value: String(statsRow?.pending_audit_count ?? 0), icon: TrendingUp, tone: 'accent' },
             ])
         } catch (err) {
             console.error('Error fetching dashboard data:', err)

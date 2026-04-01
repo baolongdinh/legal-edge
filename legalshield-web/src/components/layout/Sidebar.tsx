@@ -2,7 +2,7 @@ import { Link, useLocation } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
     LayoutDashboard, FileSearch, MessageSquare, FilePen,
-    BookOpen, Settings, ChevronLeft, Scale
+    Settings, ChevronLeft, Scale
 } from 'lucide-react'
 import { useUIStore } from '../../store'
 
@@ -11,7 +11,6 @@ const navItems = [
     { to: '/analysis', icon: FileSearch, label: 'Phân tích HĐ' },
     { to: '/chat', icon: MessageSquare, label: 'Tư vấn AI' },
     { to: '/editor', icon: FilePen, label: 'Soạn thảo' },
-    { to: '/clauses', icon: BookOpen, label: 'Kho điều khoản' },
 ]
 
 export function Sidebar() {

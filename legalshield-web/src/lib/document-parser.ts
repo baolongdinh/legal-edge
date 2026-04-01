@@ -10,16 +10,12 @@ export const ContractSchema = z.object({
     title_lines: z.array(z.string()).optional()
 });
 
-// Setup PDF.js worker
-// @ts-ignore
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.mjs`;
-
 /**
  * Extracts text from a PDF file using pdfjs-dist
  */
 export async function parsePDF(file: File): Promise<string> {
     const arrayBuffer = await file.arrayBuffer();
-    const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+    const loadingTask = pdfjs.getDocument({ data: arrayBuffer, disableWorker: true } as any);
     const pdf = await loadingTask.promise;
 
     let fullText = '';

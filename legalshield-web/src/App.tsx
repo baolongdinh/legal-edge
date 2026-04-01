@@ -83,13 +83,6 @@ function AnimatedRoutes() {
             </motion.div>
           } />
         </Route>
-        <Route path="/clauses" element={<AuthGuard><AppShell title="Kho điều khoản" /></AuthGuard>}>
-          <Route index element={
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
-              <DraftEditor clauseMode />
-            </motion.div>
-          } />
-        </Route>
         <Route path="/settings" element={<AuthGuard><AppShell title="Cài đặt & Tài khoản" /></AuthGuard>}>
           <Route index element={
             <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="h-full">

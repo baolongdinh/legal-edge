@@ -2,12 +2,9 @@ import * as Comlink from 'comlink'
 import * as pdfjs from 'pdfjs-dist'
 import mammoth from 'mammoth'
 
-// Setup PDF.js worker
-pdfjs.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjs.version}/pdf.worker.min.js`
-
 export const documentWorker = {
     async parsePDF(arrayBuffer: ArrayBuffer): Promise<string> {
-        const loadingTask = pdfjs.getDocument({ data: arrayBuffer })
+        const loadingTask = pdfjs.getDocument({ data: arrayBuffer, disableWorker: true } as any)
         const pdf = await loadingTask.promise
         let fullText = ''
 

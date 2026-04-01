@@ -9,7 +9,7 @@ import { Typography } from '../components/ui/Typography'
 import { Button } from '../components/ui/Button'
 import { Skeleton } from '../components/ui/Skeleton'
 import { useUploadStore, useAnalysisStore } from '../store'
-import { supabase } from '../lib/supabase'
+import { getCurrentUser, invokeEdgeFunction, supabase } from '../lib/supabase'
 import { classifySections, ContractSchema } from '../lib/document-parser'
 
 // Proxy for the Web Worker
@@ -153,7 +153,7 @@ function UploadZone() {
             setRisks([])
 
             if (!existingContract) {
-                const { data: { user } } = await supabase.auth.getUser()
+                const user = await getCurrentUser()
                 if (!user) throw new Error('Vui lòng đăng nhập để tiếp tục.')
 
                 const { error: insertError } = await supabase.from('contracts').insert({
@@ -169,11 +169,17 @@ function UploadZone() {
             setStatus('success', 100)
             toast.success('Đã trích xuất thành công!', { id: uploadToast })
 
-            supabase.functions.invoke('ingest-contract', {
+            invokeEdgeFunction<{
+                processed_chunks: number
+                queued_chunks: number
+                failed_chunks: number
+                status: string
+            }>('ingest-contract', {
                 body: { contract_id: docId, text }
-            }).then(({ data, error }) => {
-                if (error) console.error('Ingestion failed:', error)
-                else console.log('Ingested chunks:', data?.count)
+            }).then((data) => {
+                console.log('Ingested chunks:', data?.processed_chunks, '/', data?.queued_chunks)
+            }).catch((error) => {
+                console.error('Ingestion failed:', error)
             })
 
         } catch (err) {
@@ -334,10 +340,9 @@ function RiskPanel() {
         startAnalysis()
         const auditToast = toast.loading('AI đang thực hiện Deep Audit (Llama-3-70B)...')
         try {
-            const { data, error } = await supabase.functions.invoke('risk-review', {
+            const data = await invokeEdgeFunction<any>('risk-review', {
                 body: { clause_text: extractedText.slice(0, 8000), mode: 'deep' }
             })
-            if (error) throw error
             setRisks(data.risks)
             toast.success('Phân tích chuyên sâu hoàn tất!', { id: auditToast })
         } catch (err) {
@@ -359,10 +364,9 @@ function RiskPanel() {
         setAnswerClaimAudit([])
         setAnswerAbstained(false)
         try {
-            const { data, error } = await supabase.functions.invoke('contract-qa', {
+            const data = await invokeEdgeFunction<any>('contract-qa', {
                 body: { contract_id: currentDocumentId, query }
             })
-            if (error) throw error
             setAnswer(data.answer)
             setAnswerCitations(data.citations || [])
             setAnswerSummary(data.verification_summary || null)

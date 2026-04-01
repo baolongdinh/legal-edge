@@ -247,7 +247,13 @@ export interface Clause {
     title: string
     content: string
     kind?: 'full_template' | 'clause_snippet'
-    source_type?: 'curated' | 'ai_generated' | 'user_saved'
+    source_type?: 'curated' | 'web_crawled' | 'ai_generated' | 'user_saved'
+    source_domain?: string | null
+    source_note?: string | null
+    source_url?: string | null
+    template_file_url?: string | null
+    preview_file_url?: string | null
+    file_kind?: 'pdf' | 'doc' | 'docx' | 'html' | 'unknown'
 }
 
 export interface DraftIntakeQuestion {

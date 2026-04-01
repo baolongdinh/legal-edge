@@ -20,22 +20,106 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
 // ─── API helpers ──────────────────────────────────────────────────────────────
 
 const FUNCTIONS_URL = `${supabaseUrl}/functions/v1`
+const SESSION_CACHE_TTL_MS = 10_000
+
+let cachedToken: { value: string | null; expiresAt: number } = {
+    value: null,
+    expiresAt: 0,
+}
+
+export async function getAccessToken(forceRefresh = false): Promise<string | null> {
+    const now = Date.now()
+    if (!forceRefresh && cachedToken.expiresAt > now) {
+        return cachedToken.value
+    }
+
+    const session = (await supabase.auth.getSession()).data.session
+    cachedToken = {
+        value: session?.access_token ?? null,
+        expiresAt: now + SESSION_CACHE_TTL_MS,
+    }
+    return cachedToken.value
+}
+
+export async function getCurrentUser() {
+    const { data } = await supabase.auth.getUser()
+    return data.user
+}
+
+export async function invokeEdgeFunction<T>(
+    name: string,
+    options?: {
+        body?: unknown
+        method?: string
+        headers?: Record<string, string>
+        responseType?: 'json'
+    }
+): Promise<T>
+export async function invokeEdgeFunction(
+    name: string,
+    options: {
+        body?: unknown
+        method?: string
+        headers?: Record<string, string>
+        responseType: 'response'
+    }
+): Promise<Response>
+export async function invokeEdgeFunction<T>(
+    name: string,
+    options: {
+        body?: unknown
+        method?: string
+        headers?: Record<string, string>
+        responseType?: 'json' | 'response'
+    } = {}
+): Promise<T | Response> {
+    const {
+        body,
+        method = 'POST',
+        headers = {},
+        responseType = 'json',
+    } = options
+    const accessToken = await getAccessToken()
+    const authHeaders = {
+        ...headers,
+        Authorization: `Bearer ${accessToken ?? supabaseAnonKey}`,
+    }
+
+    if (responseType === 'response' || body instanceof FormData || method !== 'POST') {
+        const fetchHeaders = new Headers(authHeaders)
+        if (!(body instanceof FormData) && !fetchHeaders.has('Content-Type')) {
+            fetchHeaders.set('Content-Type', 'application/json')
+        }
+
+        const res = await fetch(`${FUNCTIONS_URL}/${name}`, {
+            method,
+            headers: fetchHeaders,
+            body: body instanceof FormData
+                ? body
+                : body === undefined
+                    ? undefined
+                    : JSON.stringify(body) as BodyInit,
+        })
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({ error: res.statusText }))
+            throw new Error(err.error ?? 'Edge Function error')
+        }
+
+        return responseType === 'response' ? res : res.json()
+    }
+
+    const { data, error } = await supabase.functions.invoke(name, {
+        body: body as any,
+        headers: authHeaders,
+    })
+
+    if (error) throw error
+    return data as T
+}
 
 async function callFunction<T>(name: string, body: unknown): Promise<T> {
-    const session = (await supabase.auth.getSession()).data.session
-    const res = await fetch(`${FUNCTIONS_URL}/${name}`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session?.access_token ?? supabaseAnonKey}`,
-        },
-        body: JSON.stringify(body),
-    })
-    if (!res.ok) {
-        const err = await res.json().catch(() => ({ error: res.statusText }))
-        throw new Error(err.error ?? 'Edge Function error')
-    }
-    return res.json()
+    return invokeEdgeFunction<T>(name, { body }) as Promise<T>
 }
 
 // Risk analysis
@@ -48,14 +132,9 @@ export async function analyzeRisks(clauseText: string, context?: string) {
 
 // Contract generation (returns SSE stream)
 export async function generateContractStream(prompt: string, templateId?: string) {
-    const session = (await supabase.auth.getSession()).data.session
-    return fetch(`${FUNCTIONS_URL}/generate-contract`, {
-        method: 'POST',
-        headers: {
-            'Content-Type': 'application/json',
-            Authorization: `Bearer ${session?.access_token ?? supabaseAnonKey}`,
-        },
-        body: JSON.stringify({ prompt, template_id: templateId }),
+    return invokeEdgeFunction('generate-contract', {
+        body: { prompt, template_id: templateId },
+        responseType: 'response',
     })
 }
 
@@ -125,16 +204,9 @@ export async function generateContractSuggestion(body: {
 
 // Document upload & parse
 export async function uploadAndParseDocument(file: File) {
-    const session = (await supabase.auth.getSession()).data.session
     const form = new FormData()
     form.append('file', file)
-    const res = await fetch(`${FUNCTIONS_URL}/parse-document`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${session?.access_token ?? supabaseAnonKey}` },
-        body: form,
-    })
-    if (!res.ok) throw new Error(await res.text())
-    return res.json()
+    return invokeEdgeFunction('parse-document', { body: form })
 }
 
 export async function deleteFileAssets(body: {
