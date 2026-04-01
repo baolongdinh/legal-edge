@@ -1,0 +1,42 @@
+[
+  {
+    "seed_key": "service-contract-basic-v1",
+    "name": "Mẫu hợp đồng dịch vụ cơ bản",
+    "category": "chung",
+    "template_kind": "full_template",
+    "path": "service-contract-basic.md",
+    "is_public": true,
+    "source_type": "repo_curated",
+    "source_note": "Mẫu khởi tạo nội bộ để bootstrap thư viện trước khi import thêm từ web."
+  },
+  {
+    "seed_key": "nda-basic-v1",
+    "name": "Mẫu thỏa thuận bảo mật cơ bản",
+    "category": "bảo mật",
+    "template_kind": "full_template",
+    "path": "nda-basic.md",
+    "is_public": true,
+    "source_type": "repo_curated",
+    "source_note": "Mẫu khởi tạo nội bộ để bootstrap thư viện trước khi import thêm từ web."
+  },
+  {
+    "seed_key": "payment-clause-staged-v1",
+    "name": "Điều khoản thanh toán theo tiến độ",
+    "category": "thanh toán",
+    "template_kind": "clause_snippet",
+    "path": "payment-clause-staged.md",
+    "is_public": true,
+    "source_type": "repo_curated",
+    "source_note": "Clause mẫu nội bộ phục vụ giai đoạn bootstrap."
+  },
+  {
+    "seed_key": "dispute-resolution-clause-v1",
+    "name": "Điều khoản giải quyết tranh chấp",
+    "category": "tranh chấp",
+    "template_kind": "clause_snippet",
+    "path": "dispute-resolution-clause.md",
+    "is_public": true,
+    "source_type": "repo_curated",
+    "source_note": "Clause mẫu nội bộ phục vụ giai đoạn bootstrap."
+  }
+]

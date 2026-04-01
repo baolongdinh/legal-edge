@@ -3,18 +3,56 @@
 These APIs are implemented as **Supabase Edge Functions** (TypeScript/Deno) to ensure a fully serverless architecture.
 
 ## 1. POST `/functions/v1/generate-contract`
-Generates a contract by applying RAG over legal documents and templates.
+Generates a contract or contract-ready draft by combining intake answers, legal retrieval, and curated/sample templates.
 
 **Request Body:**
 ```json
 {
   "template_id": "uuid",
-  "prompt": "Draft a warehouse lease agreement for 12 months in HCMC",
+  "prompt": "Soạn hợp đồng thuê nhà",
+  "mode": "draft",
+  "document_type": "residential_lease_contract",
+  "response_mode": "json",
+  "current_draft": "optional existing draft text",
+  "selection_context": "optional selected clause text",
   "parameters": {
-    "party_a": "Company A",
-    "party_b": "Company B",
-    "duration_months": 12,
-    "location": "HCMC"
+    "landlord_name": "Nguyễn Văn A",
+    "tenant_name": "Trần Thị B",
+    "property_address": "Quận 7, TP.HCM",
+    "term_months": 12,
+    "rent_amount_vnd": 12000000
+  },
+  "intake_answers": [
+    {
+      "question_id": "property_address",
+      "question": "Địa chỉ nhà cho thuê là gì?",
+      "answer": "Quận 7, TP.HCM"
+    }
+  ]
+}
+```
+
+**Alternative Intake Response:**
+```json
+{
+  "status": "needs_clarification",
+  "document_type": "residential_lease_contract",
+  "document_label": "Hợp đồng thuê nhà ở",
+  "clarification_pack": {
+    "intro": "Tôi cần thêm một số thông tin trước khi soạn bản nháp hoàn chỉnh.",
+    "groups": [
+      {
+        "group_title": "Thông tin các bên",
+        "questions": [
+          {
+            "id": "landlord_name",
+            "label": "Tên bên cho thuê",
+            "required": true,
+            "placeholder": "Nguyễn Văn A"
+          }
+        ]
+      }
+    ]
   }
 }
 ```
@@ -22,17 +60,41 @@ Generates a contract by applying RAG over legal documents and templates.
 **Response (Streaming or JSON):**
 ```json
 {
-  "contract_id": "uuid",
   "content": "CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM...",
+  "document_type": "residential_lease_contract",
+  "source_action": "generate",
   "citations": [
     {
-      "chunk_id": "uuid",
-      "article": "Điều 15 Luật Thương mại 2005",
-      "relevance_score": 0.92
+      "citation_text": "Điều 472 Bộ luật Dân sự 2015",
+      "citation_url": "https://vbpl.vn/...",
+      "source_domain": "vbpl.vn",
+      "verification_status": "official_verified"
     }
-  ]
+  ],
+  "template_references": [
+    {
+      "title": "Mẫu hợp đồng thuê nhà tham khảo",
+      "source_url": "https://...",
+      "source_type": "sample_template",
+      "provenance_status": "needs_review"
+    }
+  ],
+  "verification_summary": {
+    "requires_citation": true,
+    "verification_status": "official_verified",
+    "citation_count": 1,
+    "official_count": 1,
+    "secondary_count": 0,
+    "unsupported_claim_count": 0
+  },
+  "claim_audit": []
 }
 ```
+
+**Behavior Rules:**
+- If the request is not actually a contract, the endpoint should return `status: "document_type_mismatch"` with a suggested legal document type and clarification pack.
+- If key information is missing, the endpoint should return `status: "needs_clarification"` with a grouped question list so the frontend can ask the user once.
+- Binding legal citations and sample/template references must be returned in separate arrays.
 
 ## 2. POST `/functions/v1/risk-review`
 Provides low-latency risk analysis with verified legal evidence.

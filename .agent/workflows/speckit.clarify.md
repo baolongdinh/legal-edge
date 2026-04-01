@@ -179,3 +179,29 @@ Behavior rules:
 - If quota reached with unresolved high-impact categories remaining, explicitly flag them under Deferred with rationale.
 
 Context for prioritization: $ARGUMENTS
+
+## Domain-Specific Priority: Legal Drafting & Clause Systems
+
+When the active feature involves `drafting`, `contracts`, `clauses`, `templates`, `legal forms`, or `document generation`, elevate the following clarification priorities above generic UI or implementation questions:
+
+1. **User Type & Language Assumptions**
+   - Is the primary user a lawyer, legal ops staff, business operator, or ordinary consumer?
+   - Must the system avoid legal jargon by default?
+
+2. **Document-Type Verification**
+   - Must the system verify whether the requested artifact is truly a contract versus another legal document (e.g. đơn, thỏa thuận, biểu mẫu)?
+   - If there is a mismatch, should it redirect to the correct document type flow or refuse generation?
+
+3. **Clarification Collection Strategy**
+   - Should missing information be asked one-by-one, or packaged into a single structured questionnaire for one-pass user completion?
+   - Which question groups are mandatory before generation: parties, object, term, payment, penalties, dispute resolution, jurisdiction, attachments, document-specific fields?
+
+4. **Source & Template Provenance**
+   - Must the spec distinguish binding legal sources from sample templates collected from the web?
+   - Are externally collected forms allowed as drafting references, and if so, how must provenance/review status be represented?
+
+5. **Drafting Safety**
+   - Should the system generate immediately from partial input, or block until required intake fields are complete?
+   - Must the first output be a proposed draft, a clarification pack, or a document-type correction notice?
+
+When these issues are Partial or Missing, prefer questions that reduce product misuse by non-lawyers over low-impact UX questions.

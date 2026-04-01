@@ -239,13 +239,31 @@ You **MUST** consider the user input before proceeding (if not empty).
    - ❌ Test cases, test plans, QA procedures
    - ❌ Implementation details (frameworks, APIs, algorithms)
 
-   **✅ REQUIRED PATTERNS** - These test requirements quality:
-   - ✅ "Are [requirement type] defined/specified/documented for [scenario]?"
-   - ✅ "Is [vague term] quantified/clarified with specific criteria?"
-   - ✅ "Are requirements consistent between [section A] and [section B]?"
-   - ✅ "Can [requirement] be objectively measured/verified?"
-   - ✅ "Are [edge cases/scenarios] addressed in requirements?"
-   - ✅ "Does the spec define [missing aspect]?"
+**✅ REQUIRED PATTERNS** - These test requirements quality:
+- ✅ "Are [requirement type] defined/specified/documented for [scenario]?"
+- ✅ "Is [vague term] quantified/clarified with specific criteria?"
+- ✅ "Are requirements consistent between [section A] and [section B]?"
+- ✅ "Can [requirement] be objectively measured/verified?"
+- ✅ "Are [edge cases/scenarios] addressed in requirements?"
+- ✅ "Does the spec define [missing aspect]?"
+
+   **Domain Overlay - Legal Drafting / Clause Systems**:
+   If the feature involves drafting contracts, clause libraries, template retrieval, or legal document generation, the checklist MUST include requirement-quality questions for:
+   - intake usability for non-lawyer users
+   - document-type verification (`contract` vs `other legal document`)
+   - grouped clarification packs that let the user answer once instead of repeated back-and-forth
+   - mandatory drafting fields by document type
+   - separation of authoritative legal citations from sample/template references
+   - provenance rules for templates collected from the web
+   - what happens when the request is legally incoherent or mislabeled
+   - whether the spec defines when to stop and ask for clarification instead of generating
+
+   Example checklist items in this domain:
+   - "Are requirements defined for how the system identifies that a user request is not actually a contract? [Coverage, Gap]"
+   - "Is the one-pass clarification questionnaire structure specified for ordinary users? [Completeness]"
+   - "Does the spec distinguish binding legal sources from sample templates and explain how each is shown to the user? [Clarity]"
+   - "Are required intake fields defined per document type before generation may proceed? [Completeness]"
+   - "Is the fallback behavior specified when user input is too vague to generate a safe draft? [Edge Case, Gap]"
 
 6. **Structure Reference**: Generate the checklist following the canonical template in `.specify/templates/checklist-template.md` for title, meta section, category headings, and ID formatting. If template is unavailable, use: H1 title, purpose/created meta lines, `##` category sections containing `- [ ] CHK### <requirement item>` lines with globally incrementing IDs starting at CHK001.
 

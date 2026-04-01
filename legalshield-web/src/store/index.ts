@@ -250,6 +250,14 @@ export interface Clause {
     source_type?: 'curated' | 'ai_generated' | 'user_saved'
 }
 
+export interface DraftIntakeQuestion {
+    id: string
+    label: string
+    placeholder: string
+    help_text?: string
+    required?: boolean
+}
+
 interface EditorState {
     activeDraftId: string | null
     draftTitle: string
@@ -257,6 +265,11 @@ interface EditorState {
     clauseLibrary: Clause[]
     searchQuery: string
     recentClauseIds: string[]
+    draftRequest: string
+    intakeQuestions: DraftIntakeQuestion[]
+    intakeAnswers: Record<string, string>
+    resolvedDocumentType: string | null
+    resolvedDocumentLabel: string | null
     setDraft: (content: string) => void
     setDraftDocument: (payload: { id?: string | null; title?: string; content?: string }) => void
     setDraftTitle: (title: string) => void
@@ -264,6 +277,10 @@ interface EditorState {
     setClauseLibrary: (clauses: Clause[]) => void
     rememberClauseUse: (clauseId: string) => void
     insertClause: (clauses: Clause[], clauseId: string, target?: 'append' | 'selection_replace' | 'cursor_insert', selection?: { start: number; end: number }) => void
+    setDraftRequest: (request: string) => void
+    setIntakePack: (payload: { questions: DraftIntakeQuestion[]; documentType?: string | null; documentLabel?: string | null }) => void
+    setIntakeAnswer: (questionId: string, answer: string) => void
+    clearIntake: () => void
     resetDraft: () => void
 }
 
@@ -276,6 +293,11 @@ export const useEditorStore = create<EditorState>()(
             clauseLibrary: [],
             searchQuery: '',
             recentClauseIds: [],
+            draftRequest: '',
+            intakeQuestions: [],
+            intakeAnswers: {},
+            resolvedDocumentType: null,
+            resolvedDocumentLabel: null,
             setDraft: (content) => set({ activeDraft: content }),
             setDraftDocument: ({ id, title, content }) => set((state) => ({
                 activeDraftId: id ?? state.activeDraftId,
@@ -321,11 +343,38 @@ export const useEditorStore = create<EditorState>()(
                     }
                 })
             },
+            setDraftRequest: (draftRequest) => set({ draftRequest }),
+            setIntakePack: ({ questions, documentType, documentLabel }) => set((state) => ({
+                intakeQuestions: questions,
+                resolvedDocumentType: documentType ?? state.resolvedDocumentType,
+                resolvedDocumentLabel: documentLabel ?? state.resolvedDocumentLabel,
+                intakeAnswers: questions.reduce<Record<string, string>>((acc, question) => {
+                    acc[question.id] = state.intakeAnswers[question.id] ?? ''
+                    return acc
+                }, {}),
+            })),
+            setIntakeAnswer: (questionId, answer) => set((state) => ({
+                intakeAnswers: {
+                    ...state.intakeAnswers,
+                    [questionId]: answer,
+                },
+            })),
+            clearIntake: () => set({
+                intakeQuestions: [],
+                intakeAnswers: {},
+                resolvedDocumentType: null,
+                resolvedDocumentLabel: null,
+            }),
             resetDraft: () => set({
                 activeDraftId: null,
                 draftTitle: 'Bản thảo hợp đồng',
                 activeDraft: '',
                 searchQuery: '',
+                draftRequest: '',
+                intakeQuestions: [],
+                intakeAnswers: {},
+                resolvedDocumentType: null,
+                resolvedDocumentLabel: null,
             }),
         }),
         {
@@ -337,6 +386,11 @@ export const useEditorStore = create<EditorState>()(
                 activeDraft: state.activeDraft,
                 searchQuery: state.searchQuery,
                 recentClauseIds: state.recentClauseIds,
+                draftRequest: state.draftRequest,
+                intakeQuestions: state.intakeQuestions,
+                intakeAnswers: state.intakeAnswers,
+                resolvedDocumentType: state.resolvedDocumentType,
+                resolvedDocumentLabel: state.resolvedDocumentLabel,
             }),
         }
     )

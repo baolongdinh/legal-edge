@@ -8,7 +8,7 @@ import { RiskBadge } from '../components/ui/RiskBadge'
 import { Typography } from '../components/ui/Typography'
 import { Dialog } from '../components/ui/Dialog'
 import { Skeleton } from '../components/ui/Skeleton'
-import { supabase } from '../lib/supabase'
+import { deleteFileAssets, supabase } from '../lib/supabase'
 
 interface ContractWithRisks {
     id: string
@@ -76,11 +76,11 @@ export function Dashboard() {
         setIsDeleting(true)
         try {
             setDeletingId(confirmId)
-            // Delete cascade handled by migrations if configured, or manual here
-            await supabase.from('contract_risks').delete().eq('contract_id', confirmId)
-            await supabase.from('contract_chunks').delete().eq('contract_id', confirmId)
-            const { error } = await supabase.from('contracts').delete().eq('id', confirmId)
-            if (error) throw error
+            await deleteFileAssets({
+                contract_id: confirmId,
+                delete_contract: true,
+                delete_document: true,
+            })
 
             setContracts(prev => prev.filter(c => c.id !== confirmId))
             toast.success('Hợp đồng đã được xóa thành công')

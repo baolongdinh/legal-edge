@@ -1,12 +1,13 @@
 // Edge Function: POST /functions/v1/parse-document
 // Accepts a binary PDF/DOCX upload via multipart form data.
 // Supports two modes:
-//   - mode=ephemeral (default for ChatAI): Extract text in-memory, skip Storage upload entirely → zero storage cost
-//   - mode=persist: Upload to Storage + save to DB → used for deep analysis and RAG ingestion
+//   - mode=ephemeral (default for ChatAI): Extract text in-memory, skip remote file persistence
+//   - mode=persist: Upload to Cloudinary and save file URL to DB
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { encode } from 'https://deno.land/std@0.177.0/encoding/base64.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { uploadToCloudinary } from '../shared/cloudinary.ts'
 import { corsHeaders, errorResponse, fetchWithRetry, jsonResponse } from '../shared/types.ts'
 
 function parseError(message: string, code: string, stage: string, status = 400) {
@@ -34,15 +35,15 @@ export const handler = async (req: Request): Promise<Response> => {
         const file = formData.get('file') as File | null
         if (!file) return parseError('Missing file in form data', 'MISSING_FILE', 'parse_form', 400)
 
-        // mode=ephemeral (default): in-memory only, no storage cost
-        // mode=persist: upload to storage + save to DB
+        // mode=ephemeral (default): in-memory only, no remote file persistence
+        // mode=persist: upload to Cloudinary + save URL to DB
         const mode = (formData.get('mode') as string) || 'ephemeral'
 
         const fileBuffer = await file.arrayBuffer()
         const mimeType = file.type || 'application/pdf'
         const filename = file.name
 
-        // --- Helper: Extract text with Gemini Multimodal (in-memory, no Storage needed) ---
+        // --- Helper: Extract text with Gemini Multimodal (in-memory, no remote file needed) ---
         const extractWithGemini = async (buffer: ArrayBuffer, mime: string) => {
             const base64File = encode(new Uint8Array(buffer))
             const body = {
@@ -70,13 +71,10 @@ export const handler = async (req: Request): Promise<Response> => {
             return text
         }
 
-        // --- Helper: Extract PDF via Jina AI Reader (requires signed URL from Storage) ---
-        const extractWithJina = async (storagePath: string) => {
-            const { data: signed } = await supabase.storage.from('user-contracts').createSignedUrl(storagePath, 60)
-            if (!signed?.signedUrl) throw new Error('Could not generate signed URL')
-
+        // --- Helper: Extract PDF via Jina AI Reader using a remote URL ---
+        const extractWithJina = async (fileUrl: string) => {
             const res = await fetchWithRetry(
-                `https://r.jina.ai/${signed.signedUrl}`,
+                `https://r.jina.ai/${fileUrl}`,
                 { headers: { 'Accept': 'application/json' } },
                 { listEnvVar: 'JINA_API_KEYS', fallbackEnvVar: 'JINA_API_KEY' }
             )
@@ -87,31 +85,39 @@ export const handler = async (req: Request): Promise<Response> => {
 
         // --- Extract text ---
         let textContent = ''
-        let storagePath: string | null = null
+        let fileUrl: string | null = null
+        let storageObjectKey: string | null = null
+        let storageResourceType: 'image' | 'raw' | 'video' | null = null
 
         // Complex documents (PDF, Word, etc.) benefit significantly from Jina AI Reader
         const isComplexDoc = mimeType === 'application/pdf' ||
             mimeType.includes('officedocument') ||
             mimeType.includes('msword')
 
-        // Only persist mode uploads to Storage.
+        // Persist mode uploads the original file to Cloudinary so Supabase only stores the file URL.
         if (mode === 'persist') {
-            storagePath = `${user.id}/${Date.now()}-${filename}`
-            const { error: uploadError } = await supabase.storage
-                .from('user-contracts')
-                .upload(storagePath, fileBuffer, { contentType: mimeType })
-            if (uploadError) {
-                return parseError(`Storage upload: ${uploadError.message}`, 'STORAGE_UPLOAD_FAILED', 'storage_upload', 400)
+            try {
+                const uploaded = await uploadToCloudinary({
+                    file: new Uint8Array(fileBuffer),
+                    fileName: filename,
+                    mimeType,
+                    publicIdPrefix: `legalshield/documents/${user.id}`,
+                })
+                fileUrl = uploaded.secure_url
+                storageObjectKey = uploaded.public_id
+                storageResourceType = uploaded.resource_type
+            } catch (e) {
+                return parseError((e as Error).message, 'FILE_UPLOAD_FAILED', 'cloudinary_upload', 400)
             }
         }
 
         if (mimeType === 'text/plain') {
             // Ultra-fast: decode directly, no AI needed
             textContent = new TextDecoder().decode(fileBuffer)
-        } else if (mimeType === 'application/pdf' && mode === 'persist' && storagePath) {
-            // Jina AI for high-fidelity Markdown extraction (uses signed URL)
+        } else if (mimeType === 'application/pdf' && mode === 'persist' && fileUrl) {
+            // Jina AI for high-fidelity Markdown extraction using the Cloudinary URL
             try {
-                textContent = await extractWithJina(storagePath)
+                textContent = await extractWithJina(fileUrl)
             } catch (e) {
                 console.warn('Jina failed, falling back to Gemini:', e)
                 textContent = await extractWithGemini(fileBuffer, mimeType)
@@ -141,20 +147,17 @@ export const handler = async (req: Request): Promise<Response> => {
             }
         }
 
-        // --- Ephemeral cleanup ---
-        if (mode === 'ephemeral' && storagePath) {
-            console.log(`[Cleaner] Deleting ephemeral file: ${storagePath}`)
-            await supabase.storage.from('user-contracts').remove([storagePath])
-        }
-
         // --- Persist mode: save to DB ---
-        if (mode === 'persist' && storagePath) {
+        if (mode === 'persist' && fileUrl) {
             const { data: doc, error: dbError } = await supabase
                 .from('documents')
                 .insert({
                     user_id: user.id,
                     filename,
-                    storage_path: storagePath,
+                    file_url: fileUrl,
+                    storage_provider: 'cloudinary',
+                    storage_object_key: storageObjectKey,
+                    storage_resource_type: storageResourceType,
                     mime_type: mimeType,
                     text_content: textContent
                 })
@@ -166,11 +169,17 @@ export const handler = async (req: Request): Promise<Response> => {
             return jsonResponse({
                 document_id: doc.id,
                 text_content: textContent,
-                metadata: { filename, mime_type: mimeType, size_bytes: fileBuffer.byteLength, mode: 'persist' },
+                metadata: {
+                    filename,
+                    mime_type: mimeType,
+                    size_bytes: fileBuffer.byteLength,
+                    mode: 'persist',
+                    file_url: fileUrl,
+                },
             })
         }
 
-        // --- Ephemeral mode: return text only, no Storage/DB cost ---
+        // --- Ephemeral mode: return text only, no DB file link persistence ---
         return jsonResponse({
             text_content: textContent,
             metadata: { filename, mime_type: mimeType, size_bytes: fileBuffer.byteLength, mode: 'ephemeral' },

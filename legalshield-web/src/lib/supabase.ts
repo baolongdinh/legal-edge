@@ -65,9 +65,14 @@ export async function generateContractSuggestion(body: {
     current_draft?: string
     selection_context?: string
     mode?: 'draft' | 'clause_insert' | 'rewrite'
+    intake_answers?: Record<string, string>
     parameters?: Record<string, unknown>
 }) {
     return callFunction<{
+        status?: 'ok' | 'needs_clarification' | 'document_type_mismatch'
+        document_type?: string
+        document_label?: string
+        mismatch_reason?: string
         content: string
         citations: Array<{
             citation_text: string
@@ -94,6 +99,24 @@ export async function generateContractSuggestion(body: {
             matched_source_domain?: string
             score?: number
         }>
+        clarification_pack?: {
+            title: string
+            description?: string
+            questions: Array<{
+                id: string
+                label: string
+                placeholder: string
+                help_text?: string
+                required?: boolean
+            }>
+        }
+        template_references?: Array<{
+            title: string
+            url: string
+            source_domain: string
+            source_type: 'official' | 'secondary' | 'document_context'
+            note?: string
+        }>
     }>('generate-contract', {
         ...body,
         response_mode: 'json',
@@ -112,6 +135,15 @@ export async function uploadAndParseDocument(file: File) {
     })
     if (!res.ok) throw new Error(await res.text())
     return res.json()
+}
+
+export async function deleteFileAssets(body: {
+    contract_id?: string
+    document_id?: string
+    delete_contract?: boolean
+    delete_document?: boolean
+}) {
+    return callFunction<{ ok: boolean; deleted_contract: boolean; deleted_document: boolean }>('delete-file-assets', body)
 }
 
 // Export PDF

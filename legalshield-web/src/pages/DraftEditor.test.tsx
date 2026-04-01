@@ -10,9 +10,33 @@ vi.mock('idb-keyval', () => ({
 import { DraftEditor } from './DraftEditor'
 import { useEditorStore } from '../store'
 
-const mockUpdateEq = vi.fn().mockResolvedValue({ error: null })
-const mockUpdate = vi.fn(() => ({ eq: mockUpdateEq }))
-const mockInsertContract = vi.fn()
+const {
+    mockUpdateEq,
+    mockUpdate,
+    mockInsertContract,
+    mockGenerateContractSuggestion,
+} = vi.hoisted(() => ({
+    mockUpdateEq: vi.fn().mockResolvedValue({ error: null }),
+    mockUpdate: vi.fn(() => ({ eq: undefined as any })),
+    mockInsertContract: vi.fn(),
+    mockGenerateContractSuggestion: vi.fn(async (): Promise<any> => ({
+        status: 'ok',
+        content: 'ĐIỀU KHOẢN ĐỀ XUẤT',
+        citations: [],
+        verification_status: 'unverified',
+        verification_summary: {
+            requires_citation: false,
+            verification_status: 'unverified',
+            citation_count: 0,
+            official_count: 0,
+            secondary_count: 0,
+            unsupported_claim_count: 0,
+        },
+        claim_audit: [],
+    })),
+}))
+
+mockUpdate.mockImplementation(() => ({ eq: mockUpdateEq }))
 
 vi.mock('../components/layout/SplitView', () => ({
     SplitView: ({ left, right }: any) => (
@@ -80,20 +104,7 @@ vi.mock('../lib/supabase', () => ({
     },
     analyzeRisks: vi.fn(async () => ({ risks: [] })),
     exportToPDF: vi.fn(async () => ({ pdf_url: 'https://example.com/contract.pdf', size_kb: 42 })),
-    generateContractSuggestion: vi.fn(async () => ({
-        content: 'ĐIỀU KHOẢN ĐỀ XUẤT',
-        citations: [],
-        verification_status: 'unverified',
-        verification_summary: {
-            requires_citation: false,
-            verification_status: 'unverified',
-            citation_count: 0,
-            official_count: 0,
-            secondary_count: 0,
-            unsupported_claim_count: 0,
-        },
-        claim_audit: [],
-    })),
+    generateContractSuggestion: mockGenerateContractSuggestion,
 }))
 
 describe('DraftEditor', () => {
@@ -106,6 +117,11 @@ describe('DraftEditor', () => {
             clauseLibrary: [],
             searchQuery: '',
             recentClauseIds: [],
+            draftRequest: '',
+            intakeQuestions: [],
+            intakeAnswers: {},
+            resolvedDocumentType: null,
+            resolvedDocumentLabel: null,
         } as any)
         window.open = vi.fn()
     })
@@ -144,5 +160,81 @@ describe('DraftEditor', () => {
                 status: 'draft',
             }))
         })
+    })
+
+    it('collects clarification answers once before generating a draft', async () => {
+        mockGenerateContractSuggestion
+            .mockResolvedValueOnce({
+                status: 'needs_clarification',
+                document_type: 'service_contract',
+                document_label: 'Hợp đồng dịch vụ',
+                content: 'Cần làm rõ thêm thông tin.',
+                citations: [],
+                verification_status: 'unverified',
+                verification_summary: {
+                    requires_citation: false,
+                    verification_status: 'unverified',
+                    citation_count: 0,
+                    official_count: 0,
+                    secondary_count: 0,
+                    unsupported_claim_count: 0,
+                },
+                clarification_pack: {
+                    title: 'Làm rõ thông tin để soạn Hợp đồng dịch vụ',
+                    questions: [
+                        {
+                            id: 'parties',
+                            label: 'Thông tin các bên',
+                            placeholder: 'Nhập thông tin các bên',
+                            required: true,
+                        },
+                    ],
+                },
+                template_references: [],
+                claim_audit: [],
+            })
+            .mockResolvedValueOnce({
+                status: 'ok',
+                document_type: 'service_contract',
+                document_label: 'Hợp đồng dịch vụ',
+                content: 'BẢN NHÁP HỢP ĐỒNG DỊCH VỤ',
+                citations: [],
+                verification_status: 'unverified',
+                verification_summary: {
+                    requires_citation: false,
+                    verification_status: 'unverified',
+                    citation_count: 0,
+                    official_count: 0,
+                    secondary_count: 0,
+                    unsupported_claim_count: 0,
+                },
+                claim_audit: [],
+                template_references: [],
+            })
+
+        render(<DraftEditor />)
+
+        fireEvent.click(screen.getByText('AI Assist'))
+        fireEvent.change(
+            screen.getByPlaceholderText(/Tôi cần hợp đồng dịch vụ marketing/i),
+            { target: { value: 'Soạn cho tôi hợp đồng dịch vụ marketing' } }
+        )
+        fireEvent.click(screen.getByText('Phân tích yêu cầu & chuẩn bị bản nháp'))
+
+        await screen.findByText('Làm rõ thông tin để soạn Hợp đồng dịch vụ')
+        fireEvent.change(screen.getByPlaceholderText('Nhập thông tin các bên'), {
+            target: { value: 'Bên A: Công ty ABC. Bên B: Nguyễn Văn B.' },
+        })
+        fireEvent.click(screen.getByText('Tạo bản nháp từ bộ trả lời này'))
+
+        await waitFor(() => {
+            expect(mockGenerateContractSuggestion).toHaveBeenNthCalledWith(2, expect.objectContaining({
+                intake_answers: {
+                    parties: 'Bên A: Công ty ABC. Bên B: Nguyễn Văn B.',
+                },
+            }))
+        })
+
+        await screen.findByText('BẢN NHÁP HỢP ĐỒNG DỊCH VỤ')
     })
 })

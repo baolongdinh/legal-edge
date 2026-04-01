@@ -21,6 +21,10 @@ echo "▶  Setting Edge Function secrets..."
 supabase secrets set \
   GEMINI_API_KEYS="${GEMINI_API_KEYS}" \
   GROQ_API_KEYS="${GROQ_API_KEYS}" \
+  CLOUDINARY_CLOUD_NAME="${CLOUDINARY_CLOUD_NAME}" \
+  CLOUDINARY_API_KEY="${CLOUDINARY_API_KEY}" \
+  CLOUDINARY_API_SECRET="${CLOUDINARY_API_SECRET}" \
+  CLOUDINARY_UPLOAD_PREFIX="${CLOUDINARY_UPLOAD_PREFIX}" \
   STRIPE_SECRET_KEY="${STRIPE_SECRET_KEY}" \
   STRIPE_PRICE_PRO_MONTHLY="${STRIPE_PRICE_PRO_MONTHLY}" \
   STRIPE_PRICE_ENTERPRISE_MONTHLY="${STRIPE_PRICE_ENTERPRISE_MONTHLY}" \
@@ -30,6 +34,7 @@ supabase secrets set \
 echo ""
 echo "▶  Deploying Supabase Edge Functions..."
 supabase functions deploy risk-review
+supabase functions deploy delete-file-assets
 supabase functions deploy generate-contract
 supabase functions deploy parse-document
 supabase functions deploy export-pdf

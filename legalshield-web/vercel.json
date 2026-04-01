@@ -1,7 +1,7 @@
 {
     "buildCommand": "npm run build",
     "outputDirectory": "dist",
-    "installCommand": "npm install",
+    "installCommand": "npm install --legacy-peer-deps",
     "framework": "vite",
     "routes": [
         {
@@ -11,9 +11,5 @@
             "src": "/(.*)",
             "dest": "/index.html"
         }
-    ],
-    "env": {
-        "VITE_SUPABASE_URL": "@legalshield-supabase-url",
-        "VITE_SUPABASE_ANON_KEY": "@legalshield-supabase-anon-key"
-    }
+    ]
 }

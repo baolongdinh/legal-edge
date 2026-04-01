@@ -18,7 +18,7 @@ import { SplitView } from '../components/layout/SplitView'
 import { Typography } from '../components/ui/Typography'
 import { Button } from '../components/ui/Button'
 import { RiskBadge } from '../components/ui/RiskBadge'
-import { useEditorStore, type Clause } from '../store'
+import { useEditorStore, type Clause, type DraftIntakeQuestion } from '../store'
 import { supabase, analyzeRisks, exportToPDF, generateContractSuggestion } from '../lib/supabase'
 
 const categoryColors: Record<string, string> = {
@@ -38,6 +38,10 @@ type VerificationStatus = 'official_verified' | 'secondary_verified' | 'unsuppor
 interface DraftEditorProps { clauseMode?: boolean }
 
 interface SuggestionPayload {
+    status?: 'ok' | 'needs_clarification' | 'document_type_mismatch'
+    document_type?: string
+    document_label?: string
+    mismatch_reason?: string
     content: string
     source_action: DraftActionMode
     citations: Array<{
@@ -64,6 +68,18 @@ interface SuggestionPayload {
         matched_citation_url?: string
         matched_source_domain?: string
         score?: number
+    }>
+    clarification_pack?: {
+        title: string
+        description?: string
+        questions: DraftIntakeQuestion[]
+    }
+    template_references?: Array<{
+        title: string
+        url: string
+        source_domain: string
+        source_type: 'official' | 'secondary' | 'document_context'
+        note?: string
     }>
 }
 
@@ -151,6 +167,10 @@ export function DraftEditor({ clauseMode = false }: DraftEditorProps) {
         draftTitle,
         activeDraft,
         searchQuery,
+        draftRequest,
+        intakeQuestions,
+        intakeAnswers,
+        resolvedDocumentLabel,
         setDraft,
         setDraftDocument,
         setDraftTitle,
@@ -159,6 +179,10 @@ export function DraftEditor({ clauseMode = false }: DraftEditorProps) {
         setClauseLibrary,
         insertClause,
         recentClauseIds,
+        setDraftRequest,
+        setIntakePack,
+        setIntakeAnswer,
+        clearIntake,
         resetDraft,
     } = useEditorStore()
 
@@ -171,7 +195,6 @@ export function DraftEditor({ clauseMode = false }: DraftEditorProps) {
     const [isExporting, setIsExporting] = useState(false)
     const [isGenerating, setIsGenerating] = useState(false)
     const [isReviewing, setIsReviewing] = useState(false)
-    const [aiPrompt, setAiPrompt] = useState('')
     const [suggestion, setSuggestion] = useState<SuggestionPayload | null>(null)
     const [reviewPayload, setReviewPayload] = useState<{
         scope: 'selection' | 'full'
@@ -369,8 +392,8 @@ export function DraftEditor({ clauseMode = false }: DraftEditorProps) {
         }
     }
 
-    const handleDraftAction = async (mode: DraftActionMode) => {
-        if (!aiPrompt.trim() && mode !== 'rewrite') {
+    const handleDraftAction = async (mode: DraftActionMode, explicitAnswers?: Record<string, string>) => {
+        if (!draftRequest.trim() && mode !== 'rewrite') {
             toast.error('Vui lòng nhập yêu cầu cho AI.')
             return
         }
@@ -383,7 +406,7 @@ export function DraftEditor({ clauseMode = false }: DraftEditorProps) {
         setIsGenerating(true)
         try {
             const response = await generateContractSuggestion({
-                prompt: mode === 'rewrite' ? (aiPrompt.trim() || 'Viết lại đoạn này theo văn phong chặt chẽ hơn.') : aiPrompt.trim(),
+                prompt: mode === 'rewrite' ? (draftRequest.trim() || 'Viết lại đoạn này theo văn phong chặt chẽ hơn.') : draftRequest.trim(),
                 template_id: mode === 'draft' ? selectedItem?.kind === 'full_template' ? selectedItem.id : undefined : undefined,
                 current_draft: activeDraft,
                 selection_context: mode === 'rewrite'
@@ -391,13 +414,26 @@ export function DraftEditor({ clauseMode = false }: DraftEditorProps) {
                     : mode === 'clause_insert'
                         ? activeDraft.slice(Math.max(0, selectionRef.current.start - 300), selectionRef.current.end + 300)
                         : undefined,
+                intake_answers: explicitAnswers,
                 mode,
             })
 
-            setSuggestion({
+            const nextSuggestion = {
                 ...response,
                 source_action: mode,
-            })
+            } satisfies SuggestionPayload
+
+            if (response.status === 'needs_clarification' || response.status === 'document_type_mismatch') {
+                setIntakePack({
+                    questions: response.clarification_pack?.questions ?? [],
+                    documentType: response.document_type ?? null,
+                    documentLabel: response.document_label ?? null,
+                })
+            } else {
+                clearIntake()
+            }
+
+            setSuggestion(nextSuggestion)
             setActiveTab('ai')
         } catch (err) {
             console.error('AI drafting failed:', err)
@@ -407,13 +443,23 @@ export function DraftEditor({ clauseMode = false }: DraftEditorProps) {
         }
     }
 
+    const handleSubmitClarification = async () => {
+        const missingRequired = intakeQuestions.filter((question) => question.required && !intakeAnswers[question.id]?.trim())
+        if (missingRequired.length > 0) {
+            toast.error('Hãy trả lời các mục bắt buộc trước khi tạo bản nháp.')
+            return
+        }
+
+        await handleDraftAction('draft', intakeAnswers)
+    }
+
     const handleApplySuggestion = () => {
-        if (!suggestion) return
+        if (!suggestion || suggestion.status !== 'ok') return
 
         if (suggestion.source_action === 'draft') {
             setDraft(suggestion.content)
             if (!draftTitle || draftTitle === 'Bản thảo hợp đồng') {
-                setDraftTitle(selectedItem?.title || 'Bản thảo AI')
+                setDraftTitle(selectedItem?.title || suggestion.document_label || 'Bản thảo AI')
             }
         } else {
             const target: DraftInsertionTarget = suggestion.source_action === 'rewrite'
@@ -423,6 +469,7 @@ export function DraftEditor({ clauseMode = false }: DraftEditorProps) {
             setDraft(nextDraft)
         }
 
+        clearIntake()
         toast.success('Đã áp dụng đề xuất AI vào bản thảo.')
     }
 
@@ -628,26 +675,75 @@ export function DraftEditor({ clauseMode = false }: DraftEditorProps) {
                     <div className="space-y-2">
                         <Typography variant="label">AI drafting assist</Typography>
                         <textarea
-                            value={aiPrompt}
-                            onChange={(e) => setAiPrompt(e.target.value)}
-                            placeholder="Ví dụ: Viết điều khoản thanh toán theo tiến độ 3 đợt, có phạt chậm thanh toán nhưng đúng Luật Thương mại."
+                            value={draftRequest}
+                            onChange={(e) => setDraftRequest(e.target.value)}
+                            placeholder="Ví dụ: Tôi cần hợp đồng dịch vụ marketing cho công ty nhỏ, thanh toán 3 đợt, có bảo mật dữ liệu khách hàng và phạt chậm thanh toán."
                             className="min-h-[120px] w-full rounded-xl border border-slate-border bg-navy-elevated px-4 py-3 text-sm text-paper-dark outline-none placeholder:text-slate-muted focus:border-gold-primary"
                         />
+                        <p className="text-xs leading-5 text-slate-muted">
+                            Hãy mô tả bằng ngôn ngữ bình thường. AI sẽ tự kiểm tra bạn đang cần đúng loại hợp đồng/hồ sơ nào, tra cứu căn cứ và gom câu hỏi còn thiếu để bạn trả lời một lần.
+                        </p>
                         <div className="grid grid-cols-1 gap-2">
                             <Button variant="outline" size="sm" onClick={() => handleDraftAction('draft')} disabled={isGenerating}>
                                 {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <FilePlus2 size={14} />}
-                                Generate from template
+                                Phân tích yêu cầu & chuẩn bị bản nháp
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => handleDraftAction('clause_insert')} disabled={isGenerating}>
                                 {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <BookOpen size={14} />}
-                                Insert clause by instruction
+                                Chèn điều khoản theo mô tả
                             </Button>
                             <Button variant="ghost" size="sm" onClick={() => handleDraftAction('rewrite')} disabled={isGenerating}>
                                 {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Wand2 size={14} />}
-                                Rewrite selected clause
+                                Viết lại đoạn đang chọn
                             </Button>
                         </div>
                     </div>
+
+                    {suggestion?.clarification_pack && (
+                        <div className="rounded-2xl border border-gold-primary/20 bg-gold-primary/5 p-4 space-y-4">
+                            <div className="space-y-1">
+                                <div className="flex items-center justify-between gap-3">
+                                    <Typography variant="label">{suggestion.clarification_pack.title}</Typography>
+                                    <span className="rounded-full border border-gold-primary/20 px-2.5 py-1 text-[10px] font-bold uppercase tracking-[0.16em] text-gold-primary">
+                                        {suggestion.status === 'document_type_mismatch' ? 'Đã chỉnh loại tài liệu' : 'Cần làm rõ'}
+                                    </span>
+                                </div>
+                                <p className="text-sm leading-6 text-paper-dark/80">
+                                    {suggestion.mismatch_reason || suggestion.clarification_pack.description}
+                                </p>
+                                {resolvedDocumentLabel && (
+                                    <p className="text-xs uppercase tracking-[0.16em] text-slate-muted">
+                                        Loại tài liệu đang xử lý: {resolvedDocumentLabel}
+                                    </p>
+                                )}
+                            </div>
+
+                            <div className="space-y-3">
+                                {intakeQuestions.map((question) => (
+                                    <div key={question.id} className="space-y-1.5">
+                                        <label className="text-sm font-medium text-paper-dark">
+                                            {question.label}
+                                            {question.required && <span className="ml-1 text-rose-300">*</span>}
+                                        </label>
+                                        <textarea
+                                            value={intakeAnswers[question.id] ?? ''}
+                                            onChange={(e) => setIntakeAnswer(question.id, e.target.value)}
+                                            placeholder={question.placeholder}
+                                            className="min-h-[88px] w-full rounded-xl border border-slate-border bg-navy-elevated px-4 py-3 text-sm text-paper-dark outline-none placeholder:text-slate-muted focus:border-gold-primary"
+                                        />
+                                        {question.help_text && (
+                                            <p className="text-xs text-slate-muted">{question.help_text}</p>
+                                        )}
+                                    </div>
+                                ))}
+                            </div>
+
+                            <Button variant="outline" size="sm" onClick={() => void handleSubmitClarification()} disabled={isGenerating}>
+                                {isGenerating ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                                Tạo bản nháp từ bộ trả lời này
+                            </Button>
+                        </div>
+                    )}
 
                     <div className="rounded-2xl border border-slate-border bg-navy-elevated/50 p-4 space-y-3">
                         <div className="flex items-center justify-between gap-3">
@@ -663,6 +759,24 @@ export function DraftEditor({ clauseMode = false }: DraftEditorProps) {
                                 <div>{suggestion.verification_summary.secondary_count} nguồn thứ cấp</div>
                                 <div>{suggestion.verification_summary.citation_count} citation</div>
                                 <div>{suggestion.verification_summary.unsupported_claim_count} claim cần kiểm tra</div>
+                            </div>
+                        )}
+                        {suggestion?.template_references && suggestion.template_references.length > 0 && (
+                            <div className="space-y-2">
+                                <Typography variant="label">Mẫu tham khảo đã thu thập</Typography>
+                                {suggestion.template_references.map((reference) => (
+                                    <a
+                                        key={reference.url}
+                                        href={reference.url}
+                                        target="_blank"
+                                        rel="noreferrer"
+                                        className="block rounded-lg border border-slate-border bg-navy-base/60 px-3 py-2 text-xs text-paper-dark hover:border-gold-muted"
+                                    >
+                                        <div className="font-semibold">{reference.title}</div>
+                                        <div className="text-slate-muted">{reference.source_domain}</div>
+                                        {reference.note && <div className="mt-1 text-slate-muted/90">{reference.note}</div>}
+                                    </a>
+                                ))}
                             </div>
                         )}
                         {suggestion?.claim_audit && suggestion.claim_audit.length > 0 && (
@@ -690,7 +804,7 @@ export function DraftEditor({ clauseMode = false }: DraftEditorProps) {
                                 ))}
                             </div>
                         )}
-                        <Button variant="outline" size="sm" onClick={handleApplySuggestion} disabled={!suggestion}>
+                        <Button variant="outline" size="sm" onClick={handleApplySuggestion} disabled={!suggestion || suggestion.status !== 'ok'}>
                             <Sparkles size={14} />
                             Áp dụng vào bản thảo
                         </Button>
