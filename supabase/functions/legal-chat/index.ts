@@ -28,6 +28,8 @@ import {
   retrieveChatMemory,
   retrieveLegalEvidence,
   setCachedLegalAnswer,
+  getSemanticCache,
+  setSemanticCache,
   storeChatMemory,
   storeEvidenceInMemory,
   jinaRerank,
@@ -155,7 +157,7 @@ export const handler = async (req: Request): Promise<Response> => {
     const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     const supabase = createClient(url, key)
 
-    // --- STEP 1: ANSWER CACHE CHECK (Fast Path) ---
+    // --- STEP 1: EXACT CACHE CHECK (Fast Path) ---
     const answerCacheKey = canUseCache
       ? buildCacheKey('cache:legal_answer:legal-chat', normalizedMessage, document_hash || 'global')
       : null
@@ -163,27 +165,27 @@ export const handler = async (req: Request): Promise<Response> => {
     if (answerCacheKey) {
       const cachedPayload = await getCachedLegalAnswer<any>(answerCacheKey)
       if (cachedPayload) {
-        // Fire & Forget: Update Memory in background
-        if (isStandaloneQuestion(message)) {
-          embedText(message, undefined, 768).then(msgEmbed => {
-            if (msgEmbed.length > 0) {
-              storeChatMemory(supabase, {
-                user_id: user.id,
-                role: 'user',
-                content: message,
-                embedding: msgEmbed,
-              }).catch(() => { })
-            }
-          }).catch(() => { })
-        }
         return jsonResponse({ reply: cachedPayload.answer, ...cachedPayload, cached: true }, 200)
+      }
+    }
+
+    // --- STEP 2: STANDALONE QUERY & SEMANTIC CACHE (Medium Path) ---
+    const standaloneQuery = await buildStandaloneQuery(history, message)
+    const queryEmbeddingForCache = await embedText(standaloneQuery || message, undefined, 768)
+
+    if (queryEmbeddingForCache.length > 0) {
+      const semanticCached = await getSemanticCache(supabase, queryEmbeddingForCache, 0.05)
+      if (semanticCached) {
+        return jsonResponse({
+          reply: semanticCached.reply || semanticCached.answer,
+          ...semanticCached,
+          semantic_cached: true
+        }, 200)
       }
     }
     // ---------------------------------
 
-    // --- STEP 2: ADVANCED PARALLEL RETRIEVAL (Tasks T001-T004) ---
-    // 2.0 Context Consolidation (T002)
-    const standaloneQuery = await buildStandaloneQuery(history, message)
+    // 2.1 HyDE: Hypothetical Document for better embeddings (T003/T004)
 
     // 2.1 HyDE: Hypothetical Document for better embeddings (T003/T004)
     const hydeDoc = await generateHypotheticalDocument(standaloneQuery)
@@ -212,8 +214,9 @@ export const handler = async (req: Request): Promise<Response> => {
       ? embedText(hydeDoc, undefined, 768).then(emb =>
         supabase.rpc('match_document_chunks', {
           query_embedding: emb,
-          match_threshold: 0.3,
-          match_count: 20
+          match_threshold: 0.2, // Lowered to get more candidates for reranking
+          match_count: 25,
+          p_query_text: standaloneQuery // HYBRID: Add keyword search
         }).then(({ data }) => data || [])
       ).catch(e => {
         console.warn('Local RAG failed:', e)
@@ -398,6 +401,15 @@ Quy tắc ứng xử:
     if (answerCacheKey && !payload.abstained) {
       await setCachedLegalAnswer(answerCacheKey, payload, 60 * 60)
     }
+
+    // --- NEW: STORE TO SEMANTIC CACHE ---
+    if (!payload.abstained && queryEmbeddingForCache.length > 0) {
+      await setSemanticCache(supabase, standaloneQuery || message, queryEmbeddingForCache, {
+        reply: payload.answer,
+        ...payload
+      })
+    }
+    // ------------------------------------
 
     return jsonResponse({ reply: payload.answer, ...payload }, 200)
   } catch (err) {

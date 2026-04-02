@@ -933,6 +933,53 @@ export async function retrieveChatMemory(
 }
 
 /**
+ * Checks the semantic cache for a similar previously answered query.
+ */
+export async function getSemanticCache(
+    supabase: any,
+    embedding: number[],
+    threshold = 0.1 // Distance threshold: smaller is stricter
+): Promise<any | null> {
+    const { data, error } = await supabase.rpc('find_semantic_match', {
+        p_embedding: embedding,
+        p_threshold: threshold
+    })
+
+    if (error) {
+        console.warn('Semantic cache match error:', error.message)
+        return null
+    }
+
+    if (data && data.length > 0) {
+        return data[0].result_json
+    }
+
+    return null
+}
+
+/**
+ * Persists an AI result to the semantic cache.
+ */
+export async function setSemanticCache(
+    supabase: any,
+    query: string,
+    embedding: number[],
+    result: any
+) {
+    const content_hash = simpleHash(normalizeLegalQuery(query))
+    const { error } = await supabase.from('semantic_cache').upsert({
+        content_hash,
+        content_text: query,
+        embedding,
+        result_json: result
+    }, { onConflict: 'content_hash' })
+
+    if (error) {
+        console.warn('Error setting semantic cache:', error.message)
+    }
+}
+
+/**
  * Stores a message or evidence entry in chat memory.
  * Includes Redis-based deduplication to prevent noisy duplicates.
  */

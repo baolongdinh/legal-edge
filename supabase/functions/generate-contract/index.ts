@@ -609,8 +609,9 @@ serve(async (req) => {
         // 2. Vector similarity search (top 20 law chunks for reranking phase)
         const { data: rawChunks, error } = await supabase.rpc('match_document_chunks', {
             query_embedding: queryEmbedding,
-            match_threshold: 0.65,
-            match_count: 20,
+            match_threshold: 0.3, // Lowered for more candidates
+            match_count: 25,
+            p_query_text: retrievalQuery // HYBRID: Add keyword matching
         })
         if (error) throw new Error(`Vector search: ${error.message}`)
 
