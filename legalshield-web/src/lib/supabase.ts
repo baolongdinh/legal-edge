@@ -218,13 +218,13 @@ export async function deleteFileAssets(body: {
     return callFunction<{ ok: boolean; deleted_contract: boolean; deleted_document: boolean }>('delete-file-assets', body)
 }
 
-// Export PDF
-export async function exportToPDF(htmlContent: string, contractId?: string) {
-    return callFunction<{ pdf_url: string; size_kb: number }>('export-pdf', {
-        html_content: htmlContent,
-        contract_id: contractId,
-    })
-}
+// Export PDF (DEPRECATED: Use client-side lib/export.ts instead)
+// export async function exportToPDF(htmlContent: string, contractId?: string) {
+//     return callFunction<{ pdf_url: string; size_kb: number }>('export-pdf', {
+//         html_content: htmlContent,
+//         contract_id: contractId,
+//     })
+// }
 
 // Create checkout session (Stripe)
 export async function createCheckoutSession(planId: string) {

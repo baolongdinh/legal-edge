@@ -44,6 +44,24 @@ serve(async (req) => {
         }
 
         // 3. Chunking & Embedding
+        if (text.length < 5000) {
+            await supabaseAdmin
+                .from('contracts')
+                .update({
+                    status: 'ready',
+                    analysis_summary: 'Optimized: Short document (direct context injection enabled)',
+                })
+                .eq('id', contract_id)
+
+            return jsonResponse({
+                job_id: contract_id,
+                status: 'completed',
+                processed_chunks: 0,
+                queued_chunks: 0,
+                failed_chunks: 0,
+            }, 200)
+        }
+
         const chunks = text
             .split(/\n\n+/)
             .map((chunk: string) => chunk.trim())

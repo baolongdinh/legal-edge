@@ -273,6 +273,7 @@ export function ChatAI() {
                 history: Message[]
                 context_summary?: string
                 context_excerpts?: string[]
+                document_context?: string
                 document_hash?: string
             } = {
                 message: userMsg,
@@ -282,6 +283,12 @@ export function ChatAI() {
                 payload.context_summary = documentContext.summary
                 payload.context_excerpts = selectRelevantExcerpts(documentContext.text, userMsg)
                 payload.document_hash = documentContext.hash
+
+                // --- Optimization: Short Document Context Injection ---
+                // If the document is small (< 5KB), we send the full text for maximum accuracy
+                if (documentContext.text.length < 5000) {
+                    payload.document_context = documentContext.text
+                }
             }
 
             const data = await invokeEdgeFunction<any>('legal-chat', {

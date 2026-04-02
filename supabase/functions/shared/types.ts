@@ -32,6 +32,8 @@ export interface RiskClause {
     clause_ref: string
     level: 'critical' | 'moderate' | 'note'
     description: string
+    risk_quote?: string
+    suggested_revision?: string
     citation: string
     citation_url?: string
     citation_text?: string

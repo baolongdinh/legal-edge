@@ -42,6 +42,22 @@ interface VerificationSummary {
     unsupported_claim_count: number
 }
 
+interface RiskClause {
+    clause_ref: string
+    level: 'critical' | 'moderate' | 'note'
+    description: string
+    risk_quote?: string
+    suggested_revision?: string
+    citation: string
+    citation_url?: string
+    source_title?: string
+    source_excerpt?: string
+    source_domain?: string
+    retrieved_at?: string
+    verification_status?: VerificationStatus
+    evidence?: any
+}
+
 interface ClaimAudit {
     claim: string
     supported: boolean
@@ -649,6 +665,35 @@ function RiskPanel() {
                                 </Typography>
                             </div>
                             <Typography variant="body" className="text-[14px] leading-relaxed text-paper-dark/80 group-hover:text-paper-dark transition-colors">{r.description}</Typography>
+                            {r.risk_quote && (
+                                <div className="mt-4 p-4 rounded-xl bg-navy-base/50 border-l-2 border-gold-primary/30 relative group/quote">
+                                    <div className="text-[10px] font-bold uppercase tracking-widest text-gold-muted/50 mb-2">Đoạn trích rủi ro</div>
+                                    <div className="text-sm italic text-paper-dark/70 font-serif leading-relaxed">
+                                        "{r.risk_quote}"
+                                    </div>
+                                </div>
+                            )}
+
+                            {r.suggested_revision && (
+                                <div className="mt-4 p-4 rounded-xl bg-emerald-500/5 border border-emerald-500/20 relative group/rev">
+                                    <div className="flex items-center justify-between mb-2">
+                                        <div className="text-[10px] font-bold uppercase tracking-widest text-emerald-400/70">Đề xuất chỉnh sửa</div>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                navigator.clipboard.writeText(r.suggested_revision || '')
+                                                toast.success('Đã sao chép đề xuất!')
+                                            }}
+                                            className="text-[10px] text-emerald-400 hover:text-emerald-300 transition-colors uppercase font-bold tracking-tighter"
+                                        >
+                                            Sao chép
+                                        </button>
+                                    </div>
+                                    <div className="text-sm text-emerald-100/90 leading-relaxed font-sans">
+                                        {r.suggested_revision}
+                                    </div>
+                                </div>
+                            )}
                             {r.citation && (
                                 <div className="mt-4 pt-4 border-t border-slate-border/20">
                                     <div className="flex items-center gap-2 text-[10px] text-gold-muted/60 font-bold uppercase tracking-widest italic group-hover:text-gold-primary transition-colors">
@@ -702,29 +747,31 @@ function RiskPanel() {
             </div>
 
             {/* Q&A Input Bar at Bottom */}
-            {(status === 'success' || risks.length > 0) && (
-                <div className="mt-4 pt-4 border-t border-slate-border/20">
-                    <form onSubmit={handleQA} className="relative group">
-                        <div className="absolute inset-0 bg-gold-primary/5 blur-xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity" />
-                        <input
-                            type="text"
-                            value={query}
-                            onChange={(e) => setQuery(e.target.value)}
-                            placeholder="Hỏi AI thêm về hợp đồng này..."
-                            className="w-full bg-navy-base/80 border border-slate-border/50 rounded-2xl py-4 pl-6 pr-14 text-sm focus:border-gold-primary/50 outline-none backdrop-blur-md transition-all placeholder:text-paper-dark/30 shadow-inner"
-                        />
-                        <button
-                            type="submit"
-                            disabled={isSearching || !query.trim()}
-                            aria-label="Gửi câu hỏi thêm"
-                            className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-gold-primary text-navy-base rounded-xl hover:scale-105 active:scale-95 transition-all disabled:opacity-20 shadow-gold"
-                        >
-                            {isSearching ? <Loader2 size={20} className="animate-spin" /> : <Search size={20} />}
-                        </button>
-                    </form>
-                </div>
-            )}
-        </motion.div>
+            {
+                (status === 'success' || risks.length > 0) && (
+                    <div className="mt-4 pt-4 border-t border-slate-border/20">
+                        <form onSubmit={handleQA} className="relative group">
+                            <div className="absolute inset-0 bg-gold-primary/5 blur-xl rounded-full opacity-0 group-focus-within:opacity-100 transition-opacity" />
+                            <input
+                                type="text"
+                                value={query}
+                                onChange={(e) => setQuery(e.target.value)}
+                                placeholder="Hỏi AI thêm về hợp đồng này..."
+                                className="w-full bg-navy-base/80 border border-slate-border/50 rounded-2xl py-4 pl-6 pr-14 text-sm focus:border-gold-primary/50 outline-none backdrop-blur-md transition-all placeholder:text-paper-dark/30 shadow-inner"
+                            />
+                            <button
+                                type="submit"
+                                disabled={isSearching || !query.trim()}
+                                aria-label="Gửi câu hỏi thêm"
+                                className="absolute right-2 top-1/2 -translate-y-1/2 p-2.5 bg-gold-primary text-navy-base rounded-xl hover:scale-105 active:scale-95 transition-all disabled:opacity-20 shadow-gold"
+                            >
+                                {isSearching ? <Loader2 size={20} className="animate-spin" /> : <Search size={20} />}
+                            </button>
+                        </form>
+                    </div>
+                )
+            }
+        </motion.div >
     )
 }
 
