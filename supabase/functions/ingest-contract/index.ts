@@ -62,11 +62,27 @@ serve(async (req) => {
             }, 200)
         }
 
-        const chunks = text
-            .split(/\n\n+/)
-            .map((chunk: string) => chunk.trim())
-            .filter((chunk: string) => chunk.length > 80)
-            .slice(0, 80)
+        // Semantic Chunking (Legal Boundaries)
+        const semanticRegex = /(?=\n\s*(?:Điều|Chương|Phần|Mục)\s+(?:\d+|[IVXLCDM]+)[\.\:\s])/gi
+        const rawChunks = text.split(semanticRegex)
+
+        const chunks: string[] = []
+        let currentChunk = ''
+
+        for (const raw of rawChunks) {
+            const stripped = raw.trim()
+            if (!stripped) continue
+
+            if (currentChunk.length + stripped.length > 1500 && currentChunk.length > 200) {
+                chunks.push(currentChunk.trim())
+                currentChunk = stripped
+            } else {
+                currentChunk += (currentChunk ? '\n\n' : '') + stripped
+            }
+        }
+        if (currentChunk.trim()) chunks.push(currentChunk.trim())
+
+        const finalChunks = chunks.filter(c => c.length > 80).slice(0, 80)
 
         await supabaseAdmin
             .from('contracts')
@@ -74,7 +90,7 @@ serve(async (req) => {
             .eq('id', contract_id)
 
         const concurrency = Number(Deno.env.get('INGEST_CONCURRENCY') ?? '3')
-        const results = await mapWithConcurrency(chunks, concurrency, async (chunk) => {
+        const results = await mapWithConcurrency(finalChunks, concurrency, async (chunk) => {
             try {
                 const embedding = await embedText(chunk, '', 512)
                 return {
@@ -90,7 +106,7 @@ serve(async (req) => {
         })
 
         const validResults = results.filter(r => r !== null)
-        const failedChunks = chunks.length - validResults.length
+        const failedChunks = finalChunks.length - validResults.length
 
         if (validResults.length > 0) {
             for (let i = 0; i < validResults.length; i += 20) {
@@ -105,13 +121,13 @@ serve(async (req) => {
             .from('contracts')
             .update({
                 status: 'pending_audit',
-                analysis_summary: `Indexed ${validResults.length}/${chunks.length} chunks`,
+                analysis_summary: `Indexed ${validResults.length}/${finalChunks.length} chunks (Semantic)`,
             })
             .eq('id', contract_id)
 
         logTelemetry('ingest-contract', 'completed', {
             contract_id,
-            queued_chunks: chunks.length,
+            queued_chunks: finalChunks.length,
             processed_chunks: validResults.length,
             failed_chunks: failedChunks,
             concurrency,
@@ -121,7 +137,7 @@ serve(async (req) => {
             job_id: contract_id,
             status: failedChunks > 0 ? 'completed_with_errors' : 'completed',
             processed_chunks: validResults.length,
-            queued_chunks: chunks.length,
+            queued_chunks: finalChunks.length,
             failed_chunks: failedChunks,
         }, 200)
 

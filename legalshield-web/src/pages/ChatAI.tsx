@@ -93,14 +93,42 @@ async function hashText(text: string) {
     return Array.from(new Uint8Array(buffer)).map((byte) => byte.toString(16).padStart(2, '0')).join('')
 }
 
-export function ChatAI() {
-    const [messages, setMessages] = useState<Message[]>([
-        {
-            id: 'initial',
-            role: 'assistant',
-            content: 'Xin chào! Tôi là Trợ lý Pháp lý AI của LegalShield. Tôi có thể giúp bạn giải đáp thắc mắc về hợp đồng, quy định pháp luật Việt Nam hoặc tư vấn soạn thảo. Bạn cần hỗ trợ gì hôm nay?'
+// --- Chat History Persistence (localStorage, TTL 1 day) ---
+const CHAT_STORAGE_KEY = 'legalshield_chat_history'
+const CHAT_TTL_MS = 24 * 60 * 60 * 1000 // 1 ngày
+
+const INITIAL_MESSAGE: Message = {
+    id: 'initial',
+    role: 'assistant',
+    content: 'Xin chào! Tôi là Trợ lý Pháp lý AI của LegalShield. Tôi có thể giúp bạn giải đáp thắc mắc về hợp đồng, quy định pháp luật Việt Nam hoặc tư vấn soạn thảo. Bạn cần hỗ trợ gì hôm nay?'
+}
+
+function loadMessages(): Message[] {
+    try {
+        const raw = localStorage.getItem(CHAT_STORAGE_KEY)
+        if (!raw) return [INITIAL_MESSAGE]
+        const { messages, savedAt } = JSON.parse(raw) as { messages: Message[]; savedAt: number }
+        if (Date.now() - savedAt > CHAT_TTL_MS) {
+            localStorage.removeItem(CHAT_STORAGE_KEY)
+            return [INITIAL_MESSAGE]
         }
-    ])
+        return messages.length > 0 ? messages : [INITIAL_MESSAGE]
+    } catch {
+        return [INITIAL_MESSAGE]
+    }
+}
+
+function saveMessages(messages: Message[]) {
+    try {
+        localStorage.setItem(CHAT_STORAGE_KEY, JSON.stringify({ messages, savedAt: Date.now() }))
+    } catch {
+        // ignore QuotaExceededError
+    }
+}
+// -----------------------------------------------------------
+
+export function ChatAI() {
+    const [messages, setMessages] = useState<Message[]>(() => loadMessages())
     const [input, setInput] = useState('')
     const [loading, setLoading] = useState(false)
     const [isParsing, setIsParsing] = useState(false)
@@ -115,6 +143,11 @@ export function ChatAI() {
             scrollRef.current.scrollTop = scrollRef.current.scrollHeight
         }
     }, [messages, loading])
+
+    // Auto-save chat history to localStorage on every change
+    useEffect(() => {
+        saveMessages(messages)
+    }, [messages])
 
     const parseDocumentViaServer = async (selected: File, accessToken: string) => {
         const formData = new FormData()
@@ -319,6 +352,7 @@ export function ChatAI() {
     }
 
     const clearChat = () => {
+        localStorage.removeItem(CHAT_STORAGE_KEY)
         setMessages([{
             id: 'reset',
             role: 'assistant',

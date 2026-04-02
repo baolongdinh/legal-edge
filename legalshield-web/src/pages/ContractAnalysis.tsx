@@ -42,21 +42,21 @@ interface VerificationSummary {
     unsupported_claim_count: number
 }
 
-interface RiskClause {
-    clause_ref: string
-    level: 'critical' | 'moderate' | 'note'
-    description: string
-    risk_quote?: string
-    suggested_revision?: string
-    citation: string
-    citation_url?: string
-    source_title?: string
-    source_excerpt?: string
-    source_domain?: string
-    retrieved_at?: string
-    verification_status?: VerificationStatus
-    evidence?: any
-}
+// interface RiskClause {
+//     clause_ref: string
+//     level: 'critical' | 'moderate' | 'note'
+//     description: string
+//     risk_quote?: string
+//     suggested_revision?: string
+//     citation: string
+//     citation_url?: string
+//     source_title?: string
+//     source_excerpt?: string
+//     source_domain?: string
+//     retrieved_at?: string
+//     verification_status?: VerificationStatus
+//     evidence?: any
+// }
 
 interface ClaimAudit {
     claim: string
