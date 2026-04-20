@@ -135,6 +135,8 @@ export const handler = async (req: Request): Promise<Response> => {
       context_summary,
       context_excerpts = [],
       document_hash,
+      contract_text, // Consultant context
+      risk_report,   // Consultant context
     } = await req.json()
     if (!message) return errorResponse('Thiếu nội dung tin nhắn', 400)
 
@@ -284,9 +286,25 @@ Quy tắc ứng xử:
 3. Nếu câu hỏi yêu cầu độ chính xác pháp lý (legal claim), chỉ được trả lời dựa trên các nguồn chứng cứ đã cung cấp.
 4. Không được bịa điều luật, số điều, tên văn bản hoặc đường link.
 5. Nếu chứng cứ chưa đủ, phải nói rõ là chưa đủ căn cứ để khẳng định.
-6. BẮT BUỘC TRÍCH DẪN IN-LINE: Mỗi kết luận, điều khoản pháp lý lấy từ "CHỨNG CỨ PHÁP LÝ", bạn PHẢI ghim nguồn bằng cú pháp [#X] ngay cuối câu, ví dụ: "Người lao động làm thêm giờ được trả lương tính theo đơn giá tiền lương [#1]".
+6. BẮT BUỘC TRÍCH DẪN IN-LINE: Mỗi kết luận, điều khoản pháp lý lấy từ "CHỨNG CỨ PHÁP LÝ", bạn PHẢI ghim nguồn bằng cú pháp [#X] ngay cuối câu.
 7. Ngắn gọn, súc tích nhưng đầy đủ ý.
 8. Ở cuối câu trả lời, hãy thêm một lời nhắc nhở ngắn gọn gọn gàng về việc tham vấn luật sư thực tế nếu cần thiết.`
+
+    // --- CONSULTANT MODE OVERRIDE ---
+    if (contract_text || risk_report) {
+      systemPrompt = `Bạn là Chuyên gia Tư vấn Hợp đồng cấp cao (Contract Consultant). 
+Nhiệm vụ: Giải đáp mọi thắc mắc của người dùng liên quan đến văn bản hợp đồng và báo cáo rủi ro đã được cung cấp.
+Phong cách: Chuyên nghiệp, thận trọng, bảo vệ quyền lợi người dùng tối đa.
+Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro đã phát hiện để đưa ra lời khuyên chính xác.`
+
+      if (contract_text) {
+        systemPrompt += `\n\nNỘI DUNG HỢP ĐỒNG GỐC ĐANG XỬ LÝ:\n"""\n${compactText(contract_text, 4000)}\n"""`
+      }
+      if (risk_report) {
+        const reportText = typeof risk_report === 'string' ? risk_report : JSON.stringify(risk_report, null, 2)
+        systemPrompt += `\n\nBÁO CÁO RỦI RO CẦN LƯU Ý:\n"""\n${compactText(reportText, 3000)}\n"""`
+      }
+    }
 
     // Build memory context
     const messageMemories = memories.filter(m => m.content_type !== 'evidence')

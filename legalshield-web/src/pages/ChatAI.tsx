@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import * as Comlink from 'comlink'
 import { Send, Bot, User, Loader2, Scale, Trash2, Paperclip, X, FileText, Info } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -128,15 +129,38 @@ function saveMessages(messages: Message[]) {
 // -----------------------------------------------------------
 
 export function ChatAI() {
+    const location = useLocation()
     const [messages, setMessages] = useState<Message[]>(() => loadMessages())
     const [input, setInput] = useState('')
     const [loading, setLoading] = useState(false)
     const [isParsing, setIsParsing] = useState(false)
     const [file, setFile] = useState<File | null>(null)
     const [documentContext, setDocumentContext] = useState<DocumentContextState | null>(null)
+    const [riskReport, setRiskReport] = useState<any>(null) // Consultant context
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false)
     const scrollRef = useRef<HTMLDivElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+
+    // --- Consultant Mode Initialization ---
+    useEffect(() => {
+        const state = location.state as any
+        if (state?.contractText || state?.riskReport) {
+            setRiskReport(state.riskReport || null)
+
+            if (state.contractText) {
+                setDocumentContext({
+                    text: state.contractText,
+                    summary: summarizeDocument(state.contractText),
+                    hash: state.documentHash || 'consultant-init'
+                })
+            }
+
+            if (state.initialMessage && messages.length <= 1) {
+                // Auto-trigger first message
+                handleSend(undefined, state.initialMessage)
+            }
+        }
+    }, [location.state])
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -259,11 +283,13 @@ export function ChatAI() {
         }
     }
 
-    const handleSend = async (e?: React.FormEvent) => {
+    const handleSend = async (e?: React.FormEvent, overrideInput?: string) => {
         if (e) e.preventDefault()
-        if ((!input.trim() && !file) || loading || isParsing) return
 
-        let userMsg = input.trim()
+        const finalInput = overrideInput || input
+        if ((!finalInput.trim() && !file) || loading || isParsing) return
+
+        let userMsg = finalInput.trim()
         if (!userMsg && file) {
             userMsg = `Hãy phân tích tài liệu "${file.name}" mà tôi vừa tải lên.`
         }
@@ -308,20 +334,19 @@ export function ChatAI() {
                 context_excerpts?: string[]
                 document_context?: string
                 document_hash?: string
+                contract_text?: string // New
+                risk_report?: any      // New
             } = {
                 message: userMsg,
-                history: optimizedHistory
+                history: optimizedHistory,
+                risk_report: riskReport // Include consultant context if present
             }
+
             if (documentContext) {
+                payload.contract_text = documentContext.text // Prioritize for consultant
                 payload.context_summary = documentContext.summary
                 payload.context_excerpts = selectRelevantExcerpts(documentContext.text, userMsg)
                 payload.document_hash = documentContext.hash
-
-                // --- Optimization: Short Document Context Injection ---
-                // If the document is small (< 5KB), we send the full text for maximum accuracy
-                if (documentContext.text.length < 5000) {
-                    payload.document_context = documentContext.text
-                }
             }
 
             const data = await invokeEdgeFunction<any>('legal-chat', {
@@ -334,12 +359,12 @@ export function ChatAI() {
             const assistantMessage: Message = {
                 id: (Date.now() + 1).toString(),
                 role: 'assistant',
-                content: data.reply || 'Xin lỗi, tôi gặp sự cố khi xử lý yêu cầu.',
-                citations: data.citations || [],
-                verification_status: data.verification_status,
-                verification_summary: data.verification_summary,
-                claim_audit: data.claim_audit || [],
-                abstained: data.abstained
+                content: data?.reply || 'Xin lỗi, tôi gặp sự cố khi xử lý yêu cầu.',
+                citations: data?.citations || [],
+                verification_status: data?.verification_status,
+                verification_summary: data?.verification_summary,
+                claim_audit: data?.claim_audit || [],
+                abstained: data?.abstained
             }
             setMessages(prev => [...prev, assistantMessage])
             clearFile()
@@ -350,6 +375,26 @@ export function ChatAI() {
             setLoading(false)
         }
     }
+
+    // --- Consultant Mode Initialization ---
+    useEffect(() => {
+        const state = location.state as any
+        if (state?.contractText || state?.riskReport) {
+            setRiskReport(state.riskReport || null)
+
+            if (state.contractText) {
+                setDocumentContext({
+                    text: state.contractText,
+                    summary: summarizeDocument(state.contractText),
+                    hash: state.documentHash || 'consultant-init'
+                })
+            }
+
+            if (state.initialMessage && messages.length <= 1) {
+                handleSend(undefined, state.initialMessage)
+            }
+        }
+    }, [location.state])
 
     const clearChat = () => {
         localStorage.removeItem(CHAT_STORAGE_KEY)

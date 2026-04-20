@@ -1,4 +1,5 @@
 import { useCallback, useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 import * as Comlink from 'comlink'
 import { Upload, FileText, Search, Send, Loader2, Zap, AlertTriangle, CheckCircle2, Info, ExternalLink, X, Bot, Shield } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -309,6 +310,7 @@ function UploadZone() {
 }
 
 function RiskPanel() {
+    const navigate = useNavigate()
     const { risks, isAnalyzing, setRisks, startAnalysis, currentDocumentId, isHashMatch } = useAnalysisStore()
     const { status, setError, extractedText } = useUploadStore()
 
@@ -348,13 +350,13 @@ function RiskPanel() {
 
     const [query, setQuery] = useState('')
     const [answer, setAnswer] = useState('')
-    const [answerCitations, setAnswerCitations] = useState<LegalCitation[]>([])
-    const [answerVerification, setAnswerVerification] = useState<VerificationStatus>('unverified')
-    const [answerSummary, setAnswerSummary] = useState<VerificationSummary | null>(null)
-    const [answerClaimAudit, setAnswerClaimAudit] = useState<ClaimAudit[]>([])
-    const [answerAbstained, setAnswerAbstained] = useState(false)
-    const [isSearching, setIsSearching] = useState(false)
-    const [sources, setSources] = useState<any[]>([])
+    const [answerCitations] = useState<LegalCitation[]>([])
+    const [answerVerification] = useState<VerificationStatus>('unverified')
+    const [answerSummary] = useState<VerificationSummary | null>(null)
+    const [answerClaimAudit] = useState<ClaimAudit[]>([])
+    const [answerAbstained] = useState(false)
+    const [isSearching] = useState(false)
+    const [sources] = useState<any[]>([])
     const [expandedRisk, setExpandedRisk] = useState<number | null>(null)
 
     const handleDeepAudit = async () => {
@@ -378,30 +380,15 @@ function RiskPanel() {
         if (e) e.preventDefault()
         if (!query.trim() || !currentDocumentId) return
 
-        setIsSearching(true)
-        setAnswer('')
-        setAnswerCitations([])
-        setAnswerSummary(null)
-        setAnswerVerification('unverified')
-        setAnswerClaimAudit([])
-        setAnswerAbstained(false)
-        try {
-            const data = await invokeEdgeFunction<any>('contract-qa', {
-                body: { contract_id: currentDocumentId, query }
-            })
-            setAnswer(data.answer)
-            setAnswerCitations(data.citations || [])
-            setAnswerSummary(data.verification_summary || null)
-            setAnswerVerification(data.verification_status || 'unverified')
-            setAnswerClaimAudit(data.claim_audit || [])
-            setAnswerAbstained(Boolean(data.abstained))
-            setSources(data.sources || [])
-        } catch (err) {
-            console.error(err)
-            toast.error('AI không thể trả lời câu hỏi này. Thử hỏi cách khác.')
-        } finally {
-            setIsSearching(false)
-        }
+        // Route to AI Chat with Consultant Mode context
+        navigate('/chat', {
+            state: {
+                initialMessage: query,
+                contractText: extractedText,
+                riskReport: risks,
+                documentHash: currentDocumentId
+            }
+        })
     }
 
     if (status === 'idle' || status === 'uploading' || status === 'parsing' || status === 'error' || !currentDocumentId) {

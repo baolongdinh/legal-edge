@@ -514,7 +514,7 @@ export async function fetchWithRetry(
         timeoutMs?: number
     }
 ): Promise<Response> {
-    const { listEnvVar, fallbackEnvVar, maxRetries = 4, backoffBase = 50, timeoutMs = 15_000 } = config
+    const { listEnvVar, fallbackEnvVar, maxRetries = 5, backoffBase = 100, timeoutMs = 30_000 } = config
     let lastError: Error | null = null
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -545,26 +545,45 @@ export async function fetchWithRetry(
             const controller = new AbortController()
             const timeout = setTimeout(() => controller.abort(`Timeout after ${timeoutMs}ms`), timeoutMs)
             finalOptions.signal = controller.signal
+
             const response = await fetch(finalUrl, finalOptions)
             clearTimeout(timeout)
 
-            // Success or Client Error (except 429) -> Return
+            // Success or Client Error (except 429/401/403 which might be key-related) -> Return
             if (response.ok) return response
-            if (response.status !== 429 && response.status < 500) return response
+
+            // If it's a 401 or 403, and we have multiple keys, maybe the key is dead? Retry with next.
+            if (response.status !== 429 && response.status !== 401 && response.status !== 403 && response.status < 500) {
+                return response
+            }
+
+            // Support Retry-After header
+            const retryAfter = response.headers.get('Retry-After')
+            const retryAfterMs = retryAfter ? (parseInt(retryAfter, 10) * 1000) : 0
 
             const errorText = await response.text()
-            console.warn(`[Retry ${attempt}/${maxRetries}] ${listEnvVar} failed (${response.status}): ${errorText.slice(0, 100)}...`)
+            console.warn(`[Retry ${attempt}/${maxRetries}] ${listEnvVar} failed (${response.status}). Key ending: ...${currentKey.slice(-5)}. Error: ${errorText.slice(0, 150)}...`)
             lastError = new Error(`${listEnvVar} error ${response.status}: ${errorText}`)
 
-        } catch (e) {
-            console.warn(`[Retry ${attempt}/${maxRetries}] Network/Logic error:`, (e as Error).message)
-            lastError = e as Error
-        }
+            if (attempt < maxRetries) {
+                const jitter = Math.random() * 200
+                const backoffDelay = (backoffBase * Math.pow(2, attempt)) + jitter
+                const finalDelay = Math.max(backoffDelay, retryAfterMs)
+                console.log(`[Retry ${attempt}/${maxRetries}] Waiting ${Math.round(finalDelay)}ms before next attempt...`)
+                await new Promise(resolve => setTimeout(resolve, finalDelay))
+                continue
+            }
 
-        // Wait before retry
-        if (attempt < maxRetries) {
-            const delay = backoffBase * Math.pow(2, attempt)
-            await new Promise(resolve => setTimeout(resolve, delay))
+        } catch (e) {
+            const errorMsg = (e as Error).message || String(e)
+            console.warn(`[Retry ${attempt}/${maxRetries}] Network error for ${listEnvVar}:`, errorMsg)
+            lastError = e as Error
+
+            if (attempt < maxRetries) {
+                const delay = backoffBase * Math.pow(2, attempt)
+                await new Promise(resolve => setTimeout(resolve, delay))
+                continue
+            }
         }
     }
 
@@ -588,9 +607,8 @@ export function roundRobinKey(listEnvVar: string, fallbackEnvVar: string): strin
         return single
     }
 
-    const idx = (_counters[listEnvVar] ?? 0) % keys.length
-    _counters[listEnvVar] = idx + 1
-
+    // Use a random index for better distribution across stateless Edge instances
+    const idx = Math.floor(Math.random() * keys.length)
     return keys[idx]
 }
 

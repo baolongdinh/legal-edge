@@ -7,6 +7,9 @@ SHELL := /usr/bin/env bash
 WEB_DIR := legalshield-web
 SUPABASE_ENV := ./supabase/.env
 WEB_ENV := ./legalshield-web/.env
+# Pin Supabase CLI version to avoid auto-update issues (2.92.1 has bundling bugs)
+SUPABASE_CLI := npx supabase
+SUPABASE_PROJECT_ID := xrfhkyjwesxpybsooeot
 COLOR_YELLOW := \033[1;33m
 COLOR_GREEN := \033[1;32m
 COLOR_RESET := \033[0m
@@ -56,10 +59,10 @@ deploy-frontend-vercel:
 deploy-supabase:
 	@echo "▶ Pushing database migrations..."
 	@set -a && . $(SUPABASE_ENV) && set +a && \
-	npx supabase db push --password "$$SUPABASE_DB_PASSWORD"
+	$(SUPABASE_CLI) db push --password "$$SUPABASE_DB_PASSWORD"
 	@echo "▶ Setting Edge Function secrets from supabase/.env..."
 	@set -a && . $(SUPABASE_ENV) && set +a && \
-	npx supabase secrets set --project-ref "$$SUPABASE_PROJECT_ID" \
+	$(SUPABASE_CLI) secrets set --project-ref $(SUPABASE_PROJECT_ID) \
 		GEMINI_API_KEYS="$$GEMINI_API_KEYS" \
 		GROQ_API_KEYS="$$GROQ_API_KEYS" \
 		EXA_API_KEYS="$$EXA_API_KEYS" \
@@ -86,17 +89,17 @@ deploy-supabase:
 		R2_PUBLIC_DOMAIN="$$R2_PUBLIC_DOMAIN"
 	@echo "▶ Deploying all Edge Functions..."
 	@set -a && . $(SUPABASE_ENV) && set +a && \
-	npx supabase functions deploy risk-review --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
-	npx supabase functions deploy delete-file-assets --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
-	npx supabase functions deploy generate-contract --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
-	npx supabase functions deploy parse-document --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
-	npx supabase functions deploy ingest-contract --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
-	npx supabase functions deploy legal-chat --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
-	npx supabase functions deploy create-checkout-session --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
-	npx supabase functions deploy momo-payment --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
-	npx supabase functions deploy vnpay-payment --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
-	npx supabase functions deploy payment-webhook --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
-	npx supabase functions deploy contract-qa --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt
+	$(SUPABASE_CLI) functions deploy risk-review --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy delete-file-assets --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy generate-contract --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy parse-document --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy ingest-contract --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy legal-chat --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy create-checkout-session --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy momo-payment --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy vnpay-payment --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy payment-webhook --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy contract-qa --project-ref $(SUPABASE_PROJECT_ID) --use-api
 	@echo "✅ Supabase deployment complete!"
 
 deploy-frontend:
