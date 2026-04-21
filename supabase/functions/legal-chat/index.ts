@@ -167,7 +167,25 @@ export const handler = async (req: Request): Promise<Response> => {
     if (answerCacheKey) {
       const cachedPayload = await getCachedLegalAnswer<any>(answerCacheKey)
       if (cachedPayload) {
-        return jsonResponse({ reply: cachedPayload.answer, ...cachedPayload, cached: true }, 200)
+        // Log cache hit for debugging
+        console.log('[legal-chat] Cache hit:', { 
+          key: answerCacheKey, 
+          answer: cachedPayload.answer?.substring(0, 100),
+          abstained: cachedPayload.abstained,
+          citations: cachedPayload.citations?.length
+        })
+        
+        // Filter out failed responses from cache
+        const isFailedResponse = 
+          cachedPayload.abstained ||
+          cachedPayload.answer?.includes('Xin lỗi, tôi không thể tìm thấy câu trả lời phù hợp') ||
+          (cachedPayload.citations?.length === 0 && cachedPayload.verification_status === 'unverified' && cachedPayload.evidence?.length === 0)
+        
+        if (isFailedResponse) {
+          console.log('[legal-chat] Skipping failed cached response, reprocessing...')
+        } else {
+          return jsonResponse({ reply: cachedPayload.answer, ...cachedPayload, cached: true }, 200)
+        }
       }
     }
 
@@ -176,13 +194,25 @@ export const handler = async (req: Request): Promise<Response> => {
     const queryEmbeddingForCache = await embedText(standaloneQuery || message, undefined, 768)
 
     if (queryEmbeddingForCache.length > 0) {
-      const semanticCached = await getSemanticCache(supabase, queryEmbeddingForCache, 0.05)
-      if (semanticCached) {
-        return jsonResponse({
-          reply: semanticCached.reply || semanticCached.answer,
-          ...semanticCached,
-          semantic_cached: true
-        }, 200)
+      try {
+        const semanticCached = await getSemanticCache(supabase, queryEmbeddingForCache, 0.05)
+        if (semanticCached) {
+          // Filter out failed responses from semantic cache
+          const isFailedResponse = 
+            semanticCached.abstained ||
+            semanticCached.answer?.includes('Xin lỗi, tôi không thể tìm thấy câu trả lời phù hợp') ||
+            (semanticCached.citations?.length === 0 && semanticCached.verification_status === 'unverified' && semanticCached.evidence?.length === 0)
+          
+          if (!isFailedResponse) {
+            return jsonResponse({
+              reply: semanticCached.reply || semanticCached.answer,
+              ...semanticCached,
+              semantic_cached: true
+            }, 200)
+          }
+        }
+      } catch (e) {
+        console.warn('Semantic cache check failed, continuing without cache:', (e as Error).message)
       }
     }
     // ---------------------------------
@@ -201,9 +231,13 @@ export const handler = async (req: Request): Promise<Response> => {
     const fetchMemoryPromise = embedText(standaloneQuery, undefined, 768)
       .then(async (embedding) => {
         messageEmbedding = embedding
-        memories = await retrieveChatMemory(supabase, messageEmbedding, user.id, standaloneQuery)
+        // Fix function overloading by explicitly passing all parameters
+        memories = await retrieveChatMemory(supabase, messageEmbedding, user.id, standaloneQuery, undefined, 0.4, 15)
       })
-      .catch(e => console.warn('Memory retrieval failed:', (e as Error).message))
+      .catch(e => {
+        console.warn('Memory retrieval failed:', (e as Error).message)
+        memories = []
+      })
 
     const fetchExaPromise = needsCitation
       ? retrieveLegalEvidence(standaloneQuery, 10).catch(e => {
@@ -262,8 +296,20 @@ export const handler = async (req: Request): Promise<Response> => {
           .map(r => candidates[r.index])
           .filter(Boolean)
       } catch (err) {
-        console.warn('Jina rerank in chat failed:', err)
-        combinedEvidence = candidates.slice(0, 5)
+        console.warn('Jina rerank in chat failed, using fallback scoring:', err)
+        // Fallback: Simple keyword matching when JINA fails
+        const queryKeywords = standaloneQuery.toLowerCase().split(/\s+/).filter(w => w.length > 2)
+        
+        combinedEvidence = candidates
+          .map(candidate => {
+            const text = `${candidate.title} ${candidate.content}`.toLowerCase()
+            const keywordMatches = queryKeywords.filter(kw => text.includes(kw)).length
+            const score = keywordMatches / Math.max(queryKeywords.length, 1)
+            return { ...candidate, score }
+          })
+          .sort((a, b) => b.score - a.score)
+          .slice(0, 8)
+          .filter(c => c.score > 0.1) // Minimum threshold for fallback
       }
     }
 
@@ -417,15 +463,38 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
       },
     })
     if (answerCacheKey && !payload.abstained) {
-      await setCachedLegalAnswer(answerCacheKey, payload, 60 * 60)
+      // Don't cache failed responses
+      const isFailedResponse = 
+        payload.answer?.includes('Xin lỗi, tôi không thể tìm thấy câu trả lời phù hợp') ||
+        (payload.citations?.length === 0 && payload.verification_status === 'unverified' && payload.evidence?.length === 0)
+      
+      if (!isFailedResponse) {
+        await setCachedLegalAnswer(answerCacheKey, payload, 60 * 60)
+        console.log('[legal-chat] Cached successful response:', { key: answerCacheKey })
+      } else {
+        console.log('[legal-chat] Not caching failed response')
+      }
     }
 
     // --- NEW: STORE TO SEMANTIC CACHE ---
     if (!payload.abstained && queryEmbeddingForCache.length > 0) {
-      await setSemanticCache(supabase, standaloneQuery || message, queryEmbeddingForCache, {
-        reply: payload.answer,
-        ...payload
-      })
+      try {
+        const isFailedResponse = 
+          payload.answer?.includes('Xin lỗi, tôi không thể tìm thấy câu trả lời phù hợp') ||
+          (payload.citations?.length === 0 && payload.verification_status === 'unverified' && payload.evidence?.length === 0)
+        
+        if (!isFailedResponse) {
+          await setSemanticCache(supabase, standaloneQuery || message, queryEmbeddingForCache, {
+            reply: payload.answer,
+            ...payload
+          })
+          console.log('[legal-chat] Cached in semantic cache')
+        } else {
+          console.log('[legal-chat] Not caching failed response in semantic cache')
+        }
+      } catch (e) {
+        console.warn('Failed to set semantic cache, continuing:', (e as Error).message)
+      }
     }
     // ------------------------------------
 
