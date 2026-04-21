@@ -99,7 +99,13 @@ deploy-supabase:
 	$(SUPABASE_CLI) functions deploy momo-payment --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
 	$(SUPABASE_CLI) functions deploy vnpay-payment --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
 	$(SUPABASE_CLI) functions deploy payment-webhook --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
-	$(SUPABASE_CLI) functions deploy contract-qa --project-ref $(SUPABASE_PROJECT_ID) --use-api
+	$(SUPABASE_CLI) functions deploy contract-qa --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy get-conversations --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy get-messages --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy save-conversation --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy save-message --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy generate-suggestions --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy summarize-conversation --project-ref $(SUPABASE_PROJECT_ID) --use-api
 	@echo "✅ Supabase deployment complete!"
 
 deploy-frontend:

@@ -663,23 +663,29 @@ export function DraftEditor() {
                         <div className="flex-1 min-w-0">
                             <div className="bg-paper-light text-navy-base rounded-2xl shadow-[0_24px_80px_rgba(0,0,0,0.32)] border border-black/5 overflow-hidden">
                                 {/* Doc header */}
-                                <div className="px-10 pt-10 pb-6 border-b border-slate-200/60">
+                                <div className="px-12 pt-16 pb-12 border-b-2 border-slate-200/40 text-center space-y-4">
                                     <input
                                         value={draftTitle}
                                         onChange={(e) => {
                                             setDraftTitle(e.target.value)
                                             setSaveState('unsaved')
                                         }}
-                                        className="w-full text-center text-2xl font-serif font-bold text-navy-base uppercase tracking-wider bg-transparent outline-none border-b-2 border-transparent focus:border-gold-primary/40 pb-1 transition-colors"
+                                        className="w-full text-center text-3xl font-serif font-bold text-navy-base uppercase tracking-widest bg-transparent outline-none border-b border-transparent focus:border-gold-primary/30 pb-2 transition-all"
                                         placeholder="TÊN HỢP ĐỒNG"
                                     />
-                                    <p className="text-center text-xs text-slate-500 mt-2">
-                                        Soạn thảo bởi AI pháp lý LegalShield • Căn cứ pháp luật Việt Nam
-                                    </p>
+                                    <div className="flex flex-col items-center gap-1.5">
+                                        <p className="text-[11px] uppercase tracking-[0.2em] font-semibold text-paper-dark/50">
+                                            Pháp chế AI & Nghiên cứu pháp lý số
+                                        </p>
+                                        <div className="h-px w-24 bg-gold-primary/30" />
+                                        <p className="text-xs italic font-serif text-slate-500">
+                                            Soạn thảo bởi LegalShield AI • Căn cứ hệ thống pháp luật Việt Nam hiện hành
+                                        </p>
+                                    </div>
                                 </div>
 
                                 {/* Doc body */}
-                                <div className="px-10 py-8">
+                                <div className="px-16 py-12">
                                     <textarea
                                         ref={textareaRef}
                                         value={activeDraft}
@@ -689,7 +695,8 @@ export function DraftEditor() {
                                         }}
                                         spellCheck={false}
                                         rows={40}
-                                        className="w-full bg-transparent resize-none outline-none text-navy-base font-sans text-[14.5px] leading-8"
+                                        className="w-full bg-transparent resize-none outline-none text-navy-base font-serif text-lg leading-[1.8] placeholder:text-navy-base/20 transition-all custom-scrollbar"
+                                        placeholder="Bắt đầu soạn thảo nội dung hợp đồng tại đây..."
                                     />
                                 </div>
                             </div>

@@ -9,7 +9,8 @@
     box-sizing: border-box;
   }
 
-  html, body {
+  html,
+  body {
     height: 100%;
     margin: 0;
     padding: 0;
@@ -23,12 +24,15 @@
     -moz-osx-font-smoothing: grayscale;
   }
 
-  h1, h2, h3 {
+  h1,
+  h2,
+  h3 {
     font-family: 'Playfair Display', Georgia, serif;
   }
 }
 
 @layer components {
+
   /* Gold divider line */
   .gold-divider {
     @apply w-16 h-px bg-gold-primary;
@@ -36,15 +40,15 @@
 
   /* Subtle background grid texture */
   .bg-grid {
-    background-image: 
-      linear-gradient(rgba(201,168,76,0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(201,168,76,0.04) 1px, transparent 1px);
+    background-image:
+      linear-gradient(rgba(201, 168, 76, 0.04) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(201, 168, 76, 0.04) 1px, transparent 1px);
     background-size: 32px 32px;
   }
 
   /* Card border glow on hover */
   .card-hover {
-    @apply transition-all duration-300 border border-slate-border hover:border-gold-muted hover:shadow-[0_0_24px_rgba(201,168,76,0.12)];
+    @apply transition-all duration-300 border border-slate-border hover:border-gold-muted hover:shadow-[0_0_24px_rgba(201, 168, 76, 0.12)];
   }
 }
 

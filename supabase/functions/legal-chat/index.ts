@@ -122,6 +122,148 @@ Yêu cầu:
   }
 }
 
+/**
+ * Task: Auto-generate a descriptive title for new conversations.
+ */
+async function autoGenerateConversationTitle(
+  supabase: any,
+  conversationId: string,
+  userMessage: string,
+  assistantResponse: string,
+  geminiApiKey: string
+): Promise<void> {
+  try {
+    // 0. Skip if both are too short to be meaningful
+    if (userMessage.length < 5 && assistantResponse.length < 20) return;
+
+    // 1. Check if the conversation actually needs a title
+    const { data: conv, error: fetchError } = await supabase
+      .from('conversations')
+      .select('title, user_id')
+      .eq('id', conversationId)
+      .single();
+
+    if (fetchError || !conv) return;
+
+    // Only generate if it's the default title
+    if (conv.title !== 'Cuộc trò chuyện mới' && conv.title !== 'Mới') return;
+
+    const prompt = `Bạn là chuyên gia đặt tiêu đề. Hãy tóm tắt cuộc trò chuyện pháp lý sau đây thành một tiêu đề ngắn gọn, súc tích (3-5 từ).
+Nội dung người dùng: "${userMessage}"
+Nội dung trợ lý: "${assistantResponse.slice(0, 500)}..."
+Yêu cầu: 
+- Ngôn ngữ: Tiếng Việt.
+- Không sử dụng dấu ngoặc kép.
+- Trả về DUY NHẤT tiêu đề.
+Tiêu đề:`;
+
+    const response = await fetchWithRetry(
+      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ role: 'user', parts: [{ text: prompt }] }],
+          generationConfig: { maxOutputTokens: 50, temperature: 0.3 }
+        })
+      },
+      { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
+    );
+
+    if (!response.ok) return;
+
+    const data = await response.json();
+    const title = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+
+    if (title && title.length > 2) {
+      await supabase
+        .from('conversations')
+        .update({ title, updated_at: new Date().toISOString() })
+        .eq('id', conversationId);
+
+      console.log(`[Auto-Title] Updated conversation ${conversationId} to: "${title}"`);
+    }
+
+  } catch (err) {
+    console.warn('[Auto-Title] Failed:', (err as Error).message);
+  }
+}
+/**
+ * Task T004: Helper for streaming Gemini response.
+ */
+async function* streamGemini(contents: any[], apiKey: string, model = 'gemini-2.5-flash-lite'): AsyncGenerator<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents,
+      generationConfig: {
+        maxOutputTokens: 2500,
+        temperature: 0.7,
+      }
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`Gemini streaming error: ${await response.text()}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) return;
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+
+      let startIndex = -1;
+      let braceCount = 0;
+
+      for (let i = 0; i < buffer.length; i++) {
+        if (buffer[i] === '{') {
+          if (braceCount === 0) startIndex = i;
+          braceCount++;
+        } else if (buffer[i] === '}') {
+          braceCount--;
+          if (braceCount === 0 && startIndex !== -1) {
+            const jsonStr = buffer.substring(startIndex, i + 1);
+            try {
+              const data: any = JSON.parse(jsonStr);
+              const text = data.candidates?.[0]?.content?.parts?.[0]?.text;
+              if (text) yield text;
+            } catch (e) {
+              // Fragment
+            }
+            startIndex = -1;
+          }
+        }
+      }
+
+      if (startIndex !== -1) {
+        buffer = buffer.substring(startIndex);
+      } else {
+        buffer = '';
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
+interface StreamChunk {
+  type: 'chunk' | 'suggestions' | 'done' | 'error' | 'evidence' | 'status';
+  content?: string;
+  payload?: any;
+  error?: string;
+}
+
 export const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
 
@@ -130,6 +272,7 @@ export const handler = async (req: Request): Promise<Response> => {
 
     const {
       message,
+      conversation_id,
       history = [],
       document_context,
       context_summary,
@@ -168,19 +311,19 @@ export const handler = async (req: Request): Promise<Response> => {
       const cachedPayload = await getCachedLegalAnswer<any>(answerCacheKey)
       if (cachedPayload) {
         // Log cache hit for debugging
-        console.log('[legal-chat] Cache hit:', { 
-          key: answerCacheKey, 
+        console.log('[legal-chat] Cache hit:', {
+          key: answerCacheKey,
           answer: cachedPayload.answer?.substring(0, 100),
           abstained: cachedPayload.abstained,
           citations: cachedPayload.citations?.length
         })
-        
+
         // Filter out failed responses from cache
-        const isFailedResponse = 
+        const isFailedResponse =
           cachedPayload.abstained ||
           cachedPayload.answer?.includes('Xin lỗi, tôi không thể tìm thấy câu trả lời phù hợp') ||
           (cachedPayload.citations?.length === 0 && cachedPayload.verification_status === 'unverified' && cachedPayload.evidence?.length === 0)
-        
+
         if (isFailedResponse) {
           console.log('[legal-chat] Skipping failed cached response, reprocessing...')
         } else {
@@ -198,11 +341,11 @@ export const handler = async (req: Request): Promise<Response> => {
         const semanticCached = await getSemanticCache(supabase, queryEmbeddingForCache, 0.05)
         if (semanticCached) {
           // Filter out failed responses from semantic cache
-          const isFailedResponse = 
+          const isFailedResponse =
             semanticCached.abstained ||
             semanticCached.answer?.includes('Xin lỗi, tôi không thể tìm thấy câu trả lời phù hợp') ||
             (semanticCached.citations?.length === 0 && semanticCached.verification_status === 'unverified' && semanticCached.evidence?.length === 0)
-          
+
           if (!isFailedResponse) {
             return jsonResponse({
               reply: semanticCached.reply || semanticCached.answer,
@@ -299,7 +442,7 @@ export const handler = async (req: Request): Promise<Response> => {
         console.warn('Jina rerank in chat failed, using fallback scoring:', err)
         // Fallback: Simple keyword matching when JINA fails
         const queryKeywords = standaloneQuery.toLowerCase().split(/\s+/).filter(w => w.length > 2)
-        
+
         combinedEvidence = candidates
           .map(candidate => {
             const text = `${candidate.title} ${candidate.content}`.toLowerCase()
@@ -393,119 +536,128 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
     })
     // ---------------------------
 
-    // --- STEP 5: GEMINI CALL ---
-    const response = await fetchWithRetry(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ contents })
-      },
-      { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
-    )
+    // --- STREAMING SETUP ---
+    const encoder = new TextEncoder();
+    const send = (controller: ReadableStreamDefaultController, chunk: StreamChunk) => {
+      controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+    };
 
-    if (!response.ok) {
-      throw new Error(`Gemini API error: ${await response.text()}`)
-    }
+    // --- CASE 1: CACHE HIT (Streamed for consistency) ---
+    if (answerCacheKey) {
+      const cachedPayload = await getCachedLegalAnswer<any>(answerCacheKey)
+      if (cachedPayload) {
+        const isFailedResponse =
+          cachedPayload.abstained ||
+          cachedPayload.answer?.includes('Xin lỗi, tôi không thể tìm thấy câu trả lời phù hợp') ||
+          (cachedPayload.citations?.length === 0 && cachedPayload.verification_status === 'unverified' && cachedPayload.evidence?.length === 0)
 
-    const data = await response.json()
-    const rawReply = data.candidates?.[0]?.content?.parts?.[0]?.text || 'Xin lỗi, tôi không thể tìm thấy câu trả lời phù hợp.'
-    const payload = buildLegalAnswerPayload(rawReply, combinedEvidence, needsCitation)
-    // ---------------------------
-
-    // --- STEP 6: STORE TO MEMORY (fire-and-forget, compact) ---
-    if (messageEmbedding.length > 0) {
-      // User message: full text
-      storeChatMemory(supabase, {
-        user_id: user.id,
-        role: 'user',
-        content: message,
-        embedding: messageEmbedding,
-      }).catch(e => console.warn('Memory user store failed:', (e as Error).message))
-
-      // AI reply: store compact version (first 400 chars + cited URLs)
-      const citedUrls = payload.citations.map(c => c.citation_url).filter(Boolean).join(' ')
-      const compactReply = rawReply.slice(0, 400) + (citedUrls ? `\n[Nguồn: ${citedUrls}]` : '')
-
-      embedText(compactReply, undefined, 768).then(replyEmbedding =>
-        storeChatMemory(supabase, {
-          user_id: user.id,
-          role: 'assistant',
-          content: compactReply,
-          embedding: replyEmbedding,
-        })
-      ).catch(e => console.warn('Memory reply store failed:', (e as Error).message))
-    }
-    // ----------------------------------------------------------
-
-    logTelemetry('legal-chat', 'completed', {
-      has_document_context: Boolean(compactDocumentContext),
-      document_context_chars: compactDocumentContext?.length ?? 0,
-      prompt_chars: compactText(systemPrompt, 8000).length,
-      cacheable: Boolean(answerCacheKey),
-      evidence_count: combinedEvidence.length,
-      evidence_from_memory: combinedEvidence.length > 0 && memories.some(m => m.content_type === 'evidence'),
-      has_memory: memories.length > 0,
-      has_memory_evidence: evidenceMemories.length > 0,
-    })
-    await persistAnswerAudit({
-      functionName: 'legal-chat',
-      userId: user.id,
-      question: message,
-      payload,
-      metadata: {
-        has_document_context: Boolean(compactDocumentContext),
-        document_hash: document_hash ?? null,
-        history_count: history.length,
-        standalone_query: standaloneQuery,
-        memory_recall: Boolean(memoryContext),
-        exa_skipped: combinedEvidence.length > 0 && !needsCitation,
-      },
-    })
-    if (answerCacheKey && !payload.abstained) {
-      // Don't cache failed responses
-      const isFailedResponse = 
-        payload.answer?.includes('Xin lỗi, tôi không thể tìm thấy câu trả lời phù hợp') ||
-        (payload.citations?.length === 0 && payload.verification_status === 'unverified' && payload.evidence?.length === 0)
-      
-      if (!isFailedResponse) {
-        await setCachedLegalAnswer(answerCacheKey, payload, 60 * 60)
-        console.log('[legal-chat] Cached successful response:', { key: answerCacheKey })
-      } else {
-        console.log('[legal-chat] Not caching failed response')
-      }
-    }
-
-    // --- NEW: STORE TO SEMANTIC CACHE ---
-    if (!payload.abstained && queryEmbeddingForCache.length > 0) {
-      try {
-        const isFailedResponse = 
-          payload.answer?.includes('Xin lỗi, tôi không thể tìm thấy câu trả lời phù hợp') ||
-          (payload.citations?.length === 0 && payload.verification_status === 'unverified' && payload.evidence?.length === 0)
-        
         if (!isFailedResponse) {
-          await setSemanticCache(supabase, standaloneQuery || message, queryEmbeddingForCache, {
-            reply: payload.answer,
-            ...payload
-          })
-          console.log('[legal-chat] Cached in semantic cache')
-        } else {
-          console.log('[legal-chat] Not caching failed response in semantic cache')
+          return new Response(new ReadableStream({
+            start(controller) {
+              if (cachedPayload.evidence) send(controller, { type: 'evidence', payload: cachedPayload.evidence });
+              send(controller, { type: 'chunk', content: cachedPayload.answer });
+              send(controller, { type: 'done', payload: cachedPayload });
+              controller.close();
+            }
+          }), { headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' } });
         }
-      } catch (e) {
-        console.warn('Failed to set semantic cache, continuing:', (e as Error).message)
       }
     }
-    // ------------------------------------
 
-    return jsonResponse({ reply: payload.answer, ...payload }, 200)
+    // --- CASE 2: ABSTAIN (Streamed) ---
+    if (needsCitation && combinedEvidence.length === 0 && !hasRecentLegalEvidence(memories)) {
+      const abstain = buildAbstainPayload(
+        'Tôi chưa tìm thấy căn cứ pháp lý nào đủ tin cậy trong kho dữ liệu hoặc internet để giải đáp chính xác câu hỏi này. Vui lòng cung cấp thêm thông tin về văn bản luật cụ thể.',
+        true,
+      )
+      return new Response(new ReadableStream({
+        start(controller) {
+          send(controller, { type: 'chunk', content: abstain.answer });
+          send(controller, { type: 'done', payload: abstain });
+          controller.close();
+        }
+      }), { headers: { ...corsHeaders, 'Content-Type': 'text/event-stream' } });
+    }
+
+    // --- CASE 3: NORMAL STREAMING ---
+    const geminiKeys = (Deno.env.get('GEMINI_API_KEYS') || Deno.env.get('GEMINI_API_KEY') || '').split(',').map(k => k.trim());
+    const geminiApiKey = geminiKeys[Math.floor(Math.random() * geminiKeys.length)];
+
+    return new Response(new ReadableStream({
+      async start(controller) {
+        try {
+          if (combinedEvidence.length > 0) {
+            send(controller, { type: 'evidence', payload: combinedEvidence });
+          }
+
+          let fullResponseText = '';
+          for await (const chunk of streamGemini(contents, geminiApiKey)) {
+            fullResponseText += chunk;
+            send(controller, { type: 'chunk', content: chunk });
+          }
+
+          const payload = buildLegalAnswerPayload(fullResponseText, combinedEvidence, needsCitation);
+          send(controller, { type: 'done', payload });
+
+          // Background operations (Audit, Cache, Memory)
+          logTelemetry('legal-chat', 'completed', {
+            has_document_context: Boolean(compactDocumentContext),
+            evidence_count: combinedEvidence.length,
+            cacheable: Boolean(answerCacheKey),
+          }).catch(() => { });
+
+          persistAnswerAudit({
+            functionName: 'legal-chat',
+            userId: user.id,
+            question: message,
+            payload,
+            metadata: {
+              standalone_query: standaloneQuery,
+              has_document_context: Boolean(compactDocumentContext),
+            },
+          }).catch(() => { });
+
+          if (answerCacheKey && !payload.abstained) {
+            setCachedLegalAnswer(answerCacheKey, payload, 3600).catch(() => { });
+          }
+
+          if (queryEmbeddingForCache.length > 0 && !payload.abstained) {
+            setSemanticCache(supabase, standaloneQuery || message, queryEmbeddingForCache, {
+              reply: payload.answer,
+              ...payload
+            }).catch(() => { });
+          }
+
+          if (messageEmbedding.length > 0) {
+            storeChatMemory(supabase, { user_id: user.id, role: 'user', content: message, embedding: messageEmbedding }).catch(() => { });
+            embedText(fullResponseText.slice(0, 400), undefined, 768).then(emb =>
+              storeChatMemory(supabase, { user_id: user.id, role: 'assistant', content: fullResponseText.slice(0, 400), embedding: emb })
+            ).catch(() => { });
+          }
+
+          // Trigger Auto-Titling if this is a named conversation with default title
+          if (conversation_id && history.length === 0) {
+            autoGenerateConversationTitle(supabase, conversation_id, message, fullResponseText, geminiApiKey).catch(() => { });
+          }
+
+          controller.close();
+        } catch (err) {
+          send(controller, { type: 'error', error: (err as Error).message });
+          controller.close();
+        }
+      }
+    }), {
+      headers: {
+        ...corsHeaders,
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+      }
+    });
+
   } catch (err) {
     console.error('Chat function error:', err)
-    const message = (err as Error).message
-    const status = message === 'Missing Authorization' || message === 'Invalid Authorization header' || message === 'Unauthorized'
-      ? 401
-      : 500
-    return errorResponse(message, status)
+    return errorResponse((err as Error).message, 500)
   }
 }
 

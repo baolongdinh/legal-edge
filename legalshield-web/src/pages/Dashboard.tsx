@@ -174,23 +174,21 @@ export function Dashboard() {
                         className="flex items-center gap-4 p-5 bg-navy-elevated/40 backdrop-blur-md rounded-xl border border-slate-border/30 shadow-lg relative overflow-hidden group"
                     >
                         <div className="absolute inset-0 bg-gradient-to-br from-gold-primary/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity" />
-                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ring-1 ${
-                            tone === 'danger'
+                        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ring-1 ${tone === 'danger'
                                 ? 'bg-red-500/10 text-red-300 ring-red-500/20'
                                 : tone === 'accent'
                                     ? 'bg-blue-500/10 text-blue-300 ring-blue-500/20'
                                     : 'bg-gold-primary/10 text-gold-primary ring-gold-primary/20'
-                        }`}>
+                            }`}>
                             <Icon size={24} />
                         </div>
                         <div className="relative z-10">
-                            <p className={`text-3xl font-serif font-bold ${
-                                tone === 'danger'
+                            <p className={`text-3xl font-serif font-bold ${tone === 'danger'
                                     ? 'text-red-300'
                                     : tone === 'accent'
                                         ? 'text-blue-300'
                                         : 'text-gradient-gold'
-                            }`}>{value}</p>
+                                }`}>{value}</p>
                             <Typography variant="caption" className="text-paper-dark/60 font-medium uppercase tracking-wider">{label}</Typography>
                         </div>
                     </motion.div>

@@ -10,7 +10,7 @@ import { Pricing } from './pages/Pricing'
 import { ContractAnalysis } from './pages/ContractAnalysis'
 import { DraftEditor } from './pages/DraftEditor'
 import { Profile } from './pages/Profile'
-import { ChatAI } from './pages/ChatAI'
+import { ChatPage } from './pages/ChatPage'
 import { AuthGuard } from './components/auth/AuthGuard'
 import { useUserStore } from './store'
 import './index.css'
@@ -79,7 +79,12 @@ function AnimatedRoutes() {
         <Route path="/chat" element={<AuthGuard><AppShell title="Tư vấn AI" subtitle="Giải đáp thắc mắc pháp lý" /></AuthGuard>}>
           <Route index element={
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="h-full">
-              <ChatAI />
+              <ChatPage />
+            </motion.div>
+          } />
+          <Route path=":conversationId" element={
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="h-full">
+              <ChatPage />
             </motion.div>
           } />
         </Route>

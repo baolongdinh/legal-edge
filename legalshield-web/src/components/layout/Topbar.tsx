@@ -1,6 +1,5 @@
 import { Bell, User, LogOut } from 'lucide-react'
 import { useUserStore } from '../../store'
-import { Typography } from '../ui/Typography'
 
 interface TopbarProps {
     title: string
@@ -17,56 +16,56 @@ export function Topbar({ title, subtitle }: TopbarProps) {
     }
 
     return (
-        <header className="h-16 flex items-center justify-between px-4 md:px-6 border-b border-slate-border bg-navy-base/80 backdrop-blur-sm">
+        <header className="h-16 flex items-center justify-between px-6 border-b border-[#e4e2e1] bg-white/90 backdrop-blur-md sticky top-0 z-40">
             {/* Page title */}
             <div>
-                <Typography variant="h3" className="text-lg">
+                <h1 className="text-lg font-serif font-bold text-[#041627] leading-tight">
                     {title}
-                </Typography>
+                </h1>
                 {subtitle && (
-                    <Typography variant="caption" className="mt-0.5 block">
+                    <p className="text-[11px] text-slate-500 font-sans tracking-wide">
                         {subtitle}
-                    </Typography>
+                    </p>
                 )}
             </div>
 
             {/* Right side */}
             <div className="flex items-center gap-4">
                 {/* Plan pill */}
-                <span className="hidden sm:inline-flex items-center px-2.5 py-1 text-xs font-medium border border-gold-primary/40 text-gold-primary rounded-full bg-gold-primary/10">
+                <span className="hidden sm:inline-flex items-center px-3 py-1 text-[10px] font-bold uppercase tracking-widest border border-[#e4e2e1] text-[#041627] rounded bg-slate-50">
                     {planLabel[subscription]}
                 </span>
 
                 {/* Notifications */}
-                <button className="relative p-2 text-slate-muted hover:text-paper-dark transition-colors rounded-lg hover:bg-navy-hover">
+                <button className="relative p-2 text-slate-400 hover:text-[#041627] transition-colors rounded-lg hover:bg-slate-100">
                     <Bell size={18} />
                 </button>
 
                 {/* Avatar / Profile */}
                 <button
                     onClick={() => window.location.href = '/profile'}
-                    className="flex items-center gap-2 p-1 rounded-lg hover:bg-navy-hover transition-colors"
+                    className="flex items-center gap-2 p-1 rounded-lg hover:bg-slate-100 transition-colors"
                 >
-                    <div className="w-8 h-8 rounded-full bg-gold-primary/20 border border-gold-primary/40 flex items-center justify-center text-gold-primary overflow-hidden relative">
-                        <User size={15} className="absolute inset-0 m-auto text-gold-primary" />
-                        {user?.avatarUrl && (
+                    <div className="w-8 h-8 rounded-full bg-slate-200 border border-slate-100 flex items-center justify-center overflow-hidden">
+                        {user?.avatarUrl ? (
                             <img
                                 src={user.avatarUrl}
                                 alt={user.name}
-                                className="w-full h-full object-cover relative z-10 bg-navy-base"
-                                onError={(e) => { e.currentTarget.style.display = 'none'; }}
+                                className="w-full h-full object-cover"
                             />
+                        ) : (
+                            <User size={15} className="text-slate-500" />
                         )}
                     </div>
-                    <span className="hidden md:block text-sm text-paper-dark font-medium">{user?.name ?? 'Người dùng'}</span>
+                    <span className="hidden md:block text-sm text-[#041627] font-medium">{user?.name ?? 'Người dùng'}</span>
                 </button>
 
                 {/* Logout */}
-                <div className="h-6 w-px bg-slate-border mx-1 hidden sm:block" />
+                <div className="h-6 w-px bg-[#e4e2e1] mx-1 hidden sm:block" />
                 <button
                     onClick={logout}
                     title="Đăng xuất"
-                    className="p-2 text-slate-muted hover:text-red-400 transition-colors rounded-lg hover:bg-red-400/10"
+                    className="p-2 text-slate-400 hover:text-red-500 transition-colors rounded-lg hover:bg-red-50"
                 >
                     <LogOut size={18} />
                 </button>

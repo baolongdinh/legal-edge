@@ -38,3 +38,22 @@ verify_jwt = false
 
 [functions.ingest-contract]
 verify_jwt = false
+
+[functions.get-conversations]
+verify_jwt = false
+
+[functions.get-messages]
+verify_jwt = false
+
+[functions.save-conversation]
+verify_jwt = false
+
+[functions.save-message]
+verify_jwt = false
+
+
+[functions.generate-suggestions]
+verify_jwt = false
+
+[functions.summarize-conversation]
+verify_jwt = false

@@ -80,9 +80,13 @@ export async function invokeEdgeFunction<T>(
         responseType = 'json',
     } = options
     const accessToken = await getAccessToken()
+    if (!accessToken) {
+        console.warn('[LegalShield] invokeEdgeFunction called without valid session')
+    }
+
     const authHeaders = {
         ...headers,
-        Authorization: `Bearer ${accessToken ?? supabaseAnonKey}`,
+        Authorization: `Bearer ${accessToken}`,
     }
 
     if (responseType === 'response' || body instanceof FormData || method !== 'POST') {
