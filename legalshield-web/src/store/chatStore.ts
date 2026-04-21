@@ -17,6 +17,8 @@ export interface StreamingState {
   isStreaming: boolean;
   streamedContent: string;
   error: string | null;
+  evidence: any[];
+  status: string;
 }
 
 interface ChatState {
@@ -43,6 +45,8 @@ interface ChatState {
   setStreaming: (streaming: Partial<StreamingState>) => void;
   resetStreaming: () => void;
   appendStreamedContent: (content: string) => void;
+  setStreamingEvidence: (evidence: any[]) => void;
+  setStreamingStatus: (status: string) => void;
 
   setAttachedDocument: (doc: any | null) => void;
 
@@ -70,6 +74,8 @@ export const useChatStore = create<ChatState>()(
         isStreaming: false,
         streamedContent: '',
         error: null,
+        evidence: [],
+        status: '',
       },
       attachedDocument: null,
       currentSuggestions: [],
@@ -137,6 +143,8 @@ export const useChatStore = create<ChatState>()(
             isStreaming: false,
             streamedContent: '',
             error: null,
+            evidence: [],
+            status: '',
           },
         });
       },
@@ -147,6 +155,18 @@ export const useChatStore = create<ChatState>()(
             ...state.streaming,
             streamedContent: state.streaming.streamedContent + content,
           },
+        }));
+      },
+
+      setStreamingEvidence: (evidence) => {
+        set((state) => ({
+          streaming: { ...state.streaming, evidence },
+        }));
+      },
+
+      setStreamingStatus: (status) => {
+        set((state) => ({
+          streaming: { ...state.streaming, status },
         }));
       },
 

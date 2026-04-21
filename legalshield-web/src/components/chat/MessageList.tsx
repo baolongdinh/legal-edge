@@ -1,10 +1,10 @@
 import { useRef, useEffect, memo, useCallback, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageItem } from './MessageItem';
-import { StreamingMessage, TypingIndicator } from './StreamingMessage';
+import { StreamingMessage } from './StreamingMessage';
 import { useChatStore } from '../../store/chatStore';
 import { clsx, type ClassValue } from 'clsx';
-import { ArrowDown } from 'lucide-react';
+import { ArrowDown, Scale } from 'lucide-react';
 import { Button } from '../ui/Button';
 
 function cn(...inputs: ClassValue[]) {
@@ -71,34 +71,41 @@ export function MessageList({
       ref={scrollRef}
       onScroll={handleScroll}
       className={cn(
-        'flex-1 h-full overflow-y-auto space-y-0 scroll-smooth custom-scrollbar',
+        'flex-1 h-full overflow-y-auto space-y-0 scroll-smooth custom-scrollbar bg-transparent relative',
         className
       )}
     >
-      <AnimatePresence mode="wait" initial={false}>
-        <motion.div
-          key={currentConversationId || 'empty'}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          exit={{ opacity: 0 }}
-          transition={{ duration: 0.15 }}
-          className="flex flex-col min-h-full"
-        >
-          {isLoadingMessages && messages.length === 0 ? (
-            <div className="flex-1 flex items-center justify-center py-20">
-              <div className="flex flex-col items-center gap-3">
-                <div className="w-8 h-8 border-2 border-primary/20 border-t-primary rounded-full animate-spin" />
-                <p className="text-xs text-muted-foreground animate-pulse">Đang tải...</p>
+      <div className="flex flex-col min-h-full max-w-4xl mx-auto w-full px-6 md:px-10 py-12">
+        {isLoadingMessages && messages.length === 0 ? (
+          <div className="flex-1 space-y-12 py-12">
+            {[1, 2, 3].map((i) => (
+              <div key={i} className={cn(
+                "flex flex-col gap-4 max-w-[80%]",
+                i % 2 === 0 ? "ml-auto items-end" : "items-start"
+              )}>
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-full bg-lex-lawyer/5 animate-pulse" />
+                  <div className="w-24 h-3 bg-lex-lawyer/10 rounded-full animate-pulse" />
+                </div>
+                <div className={cn(
+                  "h-24 w-full rounded-2xl animate-pulse",
+                  i % 2 === 0 ? "bg-lex-deep/5" : "bg-surface-bright border border-lex-border"
+                )} />
               </div>
+            ))}
+            <div className="flex flex-col items-center gap-4 pt-12">
+              <p className="text-[10px] uppercase tracking-widest font-bold text-lex-gold/40 animate-pulse">Initializing Archive Retrieval...</p>
             </div>
-          ) : (
-            <>
-              {messages.map((message: any) => (
+          </div>
+        ) : (
+          <>
+            <AnimatePresence initial={false}>
+              {messages.map((message: any, i: number) => (
                 <motion.div
                   key={`msg-${message.id}`}
-                  initial={{ opacity: 0, y: 10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.2 }}
+                  initial={{ opacity: 0, y: 20, scale: 0.98 }}
+                  animate={{ opacity: 1, y: 0, scale: 1 }}
+                  transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1], delay: i * 0.05 }}
                 >
                   <MemoizedMessageItem
                     message={message}
@@ -122,17 +129,11 @@ export function MessageList({
                   />
                 </motion.div>
               )}
+            </AnimatePresence>
 
-              {/* Typing indicator when waiting for first chunk */}
-              {streaming.isStreaming && !streaming.streamedContent && !streaming.error && (
-                <div key="typing-indicator" className="p-4">
-                  <TypingIndicator />
-                </div>
-              )}
-            </>
-          )}
-        </motion.div>
-      </AnimatePresence>
+          </>
+        )}
+      </div>
 
       {/* Floating Scroll Button */}
       <AnimatePresence>
@@ -162,24 +163,12 @@ export function MessageList({
           animate={{ opacity: 1 }}
           className="flex flex-col items-center justify-center h-full p-8 text-center"
         >
-          <div className="w-16 h-16 mb-4 rounded-full bg-primary/10 flex items-center justify-center">
-            <svg
-              className="w-8 h-8 text-primary"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M8 10h.01M12 10h.01M16 10h.01M9 16H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-5l-5 5v-5z"
-              />
-            </svg>
+          <div className="w-16 h-16 mb-4 rounded-full bg-lex-deep/5 flex items-center justify-center">
+            <Scale className="w-8 h-8 text-lex-deep" />
           </div>
-          <h3 className="text-lg font-medium mb-2">Bắt đầu cuộc trò chuyện</h3>
-          <p className="text-sm text-muted-foreground max-w-md">
-            Hỏi bất kỳ câu hỏi nào về pháp luật. Trợ lý AI của LegalEdge sẽ giúp bạn giải đáp.
+          <h3 className="text-xl font-serif italic text-lex-deep mb-2">Bắt đầu tra cứu</h3>
+          <p className="text-sm text-lex-lawyer/60 max-w-md">
+            Hỏi bất kỳ câu hỏi nào về pháp luật. LegalShield AI sẽ cung cấp phân tích chuyên sâu cho bạn.
           </p>
         </motion.div>
       )}

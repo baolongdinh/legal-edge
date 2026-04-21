@@ -62,80 +62,80 @@ export function Pricing() {
     }
 
     return (
-        <div className="min-h-screen bg-navy-base font-sans selection:bg-gold-primary/30 relative overflow-hidden">
+        <div className="min-h-screen bg-surface font-sans selection:bg-primary/10 relative overflow-hidden">
             {/* Background elements */}
-            <div className="absolute inset-x-0 top-0 h-96 bg-gradient-to-b from-gold-primary/5 to-transparent pointer-events-none" />
-            <div className="absolute inset-0 bg-grid opacity-10 pointer-events-none" />
+            <div className="absolute inset-x-0 top-0 h-[600px] bg-gradient-to-b from-primary/5 via-transparent to-transparent pointer-events-none" />
+            <div className="absolute inset-0 bg-grid-slate-900/[0.02] pointer-events-none" />
 
             {/* Nav */}
             <motion.nav
                 initial={{ opacity: 0, y: -10 }}
                 animate={{ opacity: 1, y: 0 }}
-                className="flex items-center justify-between px-8 py-5 border-b border-slate-border/20 bg-navy-base/60 backdrop-blur-md sticky top-0 z-50"
+                className="flex justify-between items-center px-8 md:px-16 py-8 border-b border-lex-border/40 bg-surface/80 backdrop-blur-md sticky top-0 z-50"
             >
-                <Link to="/" className="flex items-center gap-2.5 group">
-                    <div className="w-8 h-8 rounded-lg bg-gold-primary/10 flex items-center justify-center border border-gold-primary/20 group-hover:border-gold-primary/40 transition-colors">
-                        <Scale className="text-gold-primary" size={18} />
+                <Link to="/" className="flex items-center gap-3 group">
+                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:border-primary/40 transition-colors">
+                        <Scale className="text-primary" size={20} />
                     </div>
-                    <span className="font-serif font-semibold text-paper-dark text-lg tracking-tight">LegalShield</span>
+                    <span className="font-serif font-bold text-primary text-xl tracking-tight">LegalShield</span>
                 </Link>
                 <Link to="/dashboard">
-                    <Button size="sm" variant="ghost" className="text-xs uppercase tracking-widest font-bold">Vào ứng dụng</Button>
+                    <Button size="sm" variant="ghost" className="text-[10px] uppercase tracking-[0.2em] font-bold text-primary/70 hover:text-primary">Vào ứng dụng</Button>
                 </Link>
             </motion.nav>
 
             {/* Header */}
-            <div className="relative max-w-5xl mx-auto text-center px-8 py-24">
+            <div className="relative max-w-5xl mx-auto text-center px-8 py-32">
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    transition={{ duration: 0.5 }}
+                    transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
                 >
-                    <Typography variant="label" className="mb-4 block tracking-[0.3em] font-bold text-gold-muted opacity-80 uppercase text-[10px]">Lựa chọn đầu tư</Typography>
-                    <Typography variant="h1" className="mb-6 font-serif text-5xl sm:text-6xl text-gradient-gold">Bảng giá minh bạch</Typography>
-                    <Typography variant="subtitle" className="max-w-2xl mx-auto text-paper-dark/50 italic leading-relaxed">
-                        Nâng cao hiệu suất pháp lý với AI được huấn luyện chuyên sâu cho luật Việt Nam.
-                        Tiết kiệm 90% chi phí so với quy trình truyền thống.
-                    </Typography>
-                    <div className="w-24 h-1 bg-gradient-to-r from-transparent via-gold-primary/30 to-transparent mx-auto mt-8" />
+                    <Typography variant="label" className="mb-6 block tracking-[0.4em] font-bold text-primary/40 uppercase text-[10px]">Lựa chọn đầu tư cho tương lai</Typography>
+                    <Typography variant="h1" className="mb-10 font-serif text-5xl sm:text-7xl text-primary leading-tight">Bảng giá chuyên sâu</Typography>
+                    <p className="max-w-2xl mx-auto text-on-surface/60 text-lg leading-relaxed font-body">
+                        Nâng cao hiệu suất pháp lý với AI được huấn luyện chuyên biệt cho luật Việt Nam.
+                        Tiết kiệm 90% thời gian so với quy trình truyền thống.
+                    </p>
+                    <div className="w-32 h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent mx-auto mt-12" />
                 </motion.div>
             </div>
 
             {/* Plans */}
-            <div className="max-w-6xl mx-auto px-8 pb-32 grid grid-cols-1 md:grid-cols-3 gap-8">
+            <div className="max-w-7xl mx-auto px-8 pb-40 grid grid-cols-1 md:grid-cols-3 gap-10">
                 {plans.map((plan, idx) => (
                     <motion.div
                         key={plan.name}
-                        initial={{ opacity: 0, y: 30 }}
+                        initial={{ opacity: 0, y: 40 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.1, duration: 0.5 }}
-                        className={`group flex flex-col p-10 rounded-2xl border transition-all duration-500 relative overflow-hidden ${plan.highlight
-                                ? 'border-gold-primary/40 bg-navy-elevated/80 shadow-[0_32px_64px_-12px_rgba(201,168,76,0.15)] ring-1 ring-gold-primary/10'
-                                : 'border-slate-border/20 bg-navy-elevated/40 hover:border-gold-primary/20 backdrop-blur-sm'
+                        transition={{ delay: idx * 0.15, duration: 0.8, ease: [0.16, 1, 0.3, 1] }}
+                        className={`group flex flex-col p-12 rounded-[2.5rem] border transition-all duration-700 relative overflow-hidden ${plan.highlight
+                            ? 'border-primary/20 bg-surface-bright shadow-[0_48px_128px_-32px_rgba(11,28,26,0.1)] ring-1 ring-primary/5 scale-105 z-10'
+                            : 'border-lex-border bg-surface-bright/50 hover:bg-surface-bright backdrop-blur-sm shadow-sm hover:shadow-xl'
                             }`}
                     >
                         {plan.highlight && (
-                            <div className="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-gold-muted via-gold-primary to-gold-muted" />
+                            <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-primary/20 via-primary to-primary/20" />
                         )}
 
-                        <div className="mb-8">
-                            <div className={`w-10 h-10 rounded-xl flex items-center justify-center mb-6 border ${plan.highlight ? 'bg-gold-primary/10 border-gold-primary/30' : 'bg-slate-border/10 border-slate-border/20'
+                        <div className="mb-10">
+                            <div className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-8 border-2 ${plan.highlight ? 'bg-primary text-surface-bright border-primary shadow-lg shadow-primary/20' : 'bg-surface border-lex-border text-primary/30'
                                 }`}>
-                                <plan.icon className={plan.highlight ? 'text-gold-primary' : 'text-paper-dark/40'} size={20} />
+                                <plan.icon size={28} />
                             </div>
-                            <Typography variant="h3" className="text-2xl font-serif mb-2">{plan.name}</Typography>
-                            <div className="flex items-baseline gap-1.5 mb-2">
-                                <span className={`font-serif text-3xl font-semibold ${plan.highlight ? 'text-gradient-gold' : 'text-paper-dark'}`}>{plan.price}</span>
-                                <Typography variant="caption" className="text-paper-dark/30 font-bold uppercase tracking-tighter">{plan.period}</Typography>
+                            <Typography variant="h3" className="text-3xl font-serif mb-3 text-primary">{plan.name}</Typography>
+                            <div className="flex items-baseline gap-2 mb-3">
+                                <span className={`font-serif text-4xl font-bold ${plan.highlight ? 'text-primary' : 'text-primary/90'}`}>{plan.price}</span>
+                                <Typography variant="caption" className="text-primary/30 font-bold uppercase tracking-widest text-[10px]">{plan.period}</Typography>
                             </div>
-                            <Typography variant="subtitle" className="text-xs text-paper-dark/40 font-medium leading-relaxed min-h-[3rem]">{plan.description}</Typography>
+                            <Typography variant="subtitle" className="text-sm text-on-surface/50 font-medium leading-relaxed min-h-[3rem]">{plan.description}</Typography>
                         </div>
 
-                        <ul className="space-y-4 mb-10 flex-1">
+                        <ul className="space-y-5 mb-14 flex-1">
                             {plan.features.map((f) => (
-                                <li key={f} className="flex items-start gap-3 text-sm text-paper-dark/70 group-hover:text-paper-dark transition-colors">
-                                    <div className={`mt-1 p-0.5 rounded-full ${plan.highlight ? 'bg-gold-primary/20' : 'bg-slate-border/30'}`}>
-                                        <Check size={10} className={plan.highlight ? 'text-gold-primary' : 'text-paper-dark/40'} />
+                                <li key={f} className="flex items-start gap-4 text-sm text-on-surface/70 group-hover:text-primary transition-colors duration-300">
+                                    <div className={`mt-1 p-0.5 rounded-full ${plan.highlight ? 'bg-primary/10 text-primary' : 'bg-surface text-on-surface/20'}`}>
+                                        <Check size={12} className="stroke-[3]" />
                                     </div>
                                     <span className="leading-tight font-medium">{f}</span>
                                 </li>
@@ -144,17 +144,17 @@ export function Pricing() {
 
                         <Button
                             variant={plan.ctaVariant}
-                            className={`w-full h-12 text-sm font-bold uppercase tracking-widest shadow-xl transition-all ${plan.highlight ? 'shadow-gold group-hover:scale-[1.02]' : 'border-slate-border/30 hover:bg-white/5'
+                            className={`w-full py-7 text-[10px] font-bold uppercase tracking-[0.3em] overflow-hidden group shadow-lg transition-all duration-500 rounded-2xl ${plan.highlight ? 'bg-primary text-surface-bright hover:bg-primary-container hover:text-on-primary-container' : 'border-lex-border hover:bg-primary hover:text-surface-bright'
                                 }`}
                             onClick={() => handlePlanSelect(plan.id)}
                             disabled={isLoading}
                         >
-                            {plan.cta}
+                            <span className="relative z-10">{plan.cta}</span>
                         </Button>
 
                         {/* Background subtle glow for highlight plan */}
                         {plan.highlight && (
-                            <div className="absolute -right-16 -bottom-16 w-32 h-32 bg-gold-primary/5 blur-[80px] rounded-full pointer-events-none" />
+                            <div className="absolute -right-24 -bottom-24 w-48 h-48 bg-primary/5 blur-[100px] rounded-full pointer-events-none" />
                         )}
                     </motion.div>
                 ))}
@@ -165,14 +165,15 @@ export function Pricing() {
                 initial={{ opacity: 0 }}
                 whileInView={{ opacity: 1 }}
                 viewport={{ once: true }}
-                className="max-w-4xl mx-auto px-8 pb-32 text-center text-paper-dark/30"
+                transition={{ duration: 1 }}
+                className="max-w-4xl mx-auto px-8 pb-40 text-center"
             >
-                <Typography variant="caption" className="block text-[10px] tracking-widest uppercase font-bold mb-4">Mọi giao dịch đều được mã hóa SSL/TLS</Typography>
-                <div className="flex justify-center gap-8 grayscale opacity-50 group-hover:grayscale-0 transition-all">
-                    {/* Placeholder for payment logos */}
-                    <div className="text-xs font-mono border border-paper-dark/10 px-3 py-1 rounded">MOMO</div>
-                    <div className="text-xs font-mono border border-paper-dark/10 px-3 py-1 rounded">VNPAY</div>
-                    <div className="text-xs font-mono border border-paper-dark/10 px-3 py-1 rounded">STRIPE</div>
+                <Typography variant="caption" className="block text-[10px] tracking-[0.4em] uppercase font-bold mb-8 text-primary/30">Mọi giao dịch đều được bảo vệ bởi tiêu chuẩn AES-256</Typography>
+                <div className="flex flex-wrap justify-center items-center gap-12 opacity-30 grayscale hover:grayscale-0 hover:opacity-60 transition-all duration-700">
+                    <div className="text-[10px] font-bold tracking-[0.2em] border border-primary/20 px-6 py-2 rounded-xl">MOMO</div>
+                    <div className="text-[10px] font-bold tracking-[0.2em] border border-primary/20 px-6 py-2 rounded-xl">VNPAY</div>
+                    <div className="text-[10px] font-bold tracking-[0.2em] border border-primary/20 px-6 py-2 rounded-xl">STRIPE</div>
+                    <div className="text-[10px] font-bold tracking-[0.2em] border border-primary/20 px-6 py-2 rounded-xl">MASTERCARD</div>
                 </div>
             </motion.div>
         </div>

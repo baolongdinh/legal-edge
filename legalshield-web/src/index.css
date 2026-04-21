@@ -1,62 +1,86 @@
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Playfair+Display:wght@400;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Noto+Serif:wght@400;700&family=Manrope:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
 
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
+:root {
+  /* LegalShield Ivory & Forest Palette - WCAG Optimized */
+  --forest-deep: #163328;
+  /* Darkened for better contrast on ivory */
+  --forest-dark: #0A1813;
+  --forest-mid: #2D4A3E;
+  --ivory-warm: #FEF9F1;
+  --ivory-surface: #F5F0E8;
+  --amber-gold: #C9954A;
+  --champagne: #F5E1AE;
+  --muted-green: #3D5A4E;
+  /* Darkened from #5A7A6E for contrast */
+
+  --background: var(--ivory-warm);
+  --foreground: var(--forest-dark);
+
+  --primary: var(--forest-deep);
+  --primary-foreground: #ffffff;
+
+  --secondary: var(--amber-gold);
+  --secondary-foreground: var(--forest-deep);
+
+  --muted: #f8f3eb;
+  /* surface-container-low from design doc */
+  --muted-foreground: var(--muted-green);
+
+  --accent: var(--champagne);
+  --accent-foreground: var(--forest-deep);
+
+  --destructive: #ba1a1a;
+  /* WCAG error color from design doc */
+  --destructive-foreground: #ffffff;
+
+  --border: rgba(193, 200, 195, 0.2);
+  /* outline-variant at 20% opacity */
+  --input: rgba(193, 200, 195, 0.3);
+  --ring: var(--forest-deep);
+
+  --radius: 0.5rem;
+}
+
 @layer base {
   * {
-    box-sizing: border-box;
-  }
-
-  html,
-  body {
-    height: 100%;
-    margin: 0;
-    padding: 0;
+    border-color: var(--border);
   }
 
   body {
-    background-color: #0A1628;
-    color: #F5F0E8;
-    font-family: 'Inter', system-ui, sans-serif;
-    -webkit-font-smoothing: antialiased;
-    -moz-osx-font-smoothing: grayscale;
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: 'Manrope', sans-serif;
   }
 
   h1,
   h2,
-  h3 {
-    font-family: 'Playfair Display', Georgia, serif;
-  }
-}
-
-@layer components {
-
-  /* Gold divider line */
-  .gold-divider {
-    @apply w-16 h-px bg-gold-primary;
-  }
-
-  /* Subtle background grid texture */
-  .bg-grid {
-    background-image:
-      linear-gradient(rgba(201, 168, 76, 0.04) 1px, transparent 1px),
-      linear-gradient(90deg, rgba(201, 168, 76, 0.04) 1px, transparent 1px);
-    background-size: 32px 32px;
-  }
-
-  /* Card border glow on hover */
-  .card-hover {
-    @apply transition-all duration-300 border border-slate-border hover:border-gold-muted hover:shadow-[0_0_24px_rgba(201, 168, 76, 0.12)];
+  h3,
+  .serif-font {
+    font-family: 'Noto Serif', serif;
   }
 }
 
 @layer utilities {
-  .text-gradient-gold {
-    background: linear-gradient(135deg, #C9A84C, #E8CEA0);
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-    background-clip: text;
+  .custom-scrollbar::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-track {
+    background: transparent;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb {
+    background: var(--forest-deep);
+    opacity: 0.2;
+    border-radius: 10px;
+  }
+
+  .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+    background: var(--forest-mid);
   }
 }

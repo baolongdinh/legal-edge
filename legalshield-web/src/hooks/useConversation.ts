@@ -85,40 +85,67 @@ export function useConversation(): UseConversationReturn {
 
   // Create conversation
   const createConversation = useCallback(async (title?: string, folder?: string) => {
+    // Generate a temporary ID for optimistic update
+    const tempId = `temp-${crypto.randomUUID()}`;
+    const tempConv: Conversation = {
+      id: tempId,
+      user_id: '', // Will be set by server
+      title: title || 'Đang khởi tạo...',
+      is_archived: false,
+      is_starred: false,
+      folder: folder || null,
+      message_count: 0,
+      total_tokens: 0,
+      created_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+      summary_level_1: null,
+      summary_level_2: null,
+      summary_level_3: null,
+      summary_last_updated: null,
+    };
+
+    addConversation(tempConv);
+
     try {
       const response = await conversationApi.create(title, folder);
 
       if (response.success) {
+        // Remove temp and add real one
+        removeConversation(tempId);
         addConversation(response.conversation);
         return response.conversation;
+      } else {
+        removeConversation(tempId);
+        setError('Failed to create conversation');
       }
     } catch (err) {
+      removeConversation(tempId);
       const message = err instanceof Error ? err.message : 'Failed to create conversation';
       setError(message);
       console.error('Create conversation error:', err);
     }
     return null;
-  }, [addConversation]);
+  }, [addConversation, removeConversation]);
 
   const selectConversation = useCallback(async (conversation: Conversation | null) => {
+    // 1. Update store synchronously for instant UI feedback in sidebar
     setSelectedConversation(conversation);
 
     if (conversation) {
       setCurrentConversationId(conversation.id);
 
-      // Try cache first
+      // 2. Try cache first to show messages immediately
       const cached = getCachedMessages(conversation.id);
       if (cached) {
         setMessages(cached);
       } else {
-        // Clear if not in cache to show loading state
         setMessages([]);
       }
 
+      // 3. Background fetch for latest messages
       setLoadingMessages(true);
       try {
         const response = await messageApi.getForConversation(conversation.id);
-
         if (response.success) {
           setMessages(response.messages);
           setCachedMessages(conversation.id, response.messages);
@@ -137,60 +164,87 @@ export function useConversation(): UseConversationReturn {
 
   // Update conversation
   const updateConversation = useCallback(async (id: string, updates: Partial<Conversation>) => {
+    const original = conversations.find(c => c.id === id);
+    updateStoreConversation(id, updates);
+
     try {
       const response = await conversationApi.update(id, updates);
-
-      if (response.success) {
-        updateStoreConversation(id, updates);
+      if (!response.success && original) {
+        // Rollback on failure
+        updateStoreConversation(id, original);
+        setError('Cập nhật không thành công. Vui lòng thử lại.');
       }
     } catch (err) {
+      if (original) updateStoreConversation(id, original);
       const message = err instanceof Error ? err.message : 'Failed to update conversation';
       setError(message);
       console.error('Update conversation error:', err);
     }
-  }, [updateStoreConversation]);
+  }, [updateStoreConversation, conversations]);
 
   // Delete conversation
   const deleteConversation = useCallback(async (id: string) => {
-    try {
-      await conversationApi.delete(id);
-      removeConversation(id);
+    const original = conversations.find(c => c.id === id);
+    if (!original) return;
 
-      // Clear selection if deleted conversation was selected
-      if (selectedConversation?.id === id) {
-        setSelectedConversation(null);
-        clearMessages();
+    // 1. Optimistically remove from store
+    removeConversation(id);
+    if (selectedConversation?.id === id) {
+      setSelectedConversation(null);
+      clearMessages();
+    }
+
+    try {
+      const response = await conversationApi.delete(id);
+      if (!response.success) {
+        // Rollback
+        addConversation(original);
+        setError('Xóa không thành công. Vui lòng thử lại.');
       }
     } catch (err) {
+      // Rollback
+      addConversation(original);
       const message = err instanceof Error ? err.message : 'Failed to delete conversation';
       setError(message);
       console.error('Delete conversation error:', err);
     }
-  }, [removeConversation, selectedConversation, setSelectedConversation, clearMessages]);
+  }, [removeConversation, selectedConversation, setSelectedConversation, clearMessages, conversations, addConversation]);
 
   // Archive conversation
   const archiveConversation = useCallback(async (id: string) => {
+    const original = conversations.find(c => c.id === id);
+    updateStoreConversation(id, { is_archived: true });
+
     try {
-      await conversationApi.archive(id);
-      updateStoreConversation(id, { is_archived: true });
+      const response = await conversationApi.archive(id);
+      if (!response.success && original) {
+        updateStoreConversation(id, { is_archived: original.is_archived });
+      }
     } catch (err) {
+      if (original) updateStoreConversation(id, { is_archived: original.is_archived });
       const message = err instanceof Error ? err.message : 'Failed to archive conversation';
       setError(message);
       console.error('Archive conversation error:', err);
     }
-  }, [updateStoreConversation]);
+  }, [updateStoreConversation, conversations]);
 
   // Unarchive conversation
   const unarchiveConversation = useCallback(async (id: string) => {
+    const original = conversations.find(c => c.id === id);
+    updateStoreConversation(id, { is_archived: false });
+
     try {
-      await conversationApi.unarchive(id);
-      updateStoreConversation(id, { is_archived: false });
+      const response = await conversationApi.unarchive(id);
+      if (!response.success && original) {
+        updateStoreConversation(id, { is_archived: original.is_archived });
+      }
     } catch (err) {
+      if (original) updateStoreConversation(id, { is_archived: original.is_archived });
       const message = err instanceof Error ? err.message : 'Failed to unarchive conversation';
       setError(message);
       console.error('Unarchive conversation error:', err);
     }
-  }, [updateStoreConversation]);
+  }, [updateStoreConversation, conversations]);
 
   // Star conversation
   const starConversation = useCallback(async (id: string) => {
@@ -239,15 +293,21 @@ export function useConversation(): UseConversationReturn {
 
   // Move to folder
   const moveToFolder = useCallback(async (id: string, folder: string | null) => {
+    const original = conversations.find(c => c.id === id);
+    updateStoreConversation(id, { folder });
+
     try {
-      await conversationApi.moveToFolder(id, folder);
-      updateStoreConversation(id, { folder });
+      const response = await conversationApi.moveToFolder(id, folder);
+      if (!response.success && original) {
+        updateStoreConversation(id, { folder: original.folder });
+      }
     } catch (err) {
+      if (original) updateStoreConversation(id, { folder: original.folder });
       const message = err instanceof Error ? err.message : 'Failed to move conversation';
       setError(message);
       console.error('Move conversation error:', err);
     }
-  }, [updateStoreConversation]);
+  }, [updateStoreConversation, conversations]);
 
   // Set filter
   const setFilter = useCallback((newFilter: 'all' | 'starred' | 'archived') => {

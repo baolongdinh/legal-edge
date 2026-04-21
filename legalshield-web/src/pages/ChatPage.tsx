@@ -1,50 +1,44 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { PanelLeftClose, PanelLeftOpen } from 'lucide-react';
-import { Button } from '../components/ui/Button';
-import { ConversationSidebar } from '../components/chat/ConversationSidebar';
+import { LayoutDashboard, Menu } from 'lucide-react';
 import { MessageList } from '../components/chat/MessageList';
 import { ChatInput } from '../components/chat/ChatInput';
 import { FollowUpSuggestions } from '../components/chat/FollowUpSuggestions';
+import { ConversationSidebar } from '../components/chat/ConversationSidebar';
+import { ConversationSummary } from '../components/chat/ConversationSummary';
 import { useConversation } from '../hooks/useConversation';
 import { useStreamingChat } from '../hooks/useStreamingChat';
 import { useChatStore } from '../store/chatStore';
-import { clsx, type ClassValue } from 'clsx';
-
-function cn(...inputs: ClassValue[]) {
-  return clsx(inputs);
-}
+import { useConversationStore } from '../store/conversationStore';
+import { summarizationApi, conversationApi } from '../lib/conversation-api';
 
 export function ChatPage() {
   const { conversationId } = useParams<{ conversationId?: string }>();
   const navigate = useNavigate();
-  const [sidebarOpen, setSidebarOpen] = useState(true);
 
   const {
     conversations,
     isLoading: isLoadingConversations,
     selectedConversation,
-    filter,
-    searchQuery,
     createConversation,
     selectConversation,
-    deleteConversation,
-    renameConversation,
-    starConversation,
-    setFilter,
-    setSearchQuery,
   } = useConversation();
 
   const {
     messages,
     currentConversationId,
-    clearMessages,
     attachedDocument,
     setAttachedDocument,
     currentSuggestions,
     setCurrentSuggestions,
+    isStreaming: isChatStreaming,
   } = useChatStore();
+
+  const [isSummaryOpen, setIsSummaryOpen] = useState(false);
+  const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
+  const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
     isStreaming,
@@ -68,14 +62,14 @@ export function ChatPage() {
       const conv = conversations.find((c) => c.id === conversationId);
       if (conv) {
         selectConversation(conv);
+      } else if (!isLoadingConversations && conversations.length > 0) {
+        navigate('/chat', { replace: true });
       }
     }
-  }, [conversationId, conversations, selectedConversation?.id, selectConversation]);
+  }, [conversationId, conversations, selectedConversation?.id, selectConversation, isLoadingConversations, navigate]);
 
-  // Handle sending message
   const handleSendMessage = useCallback(
     async (content: string) => {
-      // Create new conversation if none selected
       let activeConversationId = currentConversationId;
       if (!activeConversationId) {
         const newConv = await createConversation();
@@ -101,7 +95,26 @@ export function ChatPage() {
     ]
   );
 
-  // Handle suggestion click
+  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const fileData: any = {
+        name: file.name,
+        size: file.size,
+        type: file.type,
+      };
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        setAttachedDocument({
+          ...fileData,
+          document_context: event.target?.result as string,
+        });
+      };
+      reader.readAsText(file);
+    }
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  }, [setAttachedDocument]);
+
   const handleSuggestionClick = useCallback(
     (suggestion: string) => {
       handleSendMessage(suggestion);
@@ -110,87 +123,58 @@ export function ChatPage() {
     [handleSendMessage, setCurrentSuggestions]
   );
 
-  // Handle creating new conversation
-  const handleCreateConversation = useCallback(async () => {
-    const newConv = await createConversation();
-    if (newConv) {
-      clearMessages();
-      navigate(`/chat/${newConv.id}`);
+  const handleRegenerateSummary = useCallback(async () => {
+    if (!currentConversationId) return;
+    setIsRegeneratingSummary(true);
+
+    try {
+      await summarizationApi.summarize(currentConversationId, 1);
+      setTimeout(() => summarizationApi.summarize(currentConversationId!, 2), 2000);
+
+      setTimeout(async () => {
+        const response = await conversationApi.list();
+        if (response.success) {
+          const updated = response.conversations.find((c: any) => c.id === currentConversationId);
+          if (updated) {
+            useConversationStore.getState().updateConversation(currentConversationId!, updated);
+          }
+        }
+        setIsRegeneratingSummary(false);
+      }, 5000);
+    } catch (err) {
+      console.error('Manual summarization failed:', err);
+      setIsRegeneratingSummary(false);
     }
-  }, [createConversation, clearMessages, navigate]);
+  }, [currentConversationId]);
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] overflow-hidden">
-      {/* Sidebar */}
-      <motion.div
-        initial={false}
-        animate={{
-          width: sidebarOpen ? 320 : 0,
-          opacity: sidebarOpen ? 1 : 0,
-        }}
-        transition={{ duration: 0.2 }}
-        className={cn(
-          'border-r bg-card overflow-hidden',
-          !sidebarOpen && 'hidden'
-        )}
-      >
-        <ConversationSidebar
-          conversations={conversations}
-          selectedConversation={selectedConversation}
-          filter={filter}
-          searchQuery={searchQuery}
-          isLoading={isLoadingConversations}
-          onSelectConversation={(conv) => {
-            if (conv.id !== selectedConversation?.id) {
-              navigate(`/chat/${conv.id}`);
-            }
-          }}
-          onCreateConversation={handleCreateConversation}
-          onDeleteConversation={deleteConversation}
-          onStarConversation={starConversation}
-          onRenameConversation={renameConversation}
-          onSetFilter={setFilter}
-          onSetSearchQuery={setSearchQuery}
-        />
-      </motion.div>
+    <div className="flex h-full bg-surface transition-colors duration-500 overflow-hidden relative">
+      <ConversationSidebar
+        isMobileOpen={isMobileSidebarOpen}
+        onClose={() => setIsMobileSidebarOpen(false)}
+      />
 
-      {/* Main chat area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b">
-          <div className="flex items-center gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-            >
-              {sidebarOpen ? (
-                <PanelLeftClose className="h-5 w-5" />
-              ) : (
-                <PanelLeftOpen className="h-5 w-5" />
-              )}
-            </Button>
-            <div>
-              <h1 className="font-semibold">
-                {selectedConversation?.title || 'Trợ lý pháp lý AI'}
-              </h1>
-              {selectedConversation && (
-                <p className="text-xs text-muted-foreground">
-                  {selectedConversation.message_count} tin nhắn
-                </p>
-              )}
-            </div>
+      <div className="flex-1 flex flex-col min-w-0 bg-transparent relative">
+        {/* Mobile Header Toggle */}
+        <div className="lg:hidden flex items-center h-16 px-6 border-b border-lex-border bg-white/50 backdrop-blur-md z-50">
+          <button
+            onClick={() => setIsMobileSidebarOpen(true)}
+            className="p-2 -ml-2 text-lex-lawyer hover:text-lex-deep transition-colors"
+            aria-label="Mở menu"
+          >
+            <Menu size={24} />
+          </button>
+          <div className="ml-4 flex flex-col">
+            <span className="text-sm font-serif italic text-lex-deep">LegalShield</span>
+            <span className="text-[8px] uppercase tracking-widest text-lex-lawyer font-bold opacity-40">AI Archive</span>
           </div>
         </div>
-
-        {/* Message list */}
-        <div className="flex-1 flex flex-col min-h-0 overflow-hidden">
+        <div className="flex-1 overflow-hidden">
           <MessageList onSuggestionClick={handleSuggestionClick} />
         </div>
 
-        {/* Follow-up suggestions (inline) */}
-        {currentSuggestions.length > 0 && !isStreaming && (
-          <div className="px-4 py-2 border-t bg-accent/30">
+        {currentSuggestions.length > 0 && !isChatStreaming && (
+          <div className="px-6 md:px-10 py-4 bg-transparent mt-auto lg:mt-0">
             <FollowUpSuggestions
               suggestions={currentSuggestions}
               onSelect={handleSuggestionClick}
@@ -198,20 +182,62 @@ export function ChatPage() {
           </div>
         )}
 
-        {/* Input area */}
-        <div className="p-4 border-t">
-          <ChatInput
-            onSend={handleSendMessage}
-            attachedDocument={attachedDocument}
-            onAttachDocument={() => {
-              /* TODO: Document picker */
-            }}
-            onDetachDocument={() => setAttachedDocument(null)}
-            isStreaming={isStreaming}
-            disabled={isStreaming}
-          />
+        <div className="px-6 md:px-10 pb-6 md:pb-10">
+          <div className="max-w-4xl mx-auto w-full">
+            {!isChatStreaming && messages.length >= 2 && (
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                className="flex justify-center mb-6"
+              >
+                <button
+                  onClick={() => setIsSummaryOpen(true)}
+                  className="group flex items-center gap-3 px-6 py-2.5 bg-white border border-lex-border rounded-full hover:border-lex-gold transition-all shadow-sm hover:shadow-lex-gold/5"
+                >
+                  <LayoutDashboard size={14} className="text-lex-gold" />
+                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-lex-lawyer group-hover:text-lex-deep">
+                    Xem Insight Tổng Hợp
+                  </span>
+                </button>
+              </motion.div>
+            )}
+
+            <div className="bg-surface-bright p-4 md:p-6 rounded-2xl md:rounded-3xl border border-lex-border shadow-2xl shadow-lex-deep/5">
+              <input
+                type="file"
+                ref={fileInputRef}
+                onChange={handleFileChange}
+                className="hidden"
+                accept=".txt,.md"
+              />
+              <ChatInput
+                onSend={handleSendMessage}
+                attachedDocument={attachedDocument}
+                onAttachDocument={() => fileInputRef.current?.click()}
+                onDetachDocument={() => setAttachedDocument(null)}
+                isStreaming={isChatStreaming}
+                disabled={isChatStreaming}
+              />
+              <p className="text-[10px] text-center mt-4 text-lex-lawyer uppercase tracking-[0.3em] font-bold opacity-30">
+                Institutional AI Archive • LegalShield v2.0
+              </p>
+            </div>
+          </div>
         </div>
       </div>
+
+      <ConversationSummary
+        isOpen={isSummaryOpen}
+        onClose={() => setIsSummaryOpen(false)}
+        conversationId={currentConversationId || undefined}
+        onRegenerate={handleRegenerateSummary}
+        isRegenerating={isRegeneratingSummary}
+        summary={{
+          level_1: selectedConversation?.summary_level_1 || undefined,
+          level_2: selectedConversation?.summary_level_2 || undefined,
+          level_3: selectedConversation?.summary_level_3 || undefined,
+        }}
+      />
     </div>
   );
 }

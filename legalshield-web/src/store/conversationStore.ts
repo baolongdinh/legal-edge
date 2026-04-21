@@ -15,6 +15,7 @@ export interface Conversation {
   summary_last_updated: string | null;
   message_count: number;
   total_tokens: number;
+  metadata?: any;
   created_at: string;
   updated_at: string;
 }
@@ -26,42 +27,42 @@ interface ConversationState {
   conversations: Conversation[];
   isLoading: boolean;
   error: string | null;
-  
+
   // Selected state
   selectedConversation: Conversation | null;
-  
+
   // Filter state
   filter: FilterType;
   searchQuery: string;
   selectedFolder: string | null;
-  
+
   // Pagination
   page: number;
   hasMore: boolean;
-  
+
   // Available folders
   availableFolders: string[];
-  
+
   // Actions
   setConversations: (conversations: Conversation[]) => void;
   addConversation: (conversation: Conversation) => void;
   updateConversation: (id: string, updates: Partial<Conversation>) => void;
   removeConversation: (id: string) => void;
-  
+
   setSelectedConversation: (conversation: Conversation | null) => void;
-  
+
   setFilter: (filter: FilterType) => void;
   setSearchQuery: (query: string) => void;
   setSelectedFolder: (folder: string | null) => void;
-  
+
   setPage: (page: number) => void;
   setHasMore: (hasMore: boolean) => void;
-  
+
   setAvailableFolders: (folders: string[]) => void;
-  
+
   setLoading: (isLoading: boolean) => void;
   setError: (error: string | null) => void;
-  
+
   // Computed
   filteredConversations: () => Conversation[];
 }

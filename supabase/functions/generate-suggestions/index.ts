@@ -37,27 +37,23 @@ async function callGeminiForSuggestions(
   const docContextText = documentContext ?
     `\nTài liệu tham khảo: ${JSON.stringify(documentContext)}` : '';
 
-  const prompt = `Dựa trên cuộc tư vấn pháp lý này, hãy tạo 3-4 câu hỏi tiếp theo liên quan:
+  const prompt = `Dựa trên cuộc tư vấn pháp lý này, hãy tạo 3-4 câu hỏi tiếp theo mang tính "đào sâu" và "khơi gợi" để giúp người dùng hiểu rõ hơn về các rủi ro hoặc bước đi tiếp theo:
 
 Câu hỏi của người dùng: ${userMessage}
 
 Câu trả lời của AI: ${aiResponse}${docContextText}
 
 Yêu cầu:
-- Các câu hỏi nên khuyến khích tìm hiểu sâu hơn về chủ đề pháp lý
-- Các câu hỏi phải liên quan trực tiếp đến nội dung vừa thảo luận
-- Các câu hỏi phải bằng tiếng Việt
-- Tối đa 3-4 câu hỏi
-- Mỗi câu hỏi trên một dòng riêng biệt
-- Câu hỏi phải kết thúc bằng dấu chấm hỏi (?)
-- Câu hỏi nên cụ thể và có ý nghĩa, không quá chung chung
+- Các câu hỏi ĐỪNG quá chung chung. Hãy tập trung vào:
+  1. Các rủi ro tiềm ẩn chưa được nhắc tới.
+  2. Các chứng cứ hoặc tài liệu cụ thể người dùng cần chuẩn bị.
+  3. Các bước thủ tục hành chính/tố tụng tiếp theo.
+  4. Giải thích sâu hơn về một điều luật cụ thể vừa trích dẫn.
+- Ngôn ngữ: Tiếng Việt trang trọng.
+- Mỗi câu hỏi trên một dòng riêng biệt.
+- Câu hỏi phải kết thúc bằng dấu chấm hỏi (?).
 
-Ví dụ định dạng:
-1. Câu hỏi thứ nhất?
-2. Câu hỏi thứ hai?
-3. Câu hỏi thứ ba?
-
-Câu hỏi gợi ý:`;
+Câu hỏi gợi ý (đào sâu):`;
 
   const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 

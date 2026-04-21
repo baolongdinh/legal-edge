@@ -24,7 +24,7 @@ function AppShell({ title, subtitle }: { title: string; subtitle?: string }) {
   }, [syncUser])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-navy-base">
+    <div className="flex h-screen overflow-hidden bg-surface">
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Topbar title={title} subtitle={subtitle} />
@@ -106,13 +106,14 @@ export default function App() {
   return (
     <BrowserRouter>
       <Toaster
-        theme="dark"
+        theme="light"
         position="bottom-right"
         toastOptions={{
           style: {
-            background: '#0F172A',
-            border: '1px solid rgba(226, 232, 240, 0.1)',
-            color: '#F5F0E8',
+            background: '#FAF7F0',
+            border: '1px solid rgba(11, 28, 26, 0.1)',
+            color: '#0B1C1A',
+            fontFamily: 'Manrope, sans-serif',
           },
         }}
       />

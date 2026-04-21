@@ -1,21 +1,59 @@
 import { memo } from 'react';
-import { motion } from 'framer-motion';
-import { Loader2, AlertCircle, RotateCcw, Scale } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Loader2, AlertCircle, RotateCcw, Scale, BookOpen, Search, CheckCircle2, ChevronRight } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '../ui/Button';
 import { clsx, type ClassValue } from 'clsx';
+import { useChatStore } from '../../store/chatStore';
 
 function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
 }
 
-interface StreamingMessageProps {
-  content: string;
-  isStreaming: boolean;
-  error?: string | null;
-  onRetry?: () => void;
-  className?: string;
+// Granular step resolver for the progress tracker
+const AGENT_STEPS = [
+  { id: 'analyze', label: 'Phân tích yêu cầu', match: ['phân tích', 'tư duy', 'hiểu'] },
+  { id: 'search', label: 'Tìm kiếm pháp lý', match: ['nguồn', 'tìm kiếm', 'truy xuất'] },
+  { id: 'extract', label: 'Trích xuất điều luật', match: ['trích xuất', 'điều luật', 'văn bản'] },
+  { id: 'draft', label: 'Đang phản hồi', match: ['soạn thảo', 'phản hồi', 'trả lời'] },
+];
+
+function ProgressTracker({ currentStatus }: { currentStatus: string }) {
+  const activeStepIndex = AGENT_STEPS.findIndex(step =>
+    step.match.some(m => currentStatus.toLowerCase().includes(m))
+  ) || 0;
+
+  return (
+    <div className="flex items-center gap-3 py-4 overflow-hidden">
+      {AGENT_STEPS.map((step, index) => {
+        const isCompleted = index < activeStepIndex;
+        const isActive = index === activeStepIndex;
+
+        return (
+          <div key={step.id} className="flex items-center gap-2 group">
+            <div className={cn(
+              "flex items-center justify-center w-6 h-6 rounded-full border transition-all duration-500",
+              isCompleted ? "bg-lex-deep border-lex-deep text-lex-gold" :
+                isActive ? "border-lex-gold text-lex-gold animate-pulse shadow-[0_0_10px_rgba(201,149,74,0.3)]" :
+                  "border-lex-border text-lex-lawyer/20"
+            )}>
+              {isCompleted ? <CheckCircle2 size={12} /> : <span className="text-[10px] font-bold">{index + 1}</span>}
+            </div>
+            <span className={cn(
+              "text-[9px] font-bold uppercase tracking-widest hidden sm:inline whitespace-nowrap transition-colors",
+              isActive ? "text-lex-deep" : "text-lex-lawyer/40"
+            )}>
+              {step.label}
+            </span>
+            {index < AGENT_STEPS.length - 1 && (
+              <ChevronRight size={10} className="text-lex-border mx-1 opacity-50" />
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
 }
 
 export const StreamingMessage = memo(({
@@ -25,112 +63,152 @@ export const StreamingMessage = memo(({
   onRetry,
   className,
 }: StreamingMessageProps) => {
-  // Typing indicator animation
+  const { streaming } = useChatStore();
+  const statusText = streaming.status || 'Đang khởi tạo phiên...';
+  const hasEvidence = streaming.evidence?.length > 0;
+
+  // --- Initial wait (no content yet) ---
   if (isStreaming && !content) {
     return (
       <motion.div
-        initial={{ opacity: 0, y: 5 }}
+        initial={{ opacity: 0, y: 10 }}
         animate={{ opacity: 1, y: 0 }}
-        className={cn('flex items-center gap-3 p-4', className)}
+        className={cn(
+          'max-w-[92%] lg:max-w-[85%] p-10 font-sans leading-relaxed bg-white border border-lex-border rounded-[2.5rem] shadow-2xl shadow-lex-deep/[0.03]',
+          className
+        )}
       >
-        <TypingIndicator />
-        <span className="text-sm text-slate-500 font-medium italic">Lexis AI đang phân tích dữ liệu...</span>
+        <div className="flex items-center gap-5 mb-8 pb-8 border-b border-lex-border/60">
+          <div className="w-12 h-12 bg-lex-deep rounded-2xl flex items-center justify-center shadow-2xl shadow-lex-deep/20 border border-lex-midnight">
+            <Scale size={24} className="text-lex-gold" />
+          </div>
+          <div>
+            <h3 className="font-serif font-bold text-lex-deep leading-none text-xl tracking-tight">Hệ thống Cố vấn AI</h3>
+            <div className="flex items-center gap-3 mt-2.5">
+              <div className="w-2.5 h-2.5 bg-lex-gold rounded-full animate-pulse" />
+              <span className="text-[10px] uppercase tracking-[0.4em] font-bold text-lex-gold">
+                Institutional Core
+              </span>
+            </div>
+          </div>
+        </div>
+
+        <div className="space-y-8">
+          <ProgressTracker currentStatus={statusText} />
+          <div className="flex items-center gap-4 p-6 bg-surface-container-low/50 rounded-2xl border border-lex-border/40">
+            <Loader2 className="h-4 w-4 animate-spin text-lex-gold" />
+            <span className="text-xs font-bold text-lex-lawyer/80 leading-relaxed uppercase tracking-widest">
+              {statusText}
+            </span>
+          </div>
+        </div>
       </motion.div>
     );
   }
 
-  // Error state
+  // --- Error state ---
   if (error) {
     return (
       <motion.div
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         className={cn(
-          'flex flex-col items-start gap-3 p-5 rounded-lg border border-red-200 bg-red-50 shadow-sm',
+          'flex flex-col items-start gap-4 p-8 rounded-[2.5rem] border border-red-200/40 bg-red-50/20 shadow-xl shadow-red-900/[0.02] max-w-[85%]',
           className
         )}
       >
-        <div className="flex items-center gap-2 text-red-700">
-          <AlertCircle className="h-4 w-4" />
-          <span className="text-sm font-bold">Lỗi hệ thống</span>
+        <div className="flex items-center gap-3 text-red-700">
+          <div className="w-10 h-10 bg-red-100 rounded-xl flex items-center justify-center border border-red-200">
+            <AlertCircle className="h-5 w-5" />
+          </div>
+          <div>
+            <span className="text-xs font-bold uppercase tracking-widest block">Lỗi hệ thống</span>
+            <span className="text-[10px] uppercase opacity-60 tracking-tighter">Node ID: LS-FAILED</span>
+          </div>
         </div>
-        <p className="text-sm text-red-600/90 leading-relaxed">{error}</p>
-        {onRetry && (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onRetry}
-            className="gap-2 border-red-200 text-red-700 hover:bg-red-100"
-          >
-            <RotateCcw className="h-4 w-4" />
-            Thử lại
-          </Button>
-        )}
+        <p className="text-sm text-red-700/80 leading-relaxed font-medium pl-2 border-l-2 border-red-200 ml-5">{error}</p>
+        <div className="pl-5 pt-2">
+          {onRetry && (
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onRetry}
+              className="gap-3 border-red-200 text-red-700 hover:bg-red-50 rounded-xl px-6 font-bold uppercase tracking-widest text-[10px]"
+            >
+              <RotateCcw className="h-3 w-3" />
+              Thử lại phiên làm việc
+            </Button>
+          )}
+        </div>
       </motion.div>
     );
   }
 
-  // Streaming content display
+  // --- Streaming content display ---
   return (
     <motion.div
-      initial={{ opacity: 0, y: 5 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={cn('relative p-6 bg-white shadow-[0_12px_40px_-12px_rgba(4,22,39,0.08)] border-l-4 border-[#ffcc32]/40 rounded-lg', className)}
+      initial={{ opacity: 0, scale: 0.98, y: 10 }}
+      animate={{ opacity: 1, scale: 1, y: 0 }}
+      className={cn(
+        'max-w-[92%] lg:max-w-[85%] p-10 md:p-12 font-sans leading-relaxed bg-white border border-lex-border rounded-[2.5rem] shadow-2xl shadow-lex-deep/[0.03]',
+        className
+      )}
     >
-      <div className="flex items-center gap-3 mb-4 pb-3 border-b border-[#e4e2e1]/40">
-        <div className="h-9 w-9 bg-[#041627] flex items-center justify-center text-[#fbcc32] rounded-sm">
-          <Scale size={18} />
+      {/* Header */}
+      <div className="flex items-center gap-5 mb-10 pb-8 border-b border-lex-border/60">
+        <div className="w-12 h-12 bg-lex-deep rounded-2xl flex items-center justify-center shadow-2xl shadow-lex-deep/20 border border-lex-midnight">
+          <Scale size={24} className="text-lex-gold" />
         </div>
         <div className="flex-1">
-          <h3 className="text-base font-bold text-[#041627] font-serif leading-none">Phản hồi Thời gian thực</h3>
-          <div className="flex items-center gap-1.5 mt-1">
-            <span className="inline-block h-1.5 w-1.5 rounded-full bg-[#fbcc32] animate-pulse" />
-            <span className="text-[9px] text-slate-500 uppercase tracking-widest font-bold font-sans">Drafting in progress</span>
+          <h3 className="font-serif font-bold text-lex-deep leading-none text-xl tracking-tight">Hệ thống Cố vấn AI</h3>
+          <div className="flex items-center gap-3 mt-2.5">
+            <div className="w-2 h-2 bg-lex-gold rounded-full animate-pulse shadow-[0_0_8px_rgba(201,149,74,0.6)]" />
+            <span className="text-[10px] uppercase tracking-[0.4em] font-bold text-lex-gold">
+              Đang soạn thảo...
+            </span>
           </div>
         </div>
+
+        {/* Evidence badge — appears when citations arrive */}
+        <AnimatePresence>
+          {hasEvidence && (
+            <motion.div
+              initial={{ opacity: 0, x: 20 }}
+              animate={{ opacity: 1, x: 0 }}
+              className="flex items-center gap-2 px-4 py-2 bg-lex-gold/10 border border-lex-gold/30 rounded-xl"
+            >
+              <BookOpen size={14} className="text-lex-gold" />
+              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-lex-gold">
+                {streaming.evidence.length} Phát hiện
+              </span>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </div>
 
-      <div className="prose prose-sm max-w-none prose-slate prose-p:leading-relaxed prose-p:mb-4 text-[#1b1c1c]">
+      {/* Markdown content */}
+      <div className="prose prose-lex max-w-none text-lex-deep/90 prose-p:leading-[1.8] prose-p:mb-6 prose-headings:font-serif prose-headings:text-lex-deep prose-strong:text-lex-deep prose-strong:font-bold prose-li:marker:text-lex-gold selection:bg-lex-gold/10">
         <ReactMarkdown remarkPlugins={[remarkGfm]}>
           {content + (isStreaming ? ' \u2588' : '')}
         </ReactMarkdown>
       </div>
 
+      {/* Granular Progress Tracker Footer */}
       {isStreaming && (
-        <div className="flex items-center gap-2 mt-4 text-slate-400">
-          <Loader2 className="h-3 w-3 animate-spin" />
-          <span className="text-[10px] uppercase font-bold tracking-widest">Đang trích xuất luật...</span>
+        <div className="mt-12 pt-8 border-t border-lex-border/60">
+          <ProgressTracker currentStatus={statusText} />
         </div>
       )}
     </motion.div>
   );
 });
 
-// Typing indicator for initial loading
-export function TypingIndicator({ className }: { className?: string }) {
-  return (
-    <motion.div
-      initial={{ opacity: 0, y: 10 }}
-      animate={{ opacity: 1, y: 0 }}
-      className={cn('flex items-center gap-2 p-3', className)}
-    >
-      <div className="flex items-center gap-1">
-        <motion.span
-          className="w-2 h-2 bg-primary/60 rounded-full"
-          animate={{ scale: [1, 1.3, 1], opacity: [0.4, 1, 0.4] }}
-          transition={{ duration: 0.8, repeat: Infinity, delay: 0 }}
-        />
-        <motion.span
-          className="w-2 h-2 bg-primary/60 rounded-full"
-          animate={{ scale: [1, 1.3, 1], opacity: [0.4, 1, 0.4] }}
-          transition={{ duration: 0.8, repeat: Infinity, delay: 0.15 }}
-        />
-        <motion.span
-          className="w-2 h-2 bg-primary/60 rounded-full"
-          animate={{ scale: [1, 1.3, 1], opacity: [0.4, 1, 0.4] }}
-          transition={{ duration: 0.8, repeat: Infinity, delay: 0.3 }}
-        />
-      </div>
-    </motion.div>
-  );
+StreamingMessage.displayName = 'StreamingMessage';
+
+interface StreamingMessageProps {
+  content: string;
+  isStreaming: boolean;
+  error?: string | null;
+  onRetry?: () => void;
+  className?: string;
 }

@@ -191,7 +191,7 @@ Tiêu đề:`;
 /**
  * Task T004: Helper for streaming Gemini response.
  */
-async function* streamGemini(contents: any[], apiKey: string, model = 'gemini-2.5-flash-lite'): AsyncGenerator<string> {
+async function* streamGemini(contents: any[], apiKey: string, model = 'gemini-1.5-flash'): AsyncGenerator<string> {
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}`;
 
   const response = await fetch(url, {
@@ -475,7 +475,7 @@ Quy tắc ứng xử:
 3. Nếu câu hỏi yêu cầu độ chính xác pháp lý (legal claim), chỉ được trả lời dựa trên các nguồn chứng cứ đã cung cấp.
 4. Không được bịa điều luật, số điều, tên văn bản hoặc đường link.
 5. Nếu chứng cứ chưa đủ, phải nói rõ là chưa đủ căn cứ để khẳng định.
-6. BẮT BUỘC TRÍCH DẪN IN-LINE: Mỗi kết luận, điều khoản pháp lý lấy từ "CHỨNG CỨ PHÁP LÝ", bạn PHẢI ghim nguồn bằng cú pháp [#X] ngay cuối câu.
+6. BẮT BUỘC TRÍCH DẪN IN-LINE: Mỗi kết luận, điều khoản pháp lý lấy từ "CHỨNG CỨ PHÁP LÝ", bạn PHẢI ghim nguồn bằng cú pháp [X] ngay cuối câu (ví dụ: [1]).
 7. Ngắn gọn, súc tích nhưng đầy đủ ý.
 8. Ở cuối câu trả lời, hãy thêm một lời nhắc nhở ngắn gọn gọn gàng về việc tham vấn luật sư thực tế nếu cần thiết.`
 

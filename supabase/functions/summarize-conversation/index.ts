@@ -87,6 +87,8 @@ async function summarizeConversation(
     throw new Error(`Failed to fetch messages: ${error.message}`);
   }
 
+  console.log(`[Summary] Found ${messages?.length || 0} messages for conversation ${conversationId}`);
+
   if (!messages || messages.length === 0) {
     throw new Error('No messages found for summarization');
   }
@@ -113,8 +115,11 @@ async function summarizeConversation(
     .eq('id', conversationId);
 
   if (updateError) {
+    console.error(`[Summary] Database update error: ${updateError.message}`);
     throw new Error(`Failed to update conversation: ${updateError.message}`);
   }
+
+  console.log(`[Summary] Successfully updated ${fieldName} for conversation ${conversationId}`);
 
   return summary;
 }
@@ -126,11 +131,20 @@ serve(async (req) => {
   }
 
   try {
-    // Create Supabase client with service role for background operations
+    // Get auth token from request
+    const authHeader = req.headers.get('Authorization');
+
+    // Create Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
     const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { persistSession: false } }
+      supabaseUrl,
+      serviceKey || (Deno.env.get('SUPABASE_ANON_KEY') ?? ''),
+      {
+        auth: { persistSession: false },
+        global: { headers: authHeader ? { Authorization: authHeader } : undefined }
+      }
     );
 
     // Parse request
@@ -149,26 +163,32 @@ serve(async (req) => {
     const geminiKeys = geminiKeysRaw.split(',').map(k => k.trim()).filter(Boolean);
 
     if (geminiKeys.length === 0) {
+      console.error('[Summary] Gemini API key not configured in environment variables');
       return new Response(
         JSON.stringify({ error: 'Gemini API key not configured' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
 
+    console.log(`[Summary] Using 1 of ${geminiKeys.length} available Gemini API keys`);
+
     // Pick a random key for rotation
     const geminiApiKey = geminiKeys[Math.floor(Math.random() * geminiKeys.length)];
 
     // Perform summarization
     const startTime = Date.now();
+    console.log(`[Summary] Starting level ${level} for conversation: ${conversation_id}`);
+
     const summary = await summarizeConversation(supabaseClient, conversation_id, level, geminiApiKey);
     const duration = Date.now() - startTime;
 
-    console.log(`Summarization Level ${level} completed for conversation ${conversation_id} in ${duration}ms`);
+    console.log(`[Summary] Level ${level} completed. Summary length: ${summary.length}. Duration: ${duration}ms`);
 
     return new Response(
       JSON.stringify({
         success: true,
         level,
+        summary,
         summary_length: summary.length,
         estimated_tokens: estimateTokens(summary),
         duration_ms: duration

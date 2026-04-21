@@ -1,5 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { useState, useRef, useEffect } from 'react';
 import { Send, Paperclip, X, Loader2 } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 
@@ -9,117 +8,123 @@ function cn(...inputs: ClassValue[]) {
 
 interface ChatInputProps {
   onSend: (message: string) => void;
-  onAttachDocument?: () => void;
-  attachedDocument?: any | null;
-  onDetachDocument?: () => void;
   isStreaming?: boolean;
-  placeholder?: string;
   disabled?: boolean;
-  className?: string;
+  attachedDocument?: { name: string; size: number } | null;
+  onAttachDocument?: () => void;
+  onDetachDocument?: () => void;
 }
 
 export function ChatInput({
   onSend,
-  onAttachDocument,
-  attachedDocument,
-  onDetachDocument,
   isStreaming,
-  placeholder = 'Nhập yêu cầu pháp lý hoặc câu hỏi tại đây...',
   disabled,
-  className,
+  attachedDocument,
+  onAttachDocument,
+  onDetachDocument,
 }: ChatInputProps) {
-  const [input, setInput] = useState('');
+  const [content, setContent] = useState('');
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
-  const handleSend = useCallback(() => {
-    if (!input.trim() || isStreaming || disabled) return;
-
-    onSend(input.trim());
-    setInput('');
-
-    if (textareaRef.current) {
-      textareaRef.current.style.height = 'auto';
+  const handleSend = () => {
+    if (content.trim() && !disabled && !isStreaming) {
+      onSend(content.trim());
+      setContent('');
     }
-  }, [input, isStreaming, disabled, onSend]);
+  };
 
-  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
+  const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
-  }, [handleSend]);
+  };
 
-  const handleInputChange = useCallback((e: React.ChangeEvent<HTMLTextAreaElement>) => {
-    setInput(e.target.value);
-    const textarea = e.target;
-    textarea.style.height = 'auto';
-    textarea.style.height = `${Math.min(textarea.scrollHeight, 200)}px`;
-  }, []);
+  // Auto-resize textarea
+  useEffect(() => {
+    if (textareaRef.current) {
+      textareaRef.current.style.height = 'auto';
+      textareaRef.current.style.height = `${Math.min(textareaRef.current.scrollHeight, 200)}px`;
+    }
+  }, [content]);
 
   return (
-    <div className={cn('relative', className)}>
-      {/* Attached document indicator */}
-      <AnimatePresence>
-        {attachedDocument && (
-          <motion.div
-            initial={{ opacity: 0, y: 10 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -10 }}
-            className="absolute -top-12 left-0 right-0 flex items-center gap-2 p-2 bg-white/80 backdrop-blur shadow-sm rounded-md text-xs border border-[#e4e2e1]"
-          >
-            <Paperclip size={14} className="text-slate-400" />
-            <span className="flex-1 truncate text-[#041627] font-medium">{attachedDocument.name || 'Tài liệu đính kèm'}</span>
-            {onDetachDocument && (
-              <button
-                className="h-5 w-5 flex items-center justify-center text-slate-400 hover:text-red-500 transition-colors"
-                onClick={onDetachDocument}
-              >
-                <X size={12} />
-              </button>
-            )}
-          </motion.div>
-        )}
-      </AnimatePresence>
+    <div className="relative">
+      {/* File attachment preview */}
+      {attachedDocument && (
+        <div className="absolute bottom-full mb-4 left-0 animate-in slide-in-from-bottom-2 fade-in duration-300">
+          <div className="flex items-center gap-3 bg-white border border-lex-deep/10 px-4 py-2 rounded-lg shadow-sm">
+            <Paperclip size={14} className="text-lex-deep/40" />
+            <div className="max-w-[200px]">
+              <p className="text-xs font-medium text-lex-deep truncate">{attachedDocument.name}</p>
+              <p className="text-[10px] text-lex-muted">{(attachedDocument.size / 1024).toFixed(1)} KB</p>
+            </div>
+            <button
+              onClick={onDetachDocument}
+              className="p-1 hover:bg-lex-deep/5 rounded-full transition-colors"
+            >
+              <X size={14} className="text-lex-deep/40" />
+            </button>
+          </div>
+        </div>
+      )}
 
-      {/* Input container (Stone style) */}
-      <div className="relative flex items-center bg-[#e4e2e1] rounded-lg shadow-inner overflow-hidden min-h-[60px]">
+      {/* Quick Action Bubbles */}
+      <div className="flex gap-2 mb-4 overflow-x-auto custom-scrollbar pb-2">
+        {[
+          { label: 'Tóm tắt điều khoản', action: 'Tóm tắt các điều khoản quan trọng trong hồ sơ này' },
+          { label: 'Kiểm tra tính pháp lý', action: 'Kiểm tra tính pháp lý và các rủi ro tiềm ẩn' },
+          { label: 'Soạn đơn khởi kiện', action: 'Dựa trên vụ việc này, hãy soạn dự thảo đơn khởi kiện mẫu' },
+          { label: 'Trích dẫn điều luật', action: 'Dựa trên vụ việc này, hãy trích dẫn các điều luật liên quan, đảm bảo tính chính xác' },
+        ].map((item) => (
+          <button
+            key={item.label}
+            onClick={() => onSend(item.action)}
+            disabled={disabled || isStreaming}
+            className="flex-shrink-0 px-4 py-2 bg-surface-container-lowest border border-lex-border rounded-full text-[10px] font-bold uppercase tracking-wider text-lex-lawyer hover:bg-lex-gold/5 hover:border-lex-gold/30 hover:text-lex-gold transition-all duration-300 shadow-sm"
+          >
+            {item.label}
+          </button>
+        ))}
+      </div>
+
+      {/* Input container - Premium Redesign */}
+      <div className="relative flex items-end gap-3 bg-surface-container-lowest/80 backdrop-blur-md border border-lex-border rounded-2xl p-3 shadow-2xl shadow-lex-deep/[0.03] focus-within:border-lex-gold/40 focus-within:shadow-lex-deep/10 transition-all duration-500">
+        <button
+          onClick={onAttachDocument}
+          className="p-3 text-lex-lawyer/40 hover:text-lex-gold hover:bg-lex-gold/5 transition-all rounded-xl"
+          title="Đính kèm tài liệu"
+        >
+          <Paperclip size={22} />
+        </button>
+
         <textarea
           ref={textareaRef}
-          value={input}
-          onChange={handleInputChange}
+          value={content}
+          onChange={(e) => setContent(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          disabled={isStreaming || disabled}
-          className="w-full bg-transparent border-none focus:ring-0 py-4 px-6 pr-24 text-[#1b1c1c] placeholder:text-slate-400 resize-none no-scrollbar font-sans"
+          placeholder="Gửi hợp đồng hoặc mô tả chi tiết vụ việc của bạn..."
+          className="flex-1 bg-transparent border-none focus:ring-0 text-lex-deep text-base py-3 px-2 resize-none max-h-[200px] font-sans placeholder:text-lex-lawyer/30 leading-relaxed font-medium"
           rows={1}
+          disabled={disabled}
         />
 
-        <div className="absolute right-3 bottom-3 flex items-center gap-2">
-          {onAttachDocument && (
-            <button
-              onClick={onAttachDocument}
-              disabled={isStreaming || disabled}
-              className="p-2 text-slate-500 hover:text-[#041627] transition-colors"
-            >
-              <Paperclip size={20} />
-            </button>
+        <button
+          onClick={handleSend}
+          disabled={!content.trim() || disabled || isStreaming}
+          className={cn(
+            "w-14 h-14 flex items-center justify-center rounded-xl transition-all duration-500",
+            content.trim() && !disabled && !isStreaming
+              ? "bg-gradient-to-br from-lex-deep to-lex-midnight text-lex-gold hover:scale-105 active:scale-95 shadow-xl shadow-lex-deep/20"
+              : "bg-surface-container-low text-lex-lawyer/20 cursor-not-allowed"
           )}
-
-          <button
-            onClick={handleSend}
-            disabled={!input.trim() || isStreaming || disabled}
-            className={cn(
-              "bg-[#041627] text-white h-10 w-10 flex items-center justify-center rounded hover:opacity-90 active:scale-95 transition-all disabled:opacity-50",
-              isStreaming && "animate-pulse"
-            )}
-          >
-            {isStreaming ? (
-              <Loader2 size={18} className="animate-spin" />
-            ) : (
-              <Send size={18} className="fill-current" />
-            )}
-          </button>
-        </div>
+        >
+          {isStreaming ? (
+            <Loader2 size={24} className="animate-spin text-lex-gold" />
+          ) : (
+            <Send size={24} />
+          )}
+        </button>
       </div>
     </div>
   );

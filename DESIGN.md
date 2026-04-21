@@ -1,19 +1,20 @@
 # Design System Specification
 
-## 1. Overview & Creative North Star: "The Judicial Monolith"
+## 1. Overview & Creative North Star: "LegalShield AI: The Academic Sanctum"
 
-This design system is built to command the digital space with the same presence as a marble-clad courthouse. Our Creative North Star, **"The Judicial Monolith,"** moves away from the "app-like" clutter of standard SaaS platforms and toward a high-end editorial experience. 
+The design system is built to convey wisdom, heritage, and modern precision. Our Creative North Star, **"The Academic Sanctum,"** creates a space that feels like a prestigious law library or a private judicial chamber—warm, intellectual, and authoritative.
 
-The aesthetic is defined by institutional authority and unwavering precision. We break the "template" look by utilizing intentional asymmetry—large, bold serif headings offset by generous negative space—and a layering system that favors tonal depth over structural lines. Every pixel must feel deliberate, conveying the weight of the law through sophisticated typography and a restricted, prestigious color palette.
+The aesthetic blends **Forest Green** (representing stability and depth) with **Sand/Beige** (representing clarity and ease of reading). We utilize high-contrast serif typography for headings to establish historical trust, paired with a modern, high-performance sans-serif for functional UI. Every interaction must be fluid and layered, favoring tonal shifts and elevation over harsh borders.
 
-## 2. Colors: Tonal Authority
+## 2. Colors: The Organic Authority
 
-The palette is anchored in Deep Navy and Charcoal, punctuated by a signature Bronze that signifies prestige and successful outcomes.
+The palette is rooted in the natural tones of fine paper and dense forests, creating a "dịu mắt" (eye-pleasing) experience that sustains long periods of reading.
 
 ### Palette Strategy
-- **Primary (#041627):** The foundation of the system. Used for high-level navigation and primary interactive states.
-- **Surface & Containers:** We utilize the `surface_container` tokens (Lowest to Highest) to create a sense of architectural nesting.
-- **Tertiary (Bronze/Gold):** The `tertiary` (#1F1300) and `tertiary_fixed_dim` (#E9C176) are reserved for "Moments of Success," high-value CTAs, or professional milestones. Use these sparingly to maintain their impact.
+- **Background (#F5F2ED - Sand):** The primary surface. Provides a warm, low-strain backdrop for dense legal text.
+- **Deep Tone (#1E3A34 - Forest Green):** Used for navigation, high-authority backgrounds, and primary text.
+- **Accent (#D4A056 - Amber Gold):** Reserved for "Moments of Insight," high-value CTAs, and active status indicators.
+- **Text (On-Surface):** Use Deep Forest Green at various opacities for text on Sand, ensuring high readability without the harshness of pure black.
 
 ### The "No-Line" Rule
 To achieve a premium editorial feel, **1px solid borders are prohibited for sectioning.** Boundaries must be defined solely through background color shifts. For example, a `surface_container_low` sidebar should sit directly against a `surface` main content area. The distinction is felt through the color transition, not a "drawn" line.
@@ -21,12 +22,12 @@ To achieve a premium editorial feel, **1px solid borders are prohibited for sect
 ### Glass & Gradient Transitions
 For primary CTAs and Hero sections, use subtle linear gradients transitioning from `primary` to `primary_container`. This adds a "visual soul"—a slight metallic sheen—that prevents the UI from feeling flat or generic. For floating elements (like persistent navigation), apply a backdrop-blur (12px-20px) using a semi-transparent `surface` color to create a "frosted glass" effect.
 
-## 3. Typography: The Tension of Tradition and Tech
+## 3. Typography: The Legal Archive
 
-The system creates a "dialogue" between two distinct typefaces to convey a brand that is both historically grounded and technologically advanced.
+We use high-contrast typography to separate "Authority" from "Efficiency."
 
-- **Display & Headlines (Newsreader):** This sophisticated Serif is our "Voice of Authority." It should be used for large titles and editorial headers. The high contrast of the letterforms suggests the tradition of legal briefs and historical ledgers.
-- **UI & Body (Inter):** This clean Sans-serif is our "Voice of Precision." Used for all functional UI elements, body copy, and labels. It ensures maximum readability and a modern, efficient feel for data-heavy tasks.
+- **Headings & Titles (Newsreader/Serif):** The **Newsreader** serif (Google Fonts) is our voice of record. It carries the weight of legal history.
+- **UI & Functional Text (Inter/Sans-serif):** **Inter** ensures maximum legibility for data, menu items, and chat bubbles.
 
 **Typography Hierarchy:**
 - **Display-LG (3.5rem):** Reserved for hero titles.

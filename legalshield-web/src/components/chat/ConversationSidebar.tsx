@@ -1,259 +1,236 @@
-import { useState, memo } from 'react';
+import { useCallback, memo } from 'react';
+import { Plus, MessageSquare, Star, Trash2, Folder, Search } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  Plus,
-  Search,
-  Star,
-  Trash2,
-  MoreVertical,
-  MessageSquare,
-  Clock,
-  Edit2,
-} from 'lucide-react';
-import {
-  DropdownMenu,
-  DropdownMenuTrigger,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuSeparator,
-} from '../ui/DropdownMenu';
-import { clsx, type ClassValue } from 'clsx';
-import { formatDistanceToNow } from '../../lib/date-utils';
+import { useConversation } from '../../hooks/useConversation';
+import { Typography } from '../ui/Typography';
+import { Button } from '../ui/Button';
+import { clsx } from 'clsx';
 import type { Conversation } from '../../store/conversationStore';
-import { Dialog } from '../ui/Dialog';
 
-function cn(...inputs: ClassValue[]) {
-  return clsx(inputs);
+interface ConversationItemProps {
+    conv: Conversation;
+    isSelected: boolean;
+    onSelect: (conv: Conversation) => void;
+    onDelete: (id: string) => void;
+    formatDate: (date: string) => string;
 }
+
+const ConversationItem = memo(({ conv, isSelected, onSelect, onDelete, formatDate }: ConversationItemProps) => {
+    const isTemp = conv.id.startsWith('temp-');
+
+    // Simple status resolver based on existing fields or counts
+    const getStatus = () => {
+        if (isTemp) return { label: 'Đang tạo', color: 'text-amber-600 bg-amber-50 border-amber-100' };
+        if (conv.metadata?.status === 'processing') return { label: 'Đang xử lý', color: 'text-emerald-600 bg-emerald-50 border-emerald-100' };
+        if (conv.message_count > 10) return { label: 'Hoàn thành', color: 'text-lex-lawyer bg-lex-lawyer/5 border-lex-border' };
+        return { label: 'Cần cung cấp', color: 'text-lex-gold bg-lex-gold/5 border-lex-gold/20' };
+    };
+
+    const status = getStatus();
+
+    return (
+        <motion.div
+            initial={{ opacity: 0, x: -10 }}
+            animate={{ opacity: 1, x: 0 }}
+            onClick={() => !isTemp && onSelect(conv)}
+            className={clsx(
+                "group relative p-5 rounded-[1.5rem] cursor-pointer transition-all duration-500 mb-2 border",
+                isSelected
+                    ? "bg-surface-container-lowest shadow-2xl shadow-lex-deep/5 border-lex-border z-10 scale-[1.01]"
+                    : "hover:bg-surface-container-lowest/80 text-lex-lawyer border-transparent",
+                isTemp && "opacity-60 cursor-wait pointer-events-none"
+            )}
+        >
+            {/* Selected Indicator Bar */}
+            {isSelected && (
+                <div className="absolute left-0 top-6 bottom-6 w-1 space-y-1 bg-lex-gold rounded-r-full transition-all duration-300" />
+            )}
+
+            <div className="flex justify-between items-start mb-2 pl-2">
+                <div className="flex flex-col gap-1.5 flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                        <Typography
+                            variant="body"
+                            className={clsx(
+                                "line-clamp-1 transition-colors text-sm",
+                                isSelected ? "text-lex-deep font-bold" : "text-lex-lawyer font-semibold"
+                            )}
+                        >
+                            {conv.title || 'Cuộc hội thoại mới'}
+                        </Typography>
+                        {isTemp && (
+                            <div className="w-1.5 h-1.5 bg-lex-gold rounded-full animate-pulse" />
+                        )}
+                    </div>
+                    {/* Status Tag */}
+                    <div className={clsx(
+                        "inline-flex items-center text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border self-start transition-all duration-500",
+                        status.color
+                    )}>
+                        {status.label}
+                    </div>
+                </div>
+                {conv.is_starred && (
+                    <Star size={12} className="text-lex-gold fill-lex-gold flex-shrink-0 mt-1" />
+                )}
+            </div>
+
+            <div className="flex items-center gap-2 text-[9px] text-lex-lawyer uppercase tracking-wider opacity-40 pl-2 font-bold mb-2">
+                <span>{isTemp ? 'Mới' : formatDate(conv.updated_at)}</span>
+                <span className="w-0.5 h-0.5 bg-lex-lawyer rounded-full" />
+                <span>{conv.message_count} tin nhắn</span>
+            </div>
+
+            {/* Summary preview */}
+            {conv.summary_level_1 && !isTemp && (
+                <p className="text-[10px] text-lex-lawyer/60 leading-relaxed pl-2 line-clamp-2 font-sans italic">
+                    {conv.summary_level_1}
+                </p>
+            )}
+
+            {!isTemp && (
+                <div className={clsx(
+                    "absolute right-4 top-1/2 -translate-y-1/2 opacity-0 group-hover:opacity-100 flex gap-1 pl-4 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0",
+                    isSelected ? "bg-surface-container-lowest" : "bg-transparent"
+                )}>
+                    <button
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            onDelete(conv.id);
+                        }}
+                        className="p-1.5 text-lex-deep/20 hover:text-red-500 transition-colors"
+                    >
+                        <Trash2 size={16} />
+                    </button>
+                </div>
+            )}
+        </motion.div>
+    );
+});
+
+ConversationItem.displayName = 'ConversationItem';
 
 interface ConversationSidebarProps {
-  conversations: Conversation[];
-  selectedConversation: Conversation | null;
-  filter: 'all' | 'starred' | 'archived';
-  searchQuery: string;
-  isLoading?: boolean;
-  onSelectConversation: (conversation: Conversation) => void;
-  onCreateConversation: () => void;
-  onDeleteConversation: (id: string) => void;
-  onStarConversation: (id: string) => void;
-  onRenameConversation: (id: string, title: string) => void;
-  onSetFilter: (filter: 'all' | 'starred' | 'archived') => void;
-  onSetSearchQuery: (query: string) => void;
-  className?: string;
+    isMobileOpen?: boolean;
+    onClose?: () => void;
 }
 
-export const ConversationSidebar = memo(function ConversationSidebar({
-  conversations,
-  selectedConversation,
-  filter,
-  searchQuery,
-  isLoading,
-  onSelectConversation,
-  onCreateConversation,
-  onDeleteConversation,
-  onStarConversation,
-  onRenameConversation,
-  onSetFilter,
-  onSetSearchQuery,
-  className,
-}: ConversationSidebarProps) {
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editTitle, setEditTitle] = useState('');
-  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
-  const [deleteConversationId, setDeleteConversationId] = useState<string | null>(null);
+export function ConversationSidebar({ isMobileOpen, onClose }: ConversationSidebarProps) {
+    const navigate = useNavigate();
+    const {
+        conversations,
+        selectedConversation,
+        isLoading,
+        createConversation,
+        deleteConversation,
+        searchQuery,
+        setSearchQuery,
+    } = useConversation();
 
-  const handleStartEdit = (conversation: Conversation) => {
-    setEditingId(conversation.id);
-    setEditTitle(conversation.title);
-  };
+    const formatDate = useCallback((dateStr: string) => {
+        try {
+            return new Intl.DateTimeFormat('vi-VN', {
+                day: '2-digit',
+                month: '2-digit',
+                year: '2-digit'
+            }).format(new Date(dateStr));
+        } catch {
+            return '';
+        }
+    }, []);
 
-  const handleSaveEdit = () => {
-    if (editingId && editTitle.trim()) {
-      onRenameConversation(editingId, editTitle.trim());
-    }
-    setEditingId(null);
-    setEditTitle('');
-  };
+    const handleSelect = useCallback((conv: Conversation) => {
+        navigate(`/chat/${conv.id}`);
+    }, [navigate]);
 
-  const handleDelete = (id: string) => {
-    onDeleteConversation(id);
-    setShowDeleteDialog(false);
-    setDeleteConversationId(null);
-  };
-
-  const handleFilterClick = (value: 'all' | 'starred' | 'archived') => {
-    onSetFilter(value);
-  };
-
-  return (
-    <div className={cn('flex flex-col h-full bg-[#f6f3f2] border-r border-[#e4e2e1]', className)}>
-      {/* Header */}
-      <div className="p-6 border-b border-[#e4e2e1] space-y-5">
-        <div className="flex items-center justify-between">
-          <h2 className="font-serif italic text-xl text-[#041627]">Tra cứu gần đây</h2>
-          <button
-            onClick={onCreateConversation}
-            className="h-8 w-8 rounded bg-[#fbcc32] text-[#041627] flex items-center justify-center hover:shadow-md transition-all active:scale-95"
-          >
-            <Plus size={18} strokeWidth={3} />
-          </button>
-        </div>
-
-        {/* Search Input styled like mockup */}
-        <div className="relative group">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-slate-400 group-focus-within:text-[#041627] transition-colors" />
-          <input
-            placeholder="Tìm kiếm nội dung..."
-            value={searchQuery}
-            onChange={(e) => onSetSearchQuery(e.target.value)}
-            className="w-full bg-white border border-[#e4e2e1] rounded h-9 pl-9 pr-3 text-sm focus:outline-none focus:border-[#fbcc32] transition-colors placeholder:text-slate-400"
-          />
-        </div>
-
-        {/* Filter chips style */}
-        <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
-          <button
-            onClick={() => handleFilterClick('all')}
-            className={cn(
-              'whitespace-nowrap px-3 py-1.5 text-xs font-semibold rounded transition-all',
-              filter === 'all'
-                ? 'bg-[#041627] text-white shadow-sm'
-                : 'text-slate-500 hover:text-[#041627] hover:bg-slate-100'
-            )}
-          >
-            Tất cả
-          </button>
-          <button
-            onClick={() => handleFilterClick('starred')}
-            className={cn(
-              'whitespace-nowrap px-3 py-1.5 text-xs font-semibold rounded transition-all',
-              filter === 'starred'
-                ? 'bg-[#041627] text-white shadow-sm'
-                : 'text-slate-500 hover:text-[#041627] hover:bg-slate-100'
-            )}
-          >
-            Ghim
-          </button>
-          <button
-            onClick={() => handleFilterClick('archived')}
-            className={cn(
-              'whitespace-nowrap px-3 py-1.5 text-xs font-semibold rounded transition-all',
-              filter === 'archived'
-                ? 'bg-[#041627] text-white shadow-sm'
-                : 'text-slate-500 hover:text-[#041627] hover:bg-slate-100'
-            )}
-          >
-            Lưu trữ
-          </button>
-        </div>
-      </div>
-
-      {/* Conversation list */}
-      <div className="flex-1 min-h-0 overflow-y-auto px-3 py-4 space-y-1 custom-scrollbar">
-        {isLoading ? (
-          <div className="space-y-2">
-            {[...Array(5)].map((_, i) => (
-              <div key={i} className="h-14 bg-slate-200/50 rounded animate-pulse" />
-            ))}
-          </div>
-        ) : conversations.length === 0 ? (
-          <div className="py-20 text-center opacity-40">
-            <MessageSquare size={32} className="mx-auto mb-2" />
-            <p className="text-xs uppercase tracking-widest font-bold">Trống</p>
-          </div>
-        ) : (
-          <AnimatePresence mode="popLayout">
-            {conversations.map((conversation) => (
-              <motion.div
-                key={conversation.id}
-                initial={{ opacity: 0 }}
-                animate={{ opacity: 1 }}
-                onClick={() => onSelectConversation(conversation)}
-                className={cn(
-                  'group relative p-3 rounded cursor-pointer transition-all border-l-2',
-                  selectedConversation?.id === conversation.id
-                    ? 'bg-white border-[#fbcc32] shadow-sm'
-                    : 'border-transparent hover:bg-white/60 hover:border-slate-300'
+    return (
+        <>
+            {/* Mobile Backdrop */}
+            <AnimatePresence>
+                {isMobileOpen && (
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        exit={{ opacity: 0 }}
+                        onClick={onClose}
+                        className="fixed inset-0 bg-lex-deep/40 backdrop-blur-sm z-[60] lg:hidden"
+                    />
                 )}
-              >
-                <div className="flex items-start justify-between gap-2">
-                  {editingId === conversation.id ? (
-                    <div className="flex-1 flex items-center gap-1">
-                      <input
-                        value={editTitle}
-                        onChange={(e) => setEditTitle(e.target.value)}
-                        className="w-full bg-white border border-[#fbcc32] rounded h-6 px-2 text-xs focus:outline-none"
-                        autoFocus
-                        onBlur={handleSaveEdit}
-                        onKeyDown={(e) => e.key === 'Enter' && handleSaveEdit()}
-                        onClick={(e) => e.stopPropagation()}
-                      />
+            </AnimatePresence>
+
+            <div className={clsx(
+                "fixed inset-y-0 left-0 z-[70] lg:relative lg:z-0 transform transition-transform duration-500 ease-soft-spring lg:translate-x-0 w-[280px] sm:w-85 h-full flex flex-col bg-muted/30 border-r border-lex-border",
+                isMobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:flex"
+            )}>
+                {/* Header */}
+                <div className="p-8 space-y-8">
+                    <div className="flex items-center justify-between">
+                        <Typography variant="h3" className="font-serif italic text-lex-deep text-2xl tracking-tight">
+                            Archive
+                        </Typography>
+                        <Folder size={18} className="text-lex-gold/60" />
                     </div>
-                  ) : (
-                    <>
-                      <h3 className={cn(
-                        "text-sm line-clamp-1 flex-1 font-medium italic transition-colors",
-                        selectedConversation?.id === conversation.id ? "text-[#041627]" : "text-slate-600"
-                      )}>
-                        {conversation.title}
-                      </h3>
-
-                      <div className="flex items-center opacity-0 group-hover:opacity-100 transition-opacity">
-                        <DropdownMenu>
-                          <DropdownMenuTrigger asChild>
-                            <button
-                              className="p-1 text-slate-400 hover:text-[#041627]"
-                              onClick={(e) => e.stopPropagation()}
-                            >
-                              <MoreVertical size={14} />
-                            </button>
-                          </DropdownMenuTrigger>
-                          <DropdownMenuContent align="end" className="bg-white border-[#e4e2e1] shadow-xl">
-                            <DropdownMenuItem onClick={(e: any) => { e.stopPropagation(); handleStartEdit(conversation); }}>
-                              <Edit2 size={14} className="mr-2" /> Đổi tên
-                            </DropdownMenuItem>
-                            <DropdownMenuItem onClick={(e: any) => { e.stopPropagation(); onStarConversation(conversation.id); }}>
-                              <Star size={14} className={cn("mr-2", conversation.is_starred && "fill-[#fbcc32] text-[#fbcc32]")} />
-                              {conversation.is_starred ? 'Bỏ ghim' : 'Ghim'}
-                            </DropdownMenuItem>
-                            <DropdownMenuSeparator />
-                            <DropdownMenuItem
-                              className="text-red-600 focus:text-red-700"
-                              onClick={() => { setDeleteConversationId(conversation.id); setShowDeleteDialog(true); }}
-                            >
-                              <Trash2 size={14} className="mr-2" /> Xóa
-                            </DropdownMenuItem>
-                          </DropdownMenuContent>
-                        </DropdownMenu>
-                      </div>
-                    </>
-                  )}
+                    <Button
+                        onClick={() => createConversation()}
+                        className="w-full justify-start gap-4 bg-gradient-to-br from-lex-deep to-lex-midnight text-lex-ivory hover:scale-[1.02] active:scale-[0.98] transition-all duration-500 shadow-2xl shadow-lex-deep/20 rounded-2xl py-7 group border border-lex-midnight/50"
+                    >
+                        <div className="bg-lex-gold/10 p-2 rounded-xl group-hover:bg-lex-gold/20 transition-colors duration-500">
+                            <Plus size={20} className="text-lex-gold group-hover:rotate-90 transition-transform duration-500" />
+                        </div>
+                        <span className="font-bold uppercase tracking-[0.2em] text-[11px]">Tư vấn mới</span>
+                    </Button>
                 </div>
 
-                <div className="flex items-center gap-2 mt-1 text-[10px] text-slate-400 uppercase font-bold tracking-tighter">
-                  <Clock size={10} />
-                  <span>{formatDistanceToNow(new Date(conversation.updated_at))}</span>
-                  <span>·</span>
-                  <span>{conversation.message_count} tin</span>
-                  {conversation.is_starred && <Star size={10} className="fill-[#fbcc32] text-[#fbcc32]" />}
+                {/* Search */}
+                <div className="px-8 mb-6">
+                    <div className="relative group">
+                        <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-lex-lawyer/40 group-focus-within:text-lex-gold transition-colors" />
+                        <input
+                            type="text"
+                            placeholder="Tìm kiếm trong kho..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            className="w-full bg-surface-bright/50 border border-lex-border rounded-xl py-3 pl-11 pr-4 text-xs focus:ring-1 focus:ring-lex-gold transition-all placeholder:text-lex-lawyer/30 font-medium"
+                        />
+                    </div>
                 </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        )}
-      </div>
 
-      {/* Delete confirmation dialog */}
-      <Dialog
-        isOpen={showDeleteDialog}
-        onClose={() => setShowDeleteDialog(false)}
-        onConfirm={() => deleteConversationId && handleDelete(deleteConversationId)}
-        title="Xác nhận xóa"
-        description="Bạn có chắc chắn muốn xóa cuộc trò chuyện này? Hành động này không thể hoàn tác."
-        variant="danger"
-        confirmText="Xóa"
-        cancelText="Hủy"
-      />
-    </div>
-  );
-});
+                {/* List */}
+                <div className="flex-1 overflow-y-auto px-4 pb-8 custom-scrollbar">
+                    {isLoading && conversations.length === 0 ? (
+                        <div className="p-4 space-y-4">
+                            {[1, 2, 3, 4].map((i) => (
+                                <div key={i} className="h-20 bg-lex-lawyer/5 animate-pulse rounded-xl" />
+                            ))}
+                        </div>
+                    ) : conversations.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-20 text-center px-8 opacity-20">
+                            <MessageSquare className="w-10 h-10 text-lex-lawyer mb-4" />
+                            <p className="text-[10px] text-lex-lawyer uppercase tracking-widest font-bold">Chưa có lịch sử</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-1">
+                            {conversations.map((conv) => (
+                                <ConversationItem
+                                    key={conv.id}
+                                    conv={conv}
+                                    isSelected={selectedConversation?.id === conv.id}
+                                    onSelect={handleSelect}
+                                    onDelete={deleteConversation}
+                                    formatDate={formatDate}
+                                />
+                            ))}
+                        </div>
+                    )}
+                </div>
+
+                {/* Footer */}
+                <div className="p-6 border-t border-lex-border flex items-center justify-between text-[10px] text-lex-lawyer uppercase tracking-[0.3em] font-bold opacity-30 italic">
+                    <span>Institutional Suite</span>
+                    <span className="text-lex-gold">●</span>
+                </div>
+            </div>
+        </>
+    );
+}
