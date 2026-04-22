@@ -30,25 +30,6 @@ Công cụ tìm kiếm hợp nhất giúp truy xuất các điều luật gốc 
 
 ### 3. Trợ lý Văn bản Tích hợp (`Integrated Document Assistant`)
 Chỉnh sửa và soạn thảo văn bản với sự hỗ trợ của trợ lý tham chiếu pháp lý hiển thị song song, gợi ý cải thiện dựa trên các tiêu chuẩn quy chuẩn.
-
----
-
-## 🎨 Minh họa Giao diện (Showcase)
-
-````carousel
-### Trải nghiệm Chuyên nghiệp
-Thiết kế hiện đại, tinh tế, tập trung vào tính "Chủ quyền Số" và sự tin cậy.
-![Landing](file:///home/aiozlong/.gemini/antigravity/brain/aca93391-acfa-409b-b255-fdd9348a974d/rebranded_landing_verification.png)
-<!-- slide -->
-### Bảng điều khiển Quản trị
-Hệ thống giám sát phân tích rủi ro và trạng thái quy chuẩn theo thời gian thực.
-![Dashboard](file:///home/aiozlong/.gemini/antigravity/brain/aca93391-acfa-409b-b255-fdd9348a974d/dashboard_mobile_view_1776828029131.png)
-<!-- slide -->
-### Giao diện Tra cứu Minh bạch
-Tối ưu cho di động với hệ thống trích dẫn nguồn rõ ràng và các cảnh báo pháp lý xuyên suốt.
-![Chat](file:///home/aiozlong/.gemini/antigravity/brain/aca93391-acfa-409b-b255-fdd9348a974d/chat_mobile_view_1776828041231.png)
-````
-
 ---
 
 ## 🛠 Công nghệ Sử dụng
