@@ -11,7 +11,7 @@ interface LegalDisclaimerProps {
 export const LegalDisclaimer: React.FC<LegalDisclaimerProps> = ({
     variant = 'inline',
     className,
-    message = "Thông tin chỉ mang tính chất tham khảo. Vui lòng đối chiếu với văn bản gốc hoặc liên hệ chuyên gia pháp lý."
+    message = "Thông tin do AI tổng hợp, chỉ mang tính chất tham khảo. Không có giá trị pháp lý và không thay thế tư vấn từ luật sư có chứng chỉ hành nghề theo Luật Luật sư Việt Nam."
 }) => {
     if (variant === 'banner') {
         return (

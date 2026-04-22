@@ -209,7 +209,7 @@ export function Dashboard() {
                         label="Cảnh báo"
                         value={stats.risks.toLocaleString()}
                         sub="Rủi ro cần can thiệp"
-                        variant="dark"
+                        variant="alert"
                         delay={0.3}
                     />
                 </section>
@@ -355,7 +355,7 @@ export function Dashboard() {
     )
 }
 
-function StatCard({ icon, label, value, sub, variant = 'default', delay = 0 }: { icon: React.ReactNode, label: string, value: string, sub: string, variant?: 'default' | 'dark', delay?: number }) {
+function StatCard({ icon, label, value, sub, variant = 'default', delay = 0 }: { icon: React.ReactNode, label: string, value: string, sub: string, variant?: 'default' | 'dark' | 'alert', delay?: number }) {
     return (
         <motion.div
             initial={{ opacity: 0, y: 30 }}
@@ -365,13 +365,19 @@ function StatCard({ icon, label, value, sub, variant = 'default', delay = 0 }: {
                 "p-6 md:p-10 rounded-[1.5rem] md:rounded-[2.5rem] flex flex-col justify-between h-44 md:h-64 transition-all duration-700 shadow-[0_8px_30px_rgb(0,0,0,0.02)] group border",
                 variant === 'dark'
                     ? "bg-lex-deep text-white shadow-lex-deep/20 border-lex-midnight"
-                    : "bg-white text-lex-deep subtle-elevation hover:-translate-y-2"
+                    : variant === 'alert'
+                        ? "bg-[#1C1A16] text-white shadow-amber-950/30 border-amber-900/30"
+                        : "bg-white text-lex-deep subtle-elevation hover:-translate-y-2"
             )}
         >
             <div className="flex justify-between items-start">
                 <div className={cn(
                     "p-3 md:p-4 rounded-xl md:rounded-2xl transition-all duration-500",
-                    variant === 'dark' ? "bg-lex-midnight text-lex-gold" : "bg-surface text-lex-gold group-hover:bg-lex-gold group-hover:text-white"
+                    variant === 'dark'
+                        ? "bg-lex-midnight text-lex-gold"
+                        : variant === 'alert'
+                            ? "bg-amber-900/30 text-amber-400"
+                            : "bg-surface text-lex-gold group-hover:bg-lex-gold group-hover:text-white"
                 )}>
                     {/* Scale down icon on mobile */}
                     <div className="scale-75 md:scale-100">
@@ -380,7 +386,11 @@ function StatCard({ icon, label, value, sub, variant = 'default', delay = 0 }: {
                 </div>
                 <span className={cn(
                     "text-[8px] md:text-[10px] font-sans uppercase tracking-[0.4em] font-bold",
-                    variant === 'dark' ? "text-lex-gold" : "text-lex-lawyer/40"
+                    variant === 'dark'
+                        ? "text-lex-gold"
+                        : variant === 'alert'
+                            ? "text-amber-500/70"
+                            : "text-lex-lawyer/40"
                 )}>
                     {label}
                 </span>
@@ -389,7 +399,11 @@ function StatCard({ icon, label, value, sub, variant = 'default', delay = 0 }: {
                 <h3 className="text-3xl md:text-6xl font-serif font-bold tracking-tighter mb-1 md:mb-2">{value}</h3>
                 <p className={cn(
                     "text-[8px] md:text-[10px] font-bold uppercase tracking-[0.2em]",
-                    variant === 'dark' ? "text-lex-ivory/40" : "text-lex-lawyer/50"
+                    variant === 'dark'
+                        ? "text-lex-ivory/40"
+                        : variant === 'alert'
+                            ? "text-amber-500/40"
+                            : "text-lex-lawyer/50"
                 )}>{sub}</p>
             </div>
         </motion.div>

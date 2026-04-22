@@ -9,9 +9,9 @@ import { useUIStore } from '../../store'
 
 const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
-    { to: '/analysis', icon: FileSearch, label: 'Phân tích HĐ' },
+    { to: '/analysis', icon: FileSearch, label: 'Rà soát Rủi ro' },
     { to: '/chat', icon: MessageSquare, label: 'Tra cứu' },
-    { to: '/editor', icon: FilePen, label: 'Soạn thảo' },
+    { to: '/editor', icon: FilePen, label: 'Soạn thảo Nháp' },
 ]
 
 export function Sidebar() {

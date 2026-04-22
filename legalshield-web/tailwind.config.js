@@ -13,12 +13,12 @@ export default {
                 background: "var(--background)",
                 foreground: "var(--foreground)",
                 lex: {
-                    deep: '#0B1C1A',        // Forest Night (True Dark Green)
-                    midnight: '#050D0C',    // Deeper Forest
+                    deep: '#1a3125ff',        // Rich Forest Green (warmer, calming)
+                    midnight: '#12241bff',    // Deeper Forest
                     ivory: '#FDFCF8',       // Bright Ivory
                     gold: '#C5A059',        // Muted Gold
-                    lawyer: '#4A5D5B',      // Professional Gray
-                    border: 'rgba(11, 28, 26, 0.08)',
+                    lawyer: '#4A6B5B',      // Professional Teal Gray
+                    border: 'rgba(27, 77, 62, 0.08)',
                 },
                 surface: {
                     DEFAULT: '#F4F0E6',     // Warm Parchment (Page BG)
