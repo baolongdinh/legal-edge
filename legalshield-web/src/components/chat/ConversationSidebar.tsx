@@ -1,5 +1,5 @@
 import { useCallback, memo } from 'react';
-import { Plus, MessageSquare, Star, Trash2, Folder, Search, Info } from 'lucide-react';
+import { Plus, MessageSquare, Star, Trash2, Folder, Search } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LegalDisclaimer } from './LegalDisclaimer';
