@@ -1,9 +1,10 @@
-import { Link, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { motion } from 'framer-motion'
-import { Check, Scale, Shield, Zap, Sparkles } from 'lucide-react'
+import { Check, Shield, Zap, Sparkles } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Typography } from '../components/ui/Typography'
 import { usePayment } from '../store'
+import { PublicNavbar } from '../components/layout/PublicNavbar'
 
 const plans = [
     {
@@ -62,27 +63,12 @@ export function Pricing() {
     }
 
     return (
-        <div className="min-h-screen bg-surface font-sans selection:bg-primary/10 relative overflow-hidden">
+        <div className="min-h-screen bg-surface font-sans selection:bg-primary/10 relative overflow-hidden pb-[env(safe-area-inset-bottom)]">
             {/* Background elements */}
             <div className="absolute inset-x-0 top-0 h-[600px] bg-gradient-to-b from-primary/5 via-transparent to-transparent pointer-events-none" />
             <div className="absolute inset-0 bg-grid-slate-900/[0.02] pointer-events-none" />
 
-            {/* Nav */}
-            <motion.nav
-                initial={{ opacity: 0, y: -10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex justify-between items-center px-8 md:px-16 py-8 border-b border-lex-border/40 bg-surface/80 backdrop-blur-md sticky top-0 z-50"
-            >
-                <Link to="/" className="flex items-center gap-3 group">
-                    <div className="w-10 h-10 rounded-xl bg-primary/10 flex items-center justify-center border border-primary/20 group-hover:border-primary/40 transition-colors">
-                        <Scale className="text-primary" size={20} />
-                    </div>
-                    <span className="font-serif font-bold text-primary text-xl tracking-tight">LegalShield</span>
-                </Link>
-                <Link to="/dashboard">
-                    <Button size="sm" variant="ghost" className="text-[10px] uppercase tracking-[0.2em] font-bold text-primary/70 hover:text-primary">Vào ứng dụng</Button>
-                </Link>
-            </motion.nav>
+            <PublicNavbar />
 
             {/* Header */}
             <div className="relative max-w-5xl mx-auto text-center px-8 py-32">

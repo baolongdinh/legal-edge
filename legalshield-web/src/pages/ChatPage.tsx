@@ -157,19 +157,15 @@ export function ChatPage() {
       />
 
       <div className="flex-1 flex flex-col min-w-0 bg-transparent relative">
-        {/* Mobile Header Toggle */}
-        <div className="lg:hidden flex items-center h-14 px-4 border-b border-lex-border bg-white/80 backdrop-blur-md z-50">
+        {/* Mobile History Toggle */}
+        <div className="lg:hidden shrink-0 flex items-center justify-end px-4 py-2">
           <button
             onClick={() => setIsMobileSidebarOpen(true)}
-            className="p-2 -ml-1 text-lex-lawyer hover:text-lex-deep transition-colors"
-            aria-label="Mở menu"
+            className="flex items-center gap-2 px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest text-lex-deep bg-surface-bright border border-lex-border rounded-full shadow-sm hover:bg-surface-container transition-colors"
           >
-            <Menu size={20} />
+            <Menu size={12} />
+            Lịch sử tra cứu
           </button>
-          <div className="ml-3 flex flex-col">
-            <span className="text-xs font-serif italic text-lex-deep font-bold leading-tight">LegalShield</span>
-            <span className="text-[7px] uppercase tracking-[0.3em] text-lex-lawyer font-black opacity-30 leading-tight text-nowrap">Search Engine</span>
-          </div>
         </div>
         <div className="flex-1 overflow-hidden relative">
           <div className="max-w-[800px] mx-auto h-full">
