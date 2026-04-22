@@ -441,13 +441,13 @@ function RiskPanel() {
                 </div>
                 <div className="w-full max-w-sm space-y-6">
                     <Button
-                        variant="primary"
-                        className="w-full h-16 bg-primary text-on-primary font-bold text-lg rounded-2xl shadow-lg hover:shadow-primary/20 transition-all group"
+                        variant="gold"
+                        className="w-full h-14 bg-gradient-to-br from-lex-gold via-lex-gold/90 to-lex-gold/80 text-lex-midnight font-black text-base md:text-lg rounded-2xl md:rounded-3xl shadow-xl shadow-lex-gold/10 hover:shadow-lex-gold/20 hover:scale-[1.02] transition-all group border-0"
                         onClick={handleDeepAudit}
                         disabled={isAnalyzing}
                     >
-                        {isAnalyzing ? <Loader2 className="animate-spin mr-3" /> : <Zap className="mr-3 group-hover:scale-110 transition-transform" size={20} />}
-                        Kích hoạt Deep Audit
+                        {isAnalyzing ? <Loader2 className="animate-spin mr-3" /> : <Zap className="mr-3 group-hover:scale-110 transition-transform fill-lex-midnight" size={20} />}
+                        KÍCH HOẠT DEEP AUDIT
                     </Button>
 
                     <div className="relative">
@@ -472,7 +472,7 @@ function RiskPanel() {
                 </div>
                 <div className="flex items-center gap-2.5 text-[10px] text-on-surface-variant/30 uppercase tracking-[0.25em] font-bold">
                     <Info size={12} className="text-primary/40" />
-                    <span>Llama-3-70B Quantum Architecture</span>
+                    <span>Gemini 2.5 Flash Lite Architecture</span>
                 </div>
             </motion.div>
         )

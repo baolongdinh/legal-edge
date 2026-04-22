@@ -206,9 +206,7 @@ export function ChatPage() {
           )}
         </div>
 
-
-
-        <div className="px-4 md:px-10 pb-4 md:pb-10">
+        <div className="px-3 md:px-10 pb-3 md:pb-10">
           <div className="max-w-[800px] mx-auto w-full">
             <div className="bg-white/95 backdrop-blur-xl p-3 md:p-6 rounded-2xl md:rounded-[2.5rem] border border-lex-border shadow-2xl shadow-lex-deep/5 transition-all hover:shadow-lex-deep/10">
               <input
@@ -230,7 +228,9 @@ export function ChatPage() {
                 disabled={isChatStreaming}
               />
             </div>
-            <LegalDisclaimer variant="banner" className="mt-3" />
+            <div className="hidden lg:block">
+              <LegalDisclaimer variant="banner" className="mt-3" />
+            </div>
           </div>
         </div>
       </div>

@@ -86,9 +86,9 @@ export const MessageItem = memo(({
       )}
     >
       <div className={cn(
-        'p-3 md:p-6 transition-all duration-500 rounded-xl md:rounded-[2rem] border relative overflow-hidden',
+        'p-3 md:p-6 transition-all duration-500 rounded-xl md:rounded-[2.5rem] border relative overflow-hidden',
         isUser
-          ? 'max-w-[70%] md:max-w-[60%] bg-lex-deep text-lex-ivory font-medium border-lex-midnight shadow-2xl shadow-lex-deep/10'
+          ? 'max-w-[90%] md:max-w-[65%] bg-lex-deep text-lex-ivory font-medium border-lex-midnight shadow-2xl shadow-lex-deep/10'
           : 'max-w-full bg-white border-lex-border text-lex-deep shadow-2xl shadow-lex-deep/[0.02] hover:shadow-lex-deep/[0.05] hover:border-lex-gold/20'
       )}>
         {/* Quick Action Overlay (Assistant only) */}
@@ -112,13 +112,13 @@ export const MessageItem = memo(({
 
         {/* Assistant Branding Section */}
         {isAssistant && (
-          <div className="flex items-center gap-3 md:gap-4 mb-6 pb-6 md:mb-12 md:pb-10 border-b border-lex-border/60">
-            <div className="w-10 h-10 md:w-14 md:h-14 bg-lex-deep rounded-xl md:rounded-2xl flex items-center justify-center shadow-2xl shadow-lex-deep/20 border border-lex-midnight transform rotate-3 hover:rotate-0 transition-transform">
-              <Scale size={20} className="text-lex-gold md:hidden" />
+          <div className="flex items-center gap-3 md:gap-4 mb-4 pb-4 md:mb-12 md:pb-10 border-b border-lex-border/60">
+            <div className="w-9 h-9 md:w-14 md:h-14 bg-lex-deep rounded-lg md:rounded-2xl flex items-center justify-center shadow-2xl shadow-lex-deep/20 border border-lex-midnight transform rotate-3 hover:rotate-0 transition-transform">
+              <Scale size={18} className="text-lex-gold md:hidden" />
               <Scale size={28} className="text-lex-gold hidden md:block" />
             </div>
             <div>
-              <h3 className="font-serif font-bold text-lex-deep leading-tight text-lg md:text-2xl tracking-tight">Trợ lý Tra cứu Pháp lý</h3>
+              <h3 className="font-serif font-bold text-lex-deep leading-tight text-base md:text-2xl tracking-tight">Trợ lý Tra cứu Pháp lý</h3>
               <div className="flex flex-wrap items-center gap-2 md:gap-3 mt-1.5 md:mt-3">
                 <div className="w-1.5 h-1.5 md:w-2 md:h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(34,197,94,0.8)]"></div>
                 <span className="text-[8px] md:text-[10px] uppercase tracking-[0.3em] md:tracking-[0.5em] font-black text-green-600 opacity-80">
@@ -163,7 +163,9 @@ export const MessageItem = memo(({
           )}
 
           {isAssistant && (
-            <LegalDisclaimer variant="inline" className="mt-6 pt-4 border-t border-lex-border/40" />
+            <div className="hidden lg:block">
+              <LegalDisclaimer variant="inline" className="mt-6 pt-4 border-t border-lex-border/40" />
+            </div>
           )}
 
           {/* Image Attachments */}
