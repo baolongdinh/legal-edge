@@ -1,71 +1,71 @@
-# 🚀 LegalShield - AI-Powered Regulatory Search Engine
+# 🚀 LegalShield - Công cụ Tra cứu & Đối soát Quy chuẩn AI
 
-LegalShield is a specialized AI platform designed for high-precision **Legal & Regulatory Research**. It transitions from a simple "chat" interface to a robust "Search & Reference" engine, empowering users to verify information against authoritative legal sources in real-time.
+LegalShield là một nền tảng AI chuyên dụng phục vụ việc **Nghiên cứu Pháp lý & Quy chuẩn** với độ chính xác cao. Hệ thống chuyển đổi từ giao diện "chat" thông thường thành một công cụ **Search & Reference** (Tra cứu & Tham chiếu) mạnh mẽ, giúp người dùng xác thực thông tin trực tiếp từ các nguồn văn bản pháp luật chính thống.
 
 <img width="1921" height="961" alt="image" src="https://github.com/user-attachments/assets/2bbf548a-f95e-43d6-b5c1-b4301a999d00" />
 
-### Try now: https://legalshield-sandy.vercel.app
+### 🌐 Trải nghiệm ngay: [https://legalshield-sandy.vercel.app](https://legalshield-sandy.vercel.app)
 
 ---
 
-## ⚖️ The Problem & Our Mission
+## ⚖️ Bối cảnh & Sứ mệnh
 
-### The Challenge
-Navigating the complex landscape of Vietnamese law and regulations is often slow, prone to human error, and expensive. General-purpose AI models frequently hallucinate legal "advice" or quote non-existent articles, creating significant legal liabilities for businesses.
+### Thách thức
+Việc tìm kiếm và đối soát các quy định pháp luật Việt Nam thường tốn nhiều thời gian, dễ sai sót và chi phí cao. Các mô hình AI thông thường thường xuyên gặp hiện tượng "hallucination" (ảo tưởng), tự đưa ra các "lời khuyên" pháp lý không căn cứ hoặc trích dẫn các điều luật không tồn tại, gây ra rủi ro pháp lý lớn cho doanh nghiệp.
 
-### Our Solution
-LegalShield acts as a **Digital Sovereignty Archive**. We combine **Deep RAG (Retrieval-Augmented Generation)** with verified legal databases to provide a tool that doesn't just "chat," but "finds and verifies." 
+### Giải pháp của chúng tôi
+LegalShield đóng vai trò là một **Kho lưu trữ Chủ quyền Số**. Chúng tôi kết hợp công nghệ **Deep RAG (Retrieval-Augmented Generation)** với các cơ sở dữ liệu luật đã được xác thực để cung cấp một công cụ không chỉ dừng lại ở mức "trò chuyện" mà là "tìm kiếm và xác thực".
 
-**Core Mission**: To mitigate legal liability by providing instantly verifiable regulatory evidence.
-
----
-
-## 🌟 Key Workflows
-
-### 1. Regulatory Audit (`Đối soát Quy chuẩn`)
-Automatically scan contracts and documents to detect non-compliance or potential risks against 700+ current regulations.
-
-### 2. Deep Legal Search (`Tra cứu Chuyên sâu`)
-A unified search engine that retrieves primary law articles and real-time web evidence (via Exa), merging them into a single, cited response.
-
-### 3. Integrated Document Assistant (`Trợ lý Văn bản`)
-Edit and draft documents with a side-by-side legal reference assistant that suggests improvements based on regulatory standards.
+**Sứ mệnh cốt lõi**: Giảm thiểu rủi ro pháp lý bằng cách cung cấp các bằng chứng quy chuẩn có thể xác thực tức thì.
 
 ---
 
-## 🎨 Showcase
+## 🌟 Quy trình Nghiệp vụ Chính
+
+### 1. Đối soát Quy chuẩn (`Regulatory Audit`)
+Tự động quét các hợp đồng và tài liệu để phát hiện các rủi ro tiềm ẩn hoặc các điểm không tuân thủ dựa trên hơn 700+ quy định pháp luật hiện hành.
+
+### 2. Tra cứu Chuyên sâu (`Deep Legal Search`)
+Công cụ tìm kiếm hợp nhất giúp truy xuất các điều luật gốc và các bằng chứng thực tế từ web (thông qua Exa), tổng hợp chúng thành một câu trả lời duy nhất có trích dẫn nguồn rõ ràng.
+
+### 3. Trợ lý Văn bản Tích hợp (`Integrated Document Assistant`)
+Chỉnh sửa và soạn thảo văn bản với sự hỗ trợ của trợ lý tham chiếu pháp lý hiển thị song song, gợi ý cải thiện dựa trên các tiêu chuẩn quy chuẩn.
+
+---
+
+## 🎨 Minh họa Giao diện (Showcase)
 
 ````carousel
-### Premium Landing Experience
-Modern, authoritative design focused on "Digital Sovereignty".
+### Trải nghiệm Chuyên nghiệp
+Thiết kế hiện đại, tinh tế, tập trung vào tính "Chủ quyền Số" và sự tin cậy.
 ![Landing](file:///home/aiozlong/.gemini/antigravity/brain/aca93391-acfa-409b-b255-fdd9348a974d/rebranded_landing_verification.png)
 <!-- slide -->
-### High-Density Dashboard
-A professional cockpit for tracking regulatory audits and system status.
+### Bảng điều khiển Quản trị
+Hệ thống giám sát phân tích rủi ro và trạng thái quy chuẩn theo thời gian thực.
 ![Dashboard](file:///home/aiozlong/.gemini/antigravity/brain/aca93391-acfa-409b-b255-fdd9348a974d/dashboard_mobile_view_1776828029131.png)
 <!-- slide -->
-### Verified Search Interface
-Optimized for mobile with clear citations and persistent legal disclaimers.
+### Giao diện Tra cứu Minh bạch
+Tối ưu cho di động với hệ thống trích dẫn nguồn rõ ràng và các cảnh báo pháp lý xuyên suốt.
 ![Chat](file:///home/aiozlong/.gemini/antigravity/brain/aca93391-acfa-409b-b255-fdd9348a974d/chat_mobile_view_1776828041231.png)
 ````
 
 ---
 
-## 🛠 Tech Stack
+## 🛠 Công nghệ Sử dụng
 
 - **Frontend**: React 19, Vite, Tailwind CSS, Zustand.
-- **Intelligence**: Deep RAG (Hybrid Search + Jina Reranker v2).
-- **Compute**: Supabase Edge Functions (Gemini 1.5 Flash & Groq).
-- **Infrastructure**: PostgreSQL + pgvector, Vercel, PWA.
+- **Trí tuệ nhân tạo**: Deep RAG (Hybrid Search + Jina Reranker v2).
+- **Hệ thống xử lý**: Supabase Edge Functions (Gemini 1.5 Flash & Groq).
+- **Hạ tầng**: PostgreSQL + pgvector, Vercel, PWA.
 
 ---
 
-## � Technical Documentation
+## 📖 Tài liệu Kỹ thuật
 
-For installation, environment configuration, and deployment instructions, please see:
+Để biết hướng dẫn cài đặt, cấu hình môi trường và triển khai hệ thống, vui lòng xem tại:
 
 👉 **[SETUP.md](file:///home/aiozlong/DATA/CODE/SELF_PROD/LegalEdge/SETUP.md)**
 
 ---
 
-*LegalShield is a reference utility. Verify all information against official gazettes.*
+*LegalShield là công cụ hỗ trợ tra cứu tham khảo. Vui lòng đối chiếu mọi thông tin với Công báo chính thống.*
