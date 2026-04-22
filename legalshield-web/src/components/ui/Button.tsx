@@ -3,8 +3,8 @@ import { clsx } from 'clsx'
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
     variant?: 'primary' | 'ghost' | 'outline'
-    size?: 'sm' | 'md' | 'lg'
-    children: React.ReactNode
+    size?: 'sm' | 'md' | 'lg' | 'icon'
+    children?: React.ReactNode
     loading?: boolean
 }
 
@@ -18,6 +18,7 @@ const sizes = {
     sm: 'px-3 py-1.5 text-sm rounded',
     md: 'px-5 py-2.5 text-sm rounded-md',
     lg: 'px-7 py-3 text-base rounded-md',
+    icon: 'h-9 w-9 p-0 rounded-md',
 }
 
 export function Button({ variant = 'primary', size = 'md', className, children, loading = false, ...props }: ButtonProps) {

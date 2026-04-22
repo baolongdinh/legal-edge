@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
+import { useLocation } from 'react-router-dom'
 import * as Comlink from 'comlink'
 import { Send, Bot, User, Loader2, Scale, Trash2, Paperclip, X, FileText, Info } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
@@ -8,6 +9,7 @@ import { Typography } from '../components/ui/Typography'
 import { Skeleton } from '../components/ui/Skeleton'
 import { Dialog } from '../components/ui/Dialog'
 import { getAccessToken, invokeEdgeFunction } from '../lib/supabase'
+import { streamingChatApi } from '../lib/conversation-api'
 import { clsx } from 'clsx'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
@@ -128,15 +130,38 @@ function saveMessages(messages: Message[]) {
 // -----------------------------------------------------------
 
 export function ChatAI() {
+    const location = useLocation()
     const [messages, setMessages] = useState<Message[]>(() => loadMessages())
     const [input, setInput] = useState('')
     const [loading, setLoading] = useState(false)
     const [isParsing, setIsParsing] = useState(false)
     const [file, setFile] = useState<File | null>(null)
     const [documentContext, setDocumentContext] = useState<DocumentContextState | null>(null)
+    const [riskReport, setRiskReport] = useState<any>(null) // Consultant context
     const [isClearConfirmOpen, setIsClearConfirmOpen] = useState(false)
     const scrollRef = useRef<HTMLDivElement>(null)
     const fileInputRef = useRef<HTMLInputElement>(null)
+
+    // --- Consultant Mode Initialization ---
+    useEffect(() => {
+        const state = location.state as any
+        if (state?.contractText || state?.riskReport) {
+            setRiskReport(state.riskReport || null)
+
+            if (state.contractText) {
+                setDocumentContext({
+                    text: state.contractText,
+                    summary: summarizeDocument(state.contractText),
+                    hash: state.documentHash || 'consultant-init'
+                })
+            }
+
+            if (state.initialMessage && messages.length <= 1) {
+                // Auto-trigger first message
+                handleSend(undefined, state.initialMessage)
+            }
+        }
+    }, [location.state])
 
     useEffect(() => {
         if (scrollRef.current) {
@@ -259,11 +284,13 @@ export function ChatAI() {
         }
     }
 
-    const handleSend = async (e?: React.FormEvent) => {
+    const handleSend = async (e?: React.FormEvent, overrideInput?: string) => {
         if (e) e.preventDefault()
-        if ((!input.trim() && !file) || loading || isParsing) return
 
-        let userMsg = input.trim()
+        const finalInput = overrideInput || input
+        if ((!finalInput.trim() && !file) || loading || isParsing) return
+
+        let userMsg = finalInput.trim()
         if (!userMsg && file) {
             userMsg = `Hãy phân tích tài liệu "${file.name}" mà tôi vừa tải lên.`
         }
@@ -301,48 +328,42 @@ export function ChatAI() {
                 return { role: m.role, content: "[Đã phản hồi chi tiết]" } as any;
             });
 
-            const payload: {
-                message: string
-                history: Message[]
-                context_summary?: string
-                context_excerpts?: string[]
-                document_context?: string
-                document_hash?: string
-            } = {
-                message: userMsg,
-                history: optimizedHistory
-            }
-            if (documentContext) {
-                payload.context_summary = documentContext.summary
-                payload.context_excerpts = selectRelevantExcerpts(documentContext.text, userMsg)
-                payload.document_hash = documentContext.hash
+            const assistantId = (Date.now() + 1).toString()
+            const initialAssistantMessage: Message = { id: assistantId, role: 'assistant', content: '' }
+            setMessages(prev => [...prev, initialAssistantMessage])
 
-                // --- Optimization: Short Document Context Injection ---
-                // If the document is small (< 5KB), we send the full text for maximum accuracy
-                if (documentContext.text.length < 5000) {
-                    payload.document_context = documentContext.text
+            await streamingChatApi.stream(
+                userMsg,
+                optimizedHistory,
+                undefined, // conversation_id (optional)
+                documentContext ? {
+                    text: documentContext.text,
+                    summary: documentContext.summary,
+                    excerpts: selectRelevantExcerpts(documentContext.text, userMsg),
+                    hash: documentContext.hash,
+                    ...riskReport ? { risk_report: riskReport } : {}
+                } : undefined,
+                (chunk: string) => {
+                    setMessages(prev => prev.map(m =>
+                        m.id === assistantId ? { ...m, content: m.content + chunk } : m
+                    ))
+                },
+                (payload: any) => {
+                    setMessages(prev => prev.map(m =>
+                        m.id === assistantId ? {
+                            ...m,
+                            ...payload,
+                            content: payload.answer || m.content,
+                        } : m
+                    ))
+                    setLoading(false)
+                    clearFile()
+                },
+                (error: string) => {
+                    toast.error(error)
+                    setLoading(false)
                 }
-            }
-
-            const data = await invokeEdgeFunction<any>('legal-chat', {
-                body: payload,
-                headers: {
-                    Authorization: `Bearer ${accessToken}`
-                }
-            })
-
-            const assistantMessage: Message = {
-                id: (Date.now() + 1).toString(),
-                role: 'assistant',
-                content: data.reply || 'Xin lỗi, tôi gặp sự cố khi xử lý yêu cầu.',
-                citations: data.citations || [],
-                verification_status: data.verification_status,
-                verification_summary: data.verification_summary,
-                claim_audit: data.claim_audit || [],
-                abstained: data.abstained
-            }
-            setMessages(prev => [...prev, assistantMessage])
-            clearFile()
+            )
         } catch (err) {
             console.error('Chat error:', err)
             toast.error('Hệ thống đang bận, vui lòng thử lại sau.')
@@ -350,6 +371,26 @@ export function ChatAI() {
             setLoading(false)
         }
     }
+
+    // --- Consultant Mode Initialization ---
+    useEffect(() => {
+        const state = location.state as any
+        if (state?.contractText || state?.riskReport) {
+            setRiskReport(state.riskReport || null)
+
+            if (state.contractText) {
+                setDocumentContext({
+                    text: state.contractText,
+                    summary: summarizeDocument(state.contractText),
+                    hash: state.documentHash || 'consultant-init'
+                })
+            }
+
+            if (state.initialMessage && messages.length <= 1) {
+                handleSend(undefined, state.initialMessage)
+            }
+        }
+    }, [location.state])
 
     const clearChat = () => {
         localStorage.removeItem(CHAT_STORAGE_KEY)

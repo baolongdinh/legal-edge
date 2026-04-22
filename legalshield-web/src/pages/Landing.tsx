@@ -8,7 +8,7 @@ import { Scale, ShieldCheck, BookOpenCheck, Zap, X, ArrowRight, Shield, User, Lo
 import { supabase } from '../lib/supabase'
 
 const features = [
-    { icon: ShieldCheck, title: 'Phân tích rủi ro AI', desc: 'Phát hiện điều khoản bất lợi theo luật VN trong vài giây' },
+    { icon: ShieldCheck, title: 'Phân tích rủi ro AI', desc: 'Phát hiện điều khoản bất lợi theo luật Việt Nam trong vài giây' },
     { icon: BookOpenCheck, title: 'RAG Pháp lý', desc: 'Tham chiếu Luật Thương mại, Bộ luật Dân sự và án lệ thực tế' },
     { icon: Zap, title: 'Soạn thảo thông minh', desc: 'Tạo hợp đồng chuẩn pháp lý từ kho template chuyên nghiệp' },
 ]

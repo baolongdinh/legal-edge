@@ -24,10 +24,101 @@ import {
   summarizeVerification,
   setCachedLegalAnswer,
   validateJSONCitations,
+  jinaRerank, // US3: Use reranker
   RiskClause,
 } from '../shared/types.ts'
 
+/**
+ * Robust JSON cleaner to strip markdown backticks and whitespace.
+ */
+function cleanJSONResponse(text: string): string {
+  return text
+    .replace(/^```json\n?/, '')
+    .replace(/\n?```$/, '')
+    .trim()
+}
+
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
+
+/**
+ * Rule-based risk extraction to reduce Gemini API calls
+ */
+function extractRisksByRules(clauseText: string): Array<{ topic: string, search_query: string }> {
+  const risks: Array<{ topic: string, search_query: string }> = []
+  const text = clauseText.toLowerCase()
+
+  // Penalty clauses
+  if (text.includes('phạt') || text.includes('penal') || text.includes('vi phạm')) {
+    risks.push({
+      topic: 'Phạt vi phạm hợp đồng',
+      search_query: 'quy định phạt vi phạm hợp đồng dân sự Việt Nam'
+    })
+  }
+
+  // Termination clauses
+  if (text.includes('chấm dứt') || text.includes('terminate') || text.includes('hủy bỏ')) {
+    risks.push({
+      topic: 'Chấm dứt hợp đồng',
+      search_query: 'điều kiện chấm dứt hợp đồng theo luật dân sự Việt Nam'
+    })
+  }
+
+  // Payment terms
+  if (text.includes('thanh toán') || text.includes('payment') || text.includes('tiền')) {
+    risks.push({
+      topic: 'Điều kiện thanh toán',
+      search_query: 'nghĩa vụ thanh toán trong hợp đồng dân sự Việt Nam'
+    })
+  }
+
+  // Liability clauses
+  if (text.includes('trách nhiệm') || text.includes('bồi thường') || text.includes('liability')) {
+    risks.push({
+      topic: 'Trách nhiệm bồi thường',
+      search_query: 'trách nhiệm dân sự bồi thường thiệt hại Việt Nam'
+    })
+  }
+
+  // Dispute resolution
+  if (text.includes('giải quyết tranh chấp') || text.includes('tòa án') || text.includes('trọng tài')) {
+    risks.push({
+      topic: 'Giải quyết tranh chấp',
+      search_query: 'thẩm quyền giải quyết tranh chấp hợp đồng Việt Nam'
+    })
+  }
+
+  return risks
+}
+
+/**
+ * Fallback risk patterns when AI extraction fails
+ */
+function getFallbackRiskPatterns(clauseText: string): Array<{ topic: string, search_query: string }> {
+  return [
+    {
+      topic: 'Đánh giá tổng thể rủi ro',
+      search_query: 'các rủi ro phổ biến trong hợp đồng dân sự Việt Nam'
+    }
+  ]
+}
+
+/**
+ * Check if error is quota exceeded
+ */
+function isQuotaExceeded(error: any): boolean {
+  if (!error) return false
+  const message = error.message || error.toString() || ''
+  return message.includes('RESOURCE_EXHAUSTED') ||
+         message.includes('quota exceeded') ||
+         message.includes('Quota exceeded')
+}
+
+/**
+ * Sleep for specified milliseconds
+ */
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
 export const handler = async (req: Request): Promise<Response> => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: corsHeaders })
@@ -94,80 +185,203 @@ export const handler = async (req: Request): Promise<Response> => {
     }
 
     // 1. Semantic Cache Check
-    const embedding = await embedText(clause_text)
-    const { data: cacheMatch } = await supabaseClient.rpc('find_semantic_match', {
-      p_embedding: embedding,
-      p_threshold: 0.05
-    })
-
-    if (cacheMatch && cacheMatch.length > 0) {
-      console.log('Semantic Cache Hit!')
-      return jsonResponse({ ...cacheMatch[0].result_json, cached: true }, 200, 3600)
+    let embedding: number[] | null = null
+    try {
+      embedding = await embedText(clause_text)
+    } catch (error) {
+      console.warn('[Risk Review] Embedding failed, skipping semantic match. Error:', (error as Error).message)
+      // Continue with rule-based / AI pipeline even if embedding fails
+      embedding = null
     }
 
-    // 2. Agentic Search-First Phase (Extract specific risks -> Targeted Search)
-    console.log('[Agentic Risk] Identifying specific risks for targeted search...')
-    const riskExtractorPrompt = `Bạn là chuyên gia phân tích rủi ro hợp đồng. Hãy phân tích điều khoản sau và xác định các điểm GÂY BẤT LỢI hoặc THIẾU MINH BẠCH cho người ký.
-110:     Hãy lờ đi các điều khoản mẫu (boilerplate) thông thường trừ khi chúng có biến tướng gây hại.
-111:     Với mỗi rủi ro thực sự, hãy tạo một câu truy vấn (search_query) để tìm căn cứ pháp lý tại Việt Nam.
-112: 
-113:     Nội dung: ${clause_text}
-114: 
-115:     Trả về JSON: { "extracted_risks": [ { "topic": "...", "search_query": "..." } ] }`
-
-    const extractorRes = await fetchWithRetry(
-      `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: riskExtractorPrompt }] }],
-          generationConfig: { response_mime_type: "application/json" }
+    if (embedding) {
+      try {
+        const { data: cacheMatch } = await supabaseClient.rpc('find_semantic_match', {
+          p_embedding: embedding,
+          p_threshold: 0.05
         })
-      },
-      { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
-    )
 
-    if (!extractorRes.ok) throw new Error('Failed to extract risk topics')
-    const extractorData = await extractorRes.json()
-    const { extracted_risks } = JSON.parse(extractorData.candidates[0].content.parts[0].text)
-    console.log('[Agentic Risk] Targeted Topics:', extracted_risks.map((r: any) => r.topic))
+        if (cacheMatch && cacheMatch.length > 0) {
+          console.log('Semantic Cache Hit!')
+          return jsonResponse({ ...cacheMatch[0].result_json, cached: true }, 200, 3600)
+        }
+      } catch (error) {
+        console.warn('[Risk Review] find_semantic_match failed', (error as Error).message)
+      }
+    } else {
+      console.log('[Risk Review] embedding not available, skipping semantic match');
+    }
 
-    // execute parallel searches for each specific risk
-    const searchTasks = extracted_risks.slice(0, 3).map((r: any) => exaSearch(r.search_query, exaKey, 1))
-    const searchResults = await Promise.all(searchTasks)
-    const webContext = searchResults.flat().map(r => `[NGUỒN: ${r.url}]\n${r.content}`).join('\n\n---\n\n')
-    const allSearchUrls = searchResults.flat().map(r => r.url)
+    // 2. Agentic Search-First Phase (Internal DB + Web Exa)
+    console.log('[Agentic Risk] Identifying specific risks for targeted search...')
+
+    // Check semantic cache for risk extraction first
+    const riskExtractionCacheKey = buildCacheKey('risk-extraction', mode, clause_text)
+    const cachedRisks = await getCachedLegalAnswer(riskExtractionCacheKey)
+    let extracted_risks: any[] = []
+
+    if (cachedRisks) {
+      extracted_risks = cachedRisks.extracted_risks || []
+      console.log('[Agentic Risk] Using cached risk extraction:', extracted_risks.length, 'risks')
+    } else {
+      // Rule-based extraction first (no API call)
+      const ruleBasedRisks = extractRisksByRules(clause_text)
+      if (ruleBasedRisks.length > 0) {
+        extracted_risks = ruleBasedRisks.slice(0, 3)
+        console.log('[Agentic Risk] Using rule-based extraction:', extracted_risks.length, 'risks')
+      } else {
+        // Fallback to AI extraction only when rules don't match
+        try {
+          const riskExtractorPrompt = `Bạn là chuyên gia phân tích rủi ro hợp đồng. Hãy phân tích điều khoản sau và xác định các điểm GÂY BẤT LỢI hoặc THIẾU MINH BẠCH cho người ký.
+          Hãy lờ đi các điều khoản mẫu (boilerplate) thông thường trừ khi chúng có biến tướng gây hại.
+          Với mỗi rủi ro thực sự, hãy tạo một câu truy vấn (search_query) để tìm căn cứ pháp lý tại Việt Nam.
+
+          Nội dung: ${clause_text}
+
+          Trả về JSON: { "extracted_risks": [ { "topic": "...", "search_query": "..." } ] }`
+
+          // 1) Prefer GROQ for risk extraction if available (less likely to hit Gemini free-tier quota)
+          let extractionError: Error | null = null
+          let extractedResponse: any = null
+
+          try {
+            const groqExtractorRes = await fetchWithRetry(
+              GROQ_API_URL,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  model: 'llama-3.3-70b-versatile',
+                  messages: [
+                    { role: 'system', content: 'Bạn là chuyên gia phân tích rủi ro hợp đồng.' },
+                    { role: 'user', content: riskExtractorPrompt }
+                  ],
+                  temperature: 0,
+                  response_format: { type: 'json_object' },
+                }),
+              },
+              { listEnvVar: 'GROQ_API_KEYS', fallbackEnvVar: 'GROQ_API_KEY', maxRetries: 2, backoffBase: 300 }
+            )
+
+            if (groqExtractorRes.ok) {
+              const groqData = await groqExtractorRes.json()
+              const content = groqData.choices?.[0]?.message?.content || '{}'
+              extractedResponse = JSON.parse(cleanJSONResponse(content))
+            } else {
+              console.log('[Agentic Risk] GROQ extraction failed, status', groqExtractorRes.status)
+            }
+          } catch (err) {
+            extractionError = err as Error
+            console.log('[Agentic Risk] GROQ extraction error', extractionError.message)
+          }
+
+          if (!extractedResponse) {
+            // 2) Fall back to Gemini if GROQ is unavailable
+            const geminiExtractorRes = await fetchWithRetry(
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  contents: [{ parts: [{ text: riskExtractorPrompt }] }],
+                  generationConfig: { response_mime_type: 'application/json' }
+                })
+              },
+              { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY', maxRetries: 2, backoffBase: 300 }
+            )
+
+            if (geminiExtractorRes.ok) {
+              const geminiData = await geminiExtractorRes.json()
+              const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text || '{}'
+              extractedResponse = JSON.parse(cleanJSONResponse(rawText))
+            } else {
+              console.log('[Agentic Risk] Gemini extraction failed, status', geminiExtractorRes.status)
+            }
+          }
+
+          if (extractedResponse?.extracted_risks?.length > 0) {
+            extracted_risks = extractedResponse.extracted_risks.slice(0, 5)
+            console.log('[Agentic Risk] AI extraction found:', extracted_risks.length, 'risks')
+          } else {
+            console.log('[Agentic Risk] AI extraction did not return structured risks, using fallback patterns')
+            extracted_risks = getFallbackRiskPatterns(clause_text)
+          }
+        } catch (error) {
+          console.log('[Agentic Risk] AI extraction error, using fallback:', (error as Error).message)
+          extracted_risks = getFallbackRiskPatterns(clause_text)
+        }
+      }
+
+      // Cache the risk extraction results
+      await setCachedLegalAnswer(riskExtractionCacheKey, { extracted_risks }, 60 * 30) // 30 min cache
+    }
+
+    console.log('[Agentic Risk] Targeted Topics:', (extracted_risks || []).map((r: any) => r.topic))
+
+    // 2a. Parallel Search: Internal Law DB (Hybrid) + Web Exa
+    const internalSearchTasks = extracted_risks.slice(0, 2).map(async (r: any) => {
+      const qEmbedding = await embedText(r.search_query);
+      const { data } = await supabaseClient.rpc('match_document_chunks', {
+        query_embedding: qEmbedding,
+        match_threshold: 0.3,
+        match_count: 5,
+        p_query_text: r.search_query
+      });
+      return (data || []).map((chunk: any) => ({
+        content: chunk.content,
+        url: `internal-law://${chunk.id}`,
+        title: `Official Law: ${chunk.law_reference || 'Văn bản pháp luật'}`,
+        source_type: 'official' as const
+      }));
+    });
+
+    const webSearchTasks = extracted_risks.slice(0, 2).map((r: any) => exaSearch(r.search_query, exaKey, 5));
+
+    // Flatten all candidates
+    const nestedCandidates = await Promise.all([...internalSearchTasks, ...webSearchTasks]);
+    const allCandidates = nestedCandidates.flat();
+    console.log(`[Agentic Risk] Total candidates gathered: ${allCandidates.length}`);
+
+    // 2b. US3: Reranking Selection
+    const topEvidenceIndices = await jinaRerank(
+      clause_text,
+      allCandidates.map(c => `[SOURCE: ${c.title}]\n${c.content}`),
+      5
+    );
+
+    const goldCandidates = topEvidenceIndices.map((te: any) => allCandidates[te.index]);
+    const webContext = goldCandidates.map(c => `[NGUỒN: ${c.url}]\n${c.content}`).join('\n\n---\n\n')
+    const allSearchUrls = goldCandidates.map(c => c.url)
 
     // 3. Synthesis Phase (Final Report)
     const systemPrompt = `Bạn là chuyên gia pháp lý Việt Nam cấp cao, chuyên về thẩm định hợp đồng (Legal Due Diligence).
-142:     Nhiệm vụ: Phân tích rủi ro CHI TIẾT cho điều khoản được cung cấp.
-143: 
-144:     [BỐI CẢNH PHÁP LUẬT THẬT]:
-145:     ${webContext || 'Không tìm thấy dữ liệu pháp luật cụ thể.'}
-146: 
-147:     YÊU CẦU NGHIÊM NGẶT:
-148:     1. **risk_quote**: Phải trích dẫn CHÍNH XÁC câu văn/cụm từ trong hợp đồng gây ra rủi ro này.
-149:     2. **description**: Giải thích rõ tại sao nó rủi ro, dựa trên [BỐI CẢNH PHÁP LUẬT THẬT]. Không nói chung chung.
-150:     3. **suggested_revision**: Đưa ra đoạn văn bản thay thế cụ thể, chuyên nghiệp để bảo vệ quyền lợi người dùng.
-151:     4. **citation**: Nêu tên Điều, Luật cụ thể.
-152:     5. **level**: critical (nguy hiểm), moderate (cần sửa), note (lưu ý).
-153: 
-154:     Cấu trúc JSON:
-155:     {
-156:       "risks": [
-157:         {
-158:           "clause_ref": "Điều X.Y",
-159:           "level": "...",
-160:           "risk_quote": "đoạn trích gây rủi ro...",
-161:           "description": "giải thích rủi ro...",
-162:           "suggested_revision": "đề xuất sửa đổi...",
-163:           "citation": "...",
-164:           "citation_url": "..."
-165:         }
-166:       ]
-167:     }
-168:     Chỉ trả về JSON.`
+    Nhiệm vụ: Phân tích rủi ro CHI TIẾT cho điều khoản được cung cấp.
+
+    [CĂN CỨ PHÁP LÝ XÁC THỰC]:
+    ${webContext || 'Không tìm thấy dữ liệu pháp luật cụ thể.'}
+
+    YÊU CẦU NGHIÊM NGẶT (PHẢI CÓ):
+    1. **risk_quote**: Phải trích dẫn CHÍNH XÁC (word-for-word) câu văn hoặc cụm từ trong hợp đồng gây ra rủi ro này. KHÔNG ĐƯỢC ĐỂ TRỐNG.
+    2. **description**: Giải thích chi tiết tại sao nó rủi ro, dựa trên [CĂN CỨ PHÁP LÝ XÁC THỰC]. 
+    3. **suggested_revision**: Đưa ra đoạn văn bản THAY THẾ cụ thể, chuyên nghiệp, bảo vệ quyền lợi tối đa cho người ký. Đây là phần hỗ trợ quan trọng nhất.
+    4. **citation**: Nêu tên Điều, Luật cụ thể.
+    5. **level**: critical (nguy hiểm), moderate (cần sửa), note (lưu ý).
+
+    Cấu trúc JSON bắt buộc:
+    {
+      "risks": [
+        {
+          "clause_ref": "Điều X.Y",
+          "level": "...",
+          "risk_quote": "trích đoạn gốc từ hợp đồng...",
+          "description": "giải thích rủi ro...",
+          "suggested_revision": "văn bản đề xuất sửa đổi mới...",
+          "citation": "...",
+          "citation_url": "..."
+        }
+      ]
+    }
+    Chỉ trả về JSON.`
 
     let risks: { risks: RiskClause[] } = { risks: [] }
     const synthesisBody = {
@@ -175,19 +389,10 @@ export const handler = async (req: Request): Promise<Response> => {
       generationConfig: { response_mime_type: "application/json" }
     }
 
-    if (mode === 'fast') {
-      const geminiRes = await fetchWithRetry(
-        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(synthesisBody)
-        },
-        { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
-      )
-      const gData = await geminiRes.json()
-      risks = JSON.parse(gData.candidates[0].content.parts[0].text)
-    } else {
+    // OPTIMIZATION: Prefer Groq for risk synthesis in this endpoint to avoid Gemini free-tier quota issues.
+    let synthesisSuccess = false
+
+    try {
       const groqRes = await fetchWithRetry(
         GROQ_API_URL,
         {
@@ -203,18 +408,79 @@ export const handler = async (req: Request): Promise<Response> => {
             response_format: { type: 'json_object' },
           }),
         },
-        { listEnvVar: 'GROQ_API_KEYS', fallbackEnvVar: 'GROQ_API_KEY' }
+        { listEnvVar: 'GROQ_API_KEYS', fallbackEnvVar: 'GROQ_API_KEY', maxRetries: 2, backoffBase: 300 }
       )
-      const groqData = await groqRes.json()
-      risks = JSON.parse(groqData.choices[0].message.content)
+
+      if (groqRes.ok) {
+        const groqData = await groqRes.json()
+        const rawText = groqData.choices?.[0]?.message?.content || '{}'
+        risks = JSON.parse(cleanJSONResponse(rawText))
+        synthesisSuccess = true
+        console.log('[Risk Synthesis] Groq primary success')
+      } else {
+        console.log('[Risk Synthesis] Groq primary failed, status', groqRes.status)
+      }
+    } catch (error) {
+      console.log('[Risk Synthesis] Groq primary error:', (error as Error).message)
+    }
+
+    if (!synthesisSuccess && mode === 'fast') {
+      try {
+        const geminiRes = await fetchWithRetry(
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent`,
+          {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(synthesisBody)
+          },
+          { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY', maxRetries: 2, backoffBase: 300 }
+        )
+
+        if (geminiRes.ok) {
+          const gData = await geminiRes.json()
+          const rawText = gData.candidates?.[0]?.content?.parts?.[0]?.text || '{}'
+          risks = JSON.parse(cleanJSONResponse(rawText))
+          synthesisSuccess = true
+          console.log('[Risk Synthesis] Gemini fallback success')
+        } else {
+          console.log('[Risk Synthesis] Gemini fallback failed, status', geminiRes.status)
+        }
+      } catch (error) {
+        console.log('[Risk Synthesis] Gemini fallback error:', (error as Error).message)
+      }
+    }
+
+    // Final fallback: rule-based analysis if both AI models fail
+    if (!synthesisSuccess) {
+      console.log('[Risk Synthesis] Using rule-based fallback analysis')
+      risks = {
+        risks: [
+          {
+            clause_ref: 'Điều khoản được phân tích',
+            level: 'moderate',
+            risk_quote: clause_text.substring(0, 100) + '...',
+            description: 'Không thể phân tích chi tiết do giới hạn kỹ thuật. Khuyến nghị tham khảo ý kiến luật sư chuyên môn.',
+            suggested_revision: 'Vui lòng liên hệ luật sư để được tư vấn cụ thể về điều khoản này.',
+            citation: 'Phân tích tự động',
+            citation_url: undefined
+          }
+        ]
+      }
     }
 
     // 4. Hallucination Firewall: Programmatic Citation Validation
     risks = validateJSONCitations(risks, allSearchUrls)
 
-    const flattenedEvidence = searchResults.flat()
-    await persistVerifiedEvidence(clause_text, flattenedEvidence)
-    risks.risks = (risks.risks || []).map((risk: any) => mapRiskToVerifiedEvidence(risk, flattenedEvidence))
+    // T033: Ensure risk_quote and suggested_revision exist, otherwise fallback to generic
+    risks.risks = (risks.risks || []).map((risk: any) => ({
+      ...risk,
+      risk_quote: risk.risk_quote || risk.clause_ref || 'Không có trích dẫn cụ thể',
+      suggested_revision: risk.suggested_revision || 'Vui lòng liên hệ luật sư để được tư vấn đoạn soạn thảo thay thế cụ thể.'
+    }))
+
+    const flattenedEvidence = goldCandidates
+    await persistVerifiedEvidence(clause_text, flattenedEvidence as any)
+    risks.risks = (risks.risks || []).map((risk: any) => mapRiskToVerifiedEvidence(risk, flattenedEvidence as any))
     const verificationSummary = summarizeVerification(
       risks.risks
         .filter((risk: any) => risk.citation_url)
@@ -268,12 +534,14 @@ export const handler = async (req: Request): Promise<Response> => {
     })
 
     // 5. Save to Semantic Cache
-    await supabaseClient.from('semantic_cache').upsert({
+    const semanticCacheRow: any = {
       content_hash: clauseHash,
       content_text: clause_text,
-      embedding: embedding,
       result_json: responsePayload,
-    }, { onConflict: 'content_hash' })
+    }
+
+    if (embedding) semanticCacheRow.embedding = embedding
+    await supabaseClient.from('semantic_cache').upsert(semanticCacheRow, { onConflict: 'content_hash' })
     await setCachedLegalAnswer(clauseHash, responsePayload, 60 * 60)
     logTelemetry('risk-review', 'completed', {
       mode,
