@@ -4,6 +4,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { corsHeaders } from '../_shared/cors.ts';
+import { callLLM } from '../shared/types.ts';
 
 // Types
 interface SummarizeRequest {
@@ -19,58 +20,34 @@ function estimateTokens(text: string): number {
 // Build summarization prompt
 function buildSummarizationPrompt(messages: any[], level: number): string {
   const conversationText = messages
-    .map(m => `${m.role}: ${m.content}`)
+    .map(m => `${m.role === 'user' ? 'Người dùng' : 'AI'}: ${m.content}`)
     .join('\n\n');
 
   const targetTokens = level === 1 ? 500 : level === 2 ? 1000 : 2000;
   const scope = level === 1 ? '10 tin nhắn gần nhất' : level === 2 ? '50 tin nhắn gần nhất' : 'toàn bộ cuộc trò chuyện';
 
-  return `Hãy tóm tắt cuộc tư vấn pháp lý này (${scope}):
+  return `Hãy đóng vai một chuyên gia tóm tắt hồ sơ pháp lý. 
+Dựa vào nội dung cuộc trò chuyện sau (${scope}), hãy tạo một bản tóm tắt súc tích, chuyên nghiệp bằng tiếng Việt.
 
+Nội dung cuộc trò chuyện:
 ${conversationText}
 
 Yêu cầu tóm tắt:
-- Tập trung vào các chủ đề pháp lý chính
-- Liệt kê các câu hỏi và câu trả lời quan trọng
-- Ghi chú các kết luận pháp lý quan trọng
-- Liệt kê các vấn đề chưa được giải quyết (nếu có)
-- Đề cập các tài liệu tham khảo (nếu có)
-- Tóm tắt bằng tiếng Việt
+- Tập trung vào các chủ đề pháp lý chính.
+- Liệt kê các câu hỏi nổi bật của người dùng và hướng giải quyết của AI.
+- Ghi chú các kết luận pháp lý quan trọng (số hiệu văn bản, điều khoản nếu có).
+- Liệt kê các vấn đề còn bỏ ngỏ hoặc cần tư vấn thêm (nếu có).
+- Trình bày mạch lạc, sử dụng bullet points.
+- Độ dài mục tiêu: Khoảng ${targetTokens} từ.
 
-Mục tiêu: Khoảng ${targetTokens} tokens\n
 Tóm tắt:`;
-}
-
-// Call Gemini for summarization
-async function callGeminiForSummary(prompt: string, apiKey: string): Promise<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.3,
-        maxOutputTokens: 2048,
-      }
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Gemini API error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
 }
 
 // Summarize conversation
 async function summarizeConversation(
   supabase: any,
   conversationId: string,
-  level: 1 | 2 | 3,
-  geminiApiKey: string
+  level: 1 | 2 | 3
 ): Promise<string> {
   // Determine message limit based on level
   const messageLimit = level === 1 ? 10 : level === 2 ? 50 : 1000;
@@ -88,19 +65,32 @@ async function summarizeConversation(
   }
 
   if (!messages || messages.length === 0) {
-    throw new Error('No messages found for summarization');
+    console.warn(`[Summary] No messages found for conversation ${conversationId}`);
+    return 'Chưa có đủ tin nhắn để tạo tóm tắt.';
   }
 
   // Reverse to get chronological order
   messages.reverse();
 
-  // Build prompt and get summary
+  // Build prompt and get summary via fallback-enabled LLM call
   const prompt = buildSummarizationPrompt(messages, level);
-  const summary = await callGeminiForSummary(prompt, geminiApiKey);
+  const summary = await callLLM([
+    { role: 'system', content: 'Bạn là chuyên gia phân tích và tóm tắt văn bản pháp lý.' },
+    { role: 'user', content: prompt }
+  ], {
+    temperature: 0.3,
+    maxTokens: 2000
+  });
+
+  if (!summary) {
+    throw new Error('LLM returned empty summary');
+  }
 
   // Determine which field to update
   const fieldName = level === 1 ? 'summary_level_1' :
     level === 2 ? 'summary_level_2' : 'summary_level_3';
+
+  console.log(`[Summary] Attempting to update ${fieldName} for ${conversationId}. Length: ${summary.length}`);
 
   // Update conversation
   const { error: updateError } = await supabase
@@ -113,7 +103,21 @@ async function summarizeConversation(
     .eq('id', conversationId);
 
   if (updateError) {
+    console.error(`[Summary] DATABASE UPDATE FAILED: ${updateError.message}`, updateError);
     throw new Error(`Failed to update conversation: ${updateError.message}`);
+  }
+
+  // Double check if update actually affected any row
+  const { data: verify, error: verifyError } = await supabase
+    .from('conversations')
+    .select(fieldName)
+    .eq('id', conversationId)
+    .single();
+
+  if (verifyError || !verify?.[fieldName]) {
+    console.warn(`[Summary] Verification check failed or null column after update for ${conversationId}`);
+  } else {
+    console.log(`[Summary] Verification successful for ${conversationId}`);
   }
 
   return summary;
@@ -126,14 +130,19 @@ serve(async (req) => {
   }
 
   try {
-    // Create Supabase client with service role for background operations
+    const authHeader = req.headers.get('Authorization');
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+
     const supabaseClient = createClient(
-      Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '',
-      { auth: { persistSession: false } }
+      supabaseUrl,
+      serviceKey || (Deno.env.get('SUPABASE_ANON_KEY') ?? ''),
+      {
+        auth: { persistSession: false },
+        global: { headers: authHeader ? { Authorization: authHeader } : undefined }
+      }
     );
 
-    // Parse request
     const body: SummarizeRequest = await req.json();
     const { conversation_id, level } = body;
 
@@ -144,40 +153,25 @@ serve(async (req) => {
       );
     }
 
-    // Get Gemini API key (support plural rotation)
-    const geminiKeysRaw = Deno.env.get('GEMINI_API_KEYS') || Deno.env.get('GEMINI_API_KEY') || '';
-    const geminiKeys = geminiKeysRaw.split(',').map(k => k.trim()).filter(Boolean);
-
-    if (geminiKeys.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'Gemini API key not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Pick a random key for rotation
-    const geminiApiKey = geminiKeys[Math.floor(Math.random() * geminiKeys.length)];
-
-    // Perform summarization
     const startTime = Date.now();
-    const summary = await summarizeConversation(supabaseClient, conversation_id, level, geminiApiKey);
-    const duration = Date.now() - startTime;
+    console.log(`[Summary] Starting level ${level} for ${conversation_id}`);
 
-    console.log(`Summarization Level ${level} completed for conversation ${conversation_id} in ${duration}ms`);
+    const summary = await summarizeConversation(supabaseClient, conversation_id, level);
+    const duration = Date.now() - startTime;
 
     return new Response(
       JSON.stringify({
         success: true,
         level,
+        summary,
         summary_length: summary.length,
-        estimated_tokens: estimateTokens(summary),
         duration_ms: duration
       }),
       { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
 
   } catch (error) {
-    console.error('Summarization error:', error);
+    console.error('[Summary] Handler Error:', error);
     return new Response(
       JSON.stringify({ error: error instanceof Error ? error.message : 'Internal server error' }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }

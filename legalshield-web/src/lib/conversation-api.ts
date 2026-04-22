@@ -1,4 +1,4 @@
-import { supabase, invokeEdgeFunction, getAccessToken } from './supabase';
+import { invokeEdgeFunction, getAccessToken } from './supabase';
 import type { Conversation } from '@/store/conversationStore';
 import type { Message } from '@/store/chatStore';
 
@@ -99,7 +99,9 @@ export const streamingChatApi = {
     onChunk: (chunk: string) => void,
     onDone: (payload: any) => void,
     onError: (error: string) => void,
-    onSuggestions?: (suggestions: string[]) => void
+    onSuggestions?: (suggestions: string[]) => void,
+    onEvidence?: (evidence: any[]) => void,
+    onStatus?: (status: string) => void
   ) {
     const token = await getAccessToken();
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -144,6 +146,8 @@ export const streamingChatApi = {
               const data = JSON.parse(line.slice(6));
               switch (data.type) {
                 case 'chunk': onChunk(data.content); break;
+                case 'evidence': if (onEvidence && data.payload) onEvidence(data.payload); break;
+                case 'status': if (onStatus && data.payload) onStatus(data.payload); break;
                 case 'suggestions': if (onSuggestions && data.content) onSuggestions(JSON.parse(data.content)); break;
                 case 'done': onDone(data.payload); return;
                 case 'error': onError(data.error || 'Unknown error'); return;

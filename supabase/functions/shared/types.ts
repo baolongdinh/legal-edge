@@ -1,8 +1,17 @@
 // Shared types and utilities for all LegalShield Edge Functions
 // Import path: ../shared/types.ts
 import { Redis } from 'https://esm.sh/@upstash/redis@1.28.0'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 export { createClient }
+
+export interface IntentEvaluation {
+    intent: 'general' | 'analysis' | 'drafting' | 'citation_request'
+    needs_citations: boolean
+    complexity: 'low' | 'medium' | 'high'
+    is_drafting: boolean
+    suggested_standalone_query: string
+    reasoning: string
+}
 
 export interface AuthenticatedUser {
     id: string
@@ -119,6 +128,7 @@ export interface LegalAnswerPayload {
     verification_summary: VerificationSummary
     claim_audit?: LegalClaimAudit[]
     abstained?: boolean
+    intent_eval?: IntentEvaluation
 }
 
 export const OFFICIAL_LEGAL_DOMAINS = [
@@ -591,6 +601,73 @@ export async function fetchWithRetry(
 }
 
 /**
+ * Optimized LLM caller with Groq-first fallback strategy.
+ * For non-streaming tasks (summaries, suggestions, query expansion).
+ * Prioritizes Groq (Llama 3.3 70B) for speed and cost, falls back to Gemini 2.5 Flash Lite.
+ */
+export async function callLLM(
+    messages: { role: 'system' | 'user' | 'assistant'; content: string }[],
+    options: {
+        maxTokens?: number,
+        temperature?: number,
+        jsonMode?: boolean
+    } = {}
+): Promise<string> {
+    const { maxTokens = 2000, temperature = 0.7, jsonMode = false } = options
+
+    // 1. Try Groq (Ultra-fast, cheaper)
+    try {
+        const groqPayload: GroqChatPayload = {
+            model: 'llama-3.3-70b-versatile',
+            messages,
+            temperature,
+            max_tokens: maxTokens,
+            ...(jsonMode ? { response_format: { type: 'json_object' } } : {})
+        }
+
+        const res = await fetchWithRetry('https://api.groq.com/openai/v1/chat/completions', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(groqPayload)
+        }, { listEnvVar: 'GROQ_API_KEYS', fallbackEnvVar: 'GROQ_API_KEY' })
+
+        if (res.ok) {
+            const data = await res.json()
+            const content = data.choices?.[0]?.message?.content || ''
+            if (content) return content
+        }
+    } catch (err) {
+        console.warn('[LLM Fallback] Groq failed, switching to Gemini:', (err as Error).message)
+    }
+
+    // 2. Fallback to Gemini 2.5 Flash Lite
+    try {
+        const geminiPrompt = messages.map(m => `[${m.role.toUpperCase()}]: ${m.content}`).join('\n\n')
+        const geminiRes = await fetchWithRetry(
+            'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent',
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ role: 'user', parts: [{ text: geminiPrompt }] }],
+                    generationConfig: {
+                        maxOutputTokens: maxTokens,
+                        temperature,
+                    }
+                })
+            },
+            { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
+        )
+
+        const data = await geminiRes.json()
+        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
+    } catch (err) {
+        console.error('[LLM Fallback] All providers failed:', (err as Error).message)
+        throw err
+    }
+}
+
+/**
  * Round-robin key selector.
  * Reads GEMINI_API_KEYS or GROQ_API_KEYS (comma-separated list) from env.
  * NOTE: For retry logic, we naturally advance the counter each time.
@@ -813,8 +890,8 @@ function extractCitationText(answer: string, evidence: LegalSourceEvidence): str
 }
 
 export function buildLegalCitationsFromEvidence(answer: string, evidence: LegalSourceEvidence[]): LegalCitation[] {
-    // 1. Explicit Footnote Extraction (Prompt matched)
-    const explicitMatches = [...answer.matchAll(/\[(?:#|Nguồn\s*)(\d+)\]/gi)]
+    // 1. Explicit Footnote Extraction (Prompt matched [X] or [#X])
+    const explicitMatches = [...answer.matchAll(/\[(?:#|Nguồn\s*)?(\d+)\]/gi)]
     const explicitIndexes = [...new Set(explicitMatches.map(m => parseInt(m[1], 10) - 1))].filter(i => i >= 0 && i < evidence.length)
 
     if (explicitIndexes.length > 0) {
@@ -825,7 +902,7 @@ export function buildLegalCitationsFromEvidence(answer: string, evidence: LegalS
                 citation_url: item.url,
                 source_domain: item.source_domain,
                 source_title: item.title,
-                source_excerpt: item.content.slice(0, 280),
+                source_excerpt: item.content.slice(0, 400),
                 source_type: item.source_type,
                 verification_status: item.source_type === 'official' ? 'official_verified' : 'secondary_verified',
                 retrieved_at: item.retrieved_at,
@@ -1066,9 +1143,19 @@ export function hasRecentLegalEvidence(memories: ChatMemoryEntry[]): boolean {
     return evidenceEntries.length >= 2
 }
 
-export function buildLegalAnswerPayload(answer: string, evidence: LegalSourceEvidence[], requiresCitation: boolean): LegalAnswerPayload {
+export function buildLegalAnswerPayload(answer: string, evidence: LegalSourceEvidence[], requiresCitation: boolean, intent_eval?: IntentEvaluation): LegalAnswerPayload {
     const citations = buildLegalCitationsFromEvidence(answer, evidence)
-    const verifiedAnswer = verifyMarkdownLinks(answer, citations)
+    // Wrap citations in markdown links if they are not already linked
+    let processedAnswer = answer;
+    citations.forEach((cit, idx) => {
+        const marker = `[${idx + 1}]`;
+        if (processedAnswer.includes(marker) && !processedAnswer.includes(`(${cit.citation_url})`)) {
+            // Optional: inject link after marker or just let the UI handle it via the citations array
+            // The UI usually uses the 'citations' array to render the side panel or tooltips.
+        }
+    });
+
+    const verifiedAnswer = verifyMarkdownLinks(processedAnswer, citations)
     const claimAudit = auditClaimsAgainstEvidence(answer, evidence)
     const unsupportedClaims = claimAudit.filter((claim) => !claim.supported)
     const baseSummary = summarizeVerification(citations, requiresCitation)
@@ -1106,6 +1193,7 @@ export function buildLegalAnswerPayload(answer: string, evidence: LegalSourceEvi
         verification_summary,
         claim_audit: claimAudit,
         abstained: false,
+        intent_eval,
     }
 }
 

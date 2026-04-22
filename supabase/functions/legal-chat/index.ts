@@ -1,5 +1,5 @@
 // Edge Function: POST /functions/v1/legal-chat
-// Provides AI-powered legal consultation using Gemini 1.5 Flash
+// Provides AI-powered legal consultation using Gemini 2.5 Flash Lite
 // Security: Manual JWT verification via Supabase Auth API
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
@@ -34,7 +34,72 @@ import {
   storeEvidenceInMemory,
   jinaRerank,
   LegalSourceEvidence,
+  callLLM,
+  IntentEvaluation,
 } from '../shared/types.ts'
+
+/**
+ * Task: Evaluate user intent, complexity, and drafting needs.
+ * Uses Groq (via callLLM) for ultra-fast pre-flight analysis.
+ */
+async function evaluateIntent(
+  message: string,
+  history: any[],
+  context_summary?: string,
+): Promise<IntentEvaluation> {
+  const prompt = `Bạn là một Chuyên gia Phân tích Ý định Pháp lý. 
+Nhiệm vụ của bạn là phân tích câu hỏi của người dùng và lịch sử trò chuyện để xác định các yếu tố sau:
+1. Intent: 'general' (chào hỏi, tán gẫu), 'analysis' (hỏi đáp/phân tích pháp luật), 'drafting' (yêu cầu soạn thảo văn bản/đơn/hợp đồng), 'citation_request' (yêu cầu tìm văn bản luật cụ thể).
+2. Needs Citations: Có cần trích dẫn điều luật/cơ sở pháp lý không? (Luôn đúng nếu là drafting/analysis).
+3. Complexity: Độ phức tạp của vấn đề ('low', 'medium', 'high').
+4. Is Drafting: Người dùng có đang yêu cầu soạn thảo một văn bản pháp lý mới hoặc sửa đổi văn bản hiện có không?
+5. Suggested Standalone Query: Một câu hỏi độc lập, đầy đủ ngữ cảnh để tra cứu RAG (Vector Search).
+6. Reasoning: Giải thích ngắn gọn lý do phân loại.
+
+Lịch sử trò chuyện:
+${history.slice(-3).map((m) => `${m.role === 'user' ? 'Người dùng' : 'AI'}: ${m.content}`).join('\n')}
+
+Tóm tắt bối cảnh: ${context_summary || 'N/A'}
+
+Câu hỏi mới: "${message}"
+
+Yêu cầu trả về định dạng JSON duy nhất:
+{
+  "intent": "general" | "analysis" | "drafting" | "citation_request",
+  "needs_citations": boolean,
+  "complexity": "low" | "medium" | "high",
+  "is_drafting": boolean,
+  "suggested_standalone_query": "string",
+  "reasoning": "string"
+}`;
+
+  try {
+    const result = await callLLM([
+      { role: 'system', content: 'Bạn là chuyên gia phân loại ý định pháp lý. Chỉ trả về JSON.' },
+      { role: 'user', content: prompt },
+    ], { jsonMode: true, temperature: 0.1 });
+
+    const parsed = JSON.parse(result);
+    return {
+      intent: parsed.intent || 'analysis',
+      needs_citations: parsed.needs_citations ?? true,
+      complexity: parsed.complexity || 'medium',
+      is_drafting: parsed.is_drafting ?? false,
+      suggested_standalone_query: parsed.suggested_standalone_query || message,
+      reasoning: parsed.reasoning || '',
+    };
+  } catch (e) {
+    console.warn('Intent evaluation failed, using fallback:', e);
+    return {
+      intent: 'analysis',
+      needs_citations: true,
+      complexity: 'medium',
+      is_drafting: false,
+      suggested_standalone_query: message,
+      reasoning: 'Fallback due to error',
+    };
+  }
+}
 
 /**
  * Task T002: Rewrite message + history into a single standalone legal query.
@@ -58,22 +123,11 @@ Yêu cầu:
 Câu hỏi độc lập:`;
 
   try {
-    const response = await fetchWithRetry(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 250, temperature: 0.1 }
-        })
-      },
-      { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
-    );
+    const rewritten = await callLLM([
+      { role: 'system', content: 'Bạn là chuyên gia phân tích ngữ cảnh.' },
+      { role: 'user', content: prompt }
+    ], { maxTokens: 250, temperature: 0.1 });
 
-    if (!response.ok) return currentMessage.trim();
-    const data = await response.json();
-    const rewritten = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
     return rewritten || currentMessage.trim();
   } catch (e) {
     console.warn('Standalone query rewrite failed:', e);
@@ -100,22 +154,12 @@ Yêu cầu:
 Đoạn trích giả định:`;
 
   try {
-    const response = await fetchWithRetry(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 400, temperature: 0.4 }
-        })
-      },
-      { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
-    );
+    const hydeDoc = await callLLM([
+      { role: 'system', content: 'Bạn là Luật sư giàu kinh nghiệm.' },
+      { role: 'user', content: prompt }
+    ], { maxTokens: 400, temperature: 0.4 });
 
-    if (!response.ok) return query; // Fallback to original
-    const data = await response.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || query;
+    return hydeDoc || query;
   } catch (e) {
     console.warn('HyDE doc generation failed:', e);
     return query;
@@ -130,12 +174,9 @@ async function autoGenerateConversationTitle(
   conversationId: string,
   userMessage: string,
   assistantResponse: string,
-  geminiApiKey: string
+  history: any[] = []
 ): Promise<void> {
   try {
-    // 0. Skip if both are too short to be meaningful
-    if (userMessage.length < 5 && assistantResponse.length < 20) return;
-
     // 1. Check if the conversation actually needs a title
     const { data: conv, error: fetchError } = await supabase
       .from('conversations')
@@ -145,43 +186,55 @@ async function autoGenerateConversationTitle(
 
     if (fetchError || !conv) return;
 
-    // Only generate if it's the default title
-    if (conv.title !== 'Cuộc trò chuyện mới' && conv.title !== 'Mới') return;
+    // Only generate if it's the default title (placeholder) or empty
+    const currentTitle = conv.title || '';
+    const normalizedTitle = currentTitle.trim().toLowerCase();
 
-    const prompt = `Bạn là chuyên gia đặt tiêu đề. Hãy tóm tắt cuộc trò chuyện pháp lý sau đây thành một tiêu đề ngắn gọn, súc tích (3-5 từ).
-Nội dung người dùng: "${userMessage}"
-Nội dung trợ lý: "${assistantResponse.slice(0, 500)}..."
-Yêu cầu: 
-- Ngôn ngữ: Tiếng Việt.
-- Không sử dụng dấu ngoặc kép.
-- Trả về DUY NHẤT tiêu đề.
-Tiêu đề:`;
+    const isPlaceholder = !currentTitle ||
+      normalizedTitle === '' ||
+      normalizedTitle === 'cuộc trò chuyện mới' ||
+      normalizedTitle === 'mới' ||
+      normalizedTitle === 'new conversation' ||
+      normalizedTitle.includes('unnamed') ||
+      normalizedTitle.includes('untitled');
 
-    const response = await fetchWithRetry(
-      'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent',
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          contents: [{ role: 'user', parts: [{ text: prompt }] }],
-          generationConfig: { maxOutputTokens: 50, temperature: 0.3 }
-        })
-      },
-      { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
-    );
+    if (!isPlaceholder) {
+      console.log(`[Titling] Skip: Conversation ${conversationId} already has title "${currentTitle}"`);
+      return;
+    }
 
-    if (!response.ok) return;
+    // 0. Skip if both are too short AND we don't have enough history to compensate
+    const totalContextLength = userMessage.length + assistantResponse.length +
+      history.reduce((acc, m) => acc + (m.content?.length || 0), 0);
 
-    const data = await response.json();
-    const title = data.candidates?.[0]?.content?.parts?.[0]?.text?.trim();
+    if (totalContextLength < 50) return;
+
+    // Prepare context for titling
+    const totalContext = (history.map(m => `${m.role}: ${m.content}`).join('\n') + `\nuser: ${userMessage}\nassistant: ${assistantResponse}`).slice(-4000);
+
+    const titlePrompt = [
+      { role: 'system', content: 'Bạn là chuyên gia pháp lý. Hãy đặt tiêu đề cho cuộc hội thoại này dựa trên nội dung thảo luận. Tiêu đề phải ngắn gọn (dưới 7 từ), chuyên nghiệp, bằng tiếng Việt và đi thẳng vào vấn đề pháp lý chính.' },
+      { role: 'user', content: `Dựa trên nội dung sau, hãy đặt tiêu đề phù hợp:\n\n${totalContext}` }
+    ] as any;
+
+    const title = await callLLM(titlePrompt, { maxTokens: 50, temperature: 0.3 });
 
     if (title && title.length > 2) {
-      await supabase
+      console.log(`[Titling] Generated title for ${conversationId}: "${title}"`);
+
+      const { error: updateError } = await supabase
         .from('conversations')
-        .update({ title, updated_at: new Date().toISOString() })
+        .update({
+          title: title.trim().replace(/^"|"$/g, ''),
+          updated_at: new Date().toISOString()
+        })
         .eq('id', conversationId);
 
-      console.log(`[Auto-Title] Updated conversation ${conversationId} to: "${title}"`);
+      if (updateError) {
+        console.error(`[Titling] Update error for ${conversationId}:`, updateError);
+      } else {
+        console.log(`[Auto-Title] Updated conversation ${conversationId} to: "${title}"`);
+      }
     }
 
   } catch (err) {
@@ -291,10 +344,18 @@ export const handler = async (req: Request): Promise<Response> => {
       Array.isArray(context_excerpts) ? context_excerpts : [],
       typeof document_context === 'string' ? document_context : undefined,
     )
+    const { intent_eval } = await (async () => {
+      // Fast pre-flight intent evaluation
+      return { intent_eval: await evaluateIntent(message, history, typeof context_summary === 'string' ? context_summary : undefined) };
+    })();
+
     const normalizedMessage = normalizeLegalQuery(message)
-    const needsCitation = requiresLegalCitation(message)
+    const needsCitation = intent_eval.needs_citations || requiresLegalCitation(message)
+    const isDrafting = intent_eval.is_drafting
+    const standaloneQuery = intent_eval.suggested_standalone_query || await buildStandaloneQuery(history, message)
+
     // Only cache standalone, citation-free questions that are context-independent
-    const canUseCache = !needsCitation && (isStandaloneQuestion(message) || history.length === 0)
+    const canUseCache = !needsCitation && intent_eval.intent === 'general' && (isStandaloneQuestion(message) || history.length === 0)
 
     // @ts-ignore: Deno global
     const url = Deno.env.get('SUPABASE_URL') ?? ''
@@ -332,8 +393,7 @@ export const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    // --- STEP 2: STANDALONE QUERY & SEMANTIC CACHE (Medium Path) ---
-    const standaloneQuery = await buildStandaloneQuery(history, message)
+    // --- STEP 2: SEMANTIC CACHE (Medium Path) ---
     const queryEmbeddingForCache = await embedText(standaloneQuery || message, undefined, 768)
 
     if (queryEmbeddingForCache.length > 0) {
@@ -382,19 +442,19 @@ export const handler = async (req: Request): Promise<Response> => {
         memories = []
       })
 
-    const fetchExaPromise = needsCitation
-      ? retrieveLegalEvidence(standaloneQuery, 10).catch(e => {
+    const fetchExaPromise = (needsCitation || intent_eval.intent === 'citation_request')
+      ? retrieveLegalEvidence(standaloneQuery, intent_eval.complexity === 'high' ? 12 : 8).catch(e => {
         console.warn('Exa retrieval failed:', (e as Error).message)
         return []
       })
       : Promise.resolve([])
 
-    const fetchLocalLawPromise = (needsCitation || Boolean(document_hash))
+    const fetchLocalLawPromise = (needsCitation || Boolean(document_hash) || isDrafting)
       ? embedText(hydeDoc, undefined, 768).then(emb =>
         supabase.rpc('match_document_chunks', {
           query_embedding: emb,
           match_threshold: 0.2, // Lowered to get more candidates for reranking
-          match_count: 25,
+          match_count: intent_eval.complexity === 'high' ? 40 : 25,
           p_query_text: standaloneQuery // HYBRID: Add keyword search
         }).then(({ data }) => data || [])
       ).catch(e => {
@@ -468,6 +528,7 @@ export const handler = async (req: Request): Promise<Response> => {
     let systemPrompt = `Bạn là Trợ lý Pháp lý AI cao cấp của LegalShield Việt Nam. 
 Nhiệm vụ của bạn là tư vấn pháp luật, giải đáp thắc mắc và SẴN SÀNG SOẠN THẢO các dự thảo văn bản pháp lý (đơn khởi kiện, hợp đồng, văn bản tố tụng...) khi người dùng có yêu cầu.
 Tên người dùng đang chat với bạn: ${user.user_metadata?.full_name || user.email || 'Người dùng'}.
+Ý định của người dùng được xác định là: ${intent_eval.intent} (${intent_eval.reasoning}).
 
 Quy tắc ứng xử:
 1. Luôn sử dụng tiếng Việt trang trọng, lịch sự.
@@ -475,9 +536,13 @@ Quy tắc ứng xử:
 3. Nếu câu hỏi yêu cầu độ chính xác pháp lý (legal claim), chỉ được trả lời dựa trên các nguồn chứng cứ đã cung cấp.
 4. Không được bịa điều luật, số điều, tên văn bản hoặc đường link.
 5. Nếu chứng cứ chưa đủ, phải nói rõ là chưa đủ căn cứ để khẳng định.
-6. BẮT BUỘC TRÍCH DẪN IN-LINE: Mỗi kết luận, điều khoản pháp lý lấy từ "CHỨNG CỨ PHÁP LÝ", bạn PHẢI ghim nguồn bằng cú pháp [#X] ngay cuối câu.
+6. BẮT BUỘC TRÍCH DẪN IN-LINE: Mỗi kết luận, điều khoản pháp lý lấy từ "CHỨNG CỨ PHÁP LÝ", bạn PHẢI ghim nguồn bằng cú pháp [X] ngay cuối câu (ví dụ: [1]).
 7. Ngắn gọn, súc tích nhưng đầy đủ ý.
-8. Ở cuối câu trả lời, hãy thêm một lời nhắc nhở ngắn gọn gọn gàng về việc tham vấn luật sư thực tế nếu cần thiết.`
+8. ${isDrafting ? 'Đặc biệt khi soạn thảo văn bản, hãy tuân thủ nghiêm ngặt các quy định về thể thức văn bản hành chính của Việt Nam.' : 'Ở cuối câu trả lời, hãy thêm một lời nhắc nhở ngắn gọn gọn gàng về việc tham vấn luật sư thực tế nếu cần thiết.'}`
+
+    if (intent_eval.intent === 'drafting') {
+      systemPrompt += `\n\nCHẾ ĐỘ SOẠN THẢO: Bạn đang thực hiện soạn thảo văn bản pháp lý. Hãy đảm bảo nội dung đầy đủ các phần: căn cứ pháp lý, nội dung chính, kiến nghị và các thông tin cần thiết. Nếu thiếu thông tin từ người dùng, hãy ghi chú các phần [Cần điền thông tin] một cách rõ ràng.`
+    }
 
     // --- CONSULTANT MODE OVERRIDE ---
     if (contract_text || risk_report) {
@@ -635,9 +700,12 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
             ).catch(() => { });
           }
 
-          // Trigger Auto-Titling if this is a named conversation with default title
-          if (conversation_id && history.length === 0) {
-            autoGenerateConversationTitle(supabase, conversation_id, message, fullResponseText, geminiApiKey).catch(() => { });
+          // Trigger Auto-Titling if this is a named conversation
+          if (conversation_id) {
+            // CRITICAL: Await titling to ensure it completes before function termination
+            await autoGenerateConversationTitle(supabase, conversation_id, message, fullResponseText, history).catch((err) => {
+              console.error('[Titling] Background task failed:', err);
+            });
           }
 
           controller.close();

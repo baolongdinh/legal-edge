@@ -24,7 +24,7 @@ function AppShell({ title, subtitle }: { title: string; subtitle?: string }) {
   }, [syncUser])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-navy-base">
+    <div className="flex h-screen overflow-hidden bg-surface">
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Topbar title={title} subtitle={subtitle} />
@@ -62,7 +62,7 @@ function AnimatedRoutes() {
             </motion.div>
           } />
         </Route>
-        <Route path="/analysis" element={<AuthGuard><AppShell title="Phân tích hợp đồng" subtitle="Xem xét rủi ro pháp lý" /></AuthGuard>}>
+        <Route path="/analysis" element={<AuthGuard><AppShell title="Phòng ngừa rủi ro" subtitle="Đối soát quy định văn bản" /></AuthGuard>}>
           <Route index element={
             <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} className="h-full">
               <ContractAnalysis />
@@ -76,7 +76,7 @@ function AnimatedRoutes() {
             </motion.div>
           } />
         </Route>
-        <Route path="/chat" element={<AuthGuard><AppShell title="Tư vấn AI" subtitle="Giải đáp thắc mắc pháp lý" /></AuthGuard>}>
+        <Route path="/chat" element={<AuthGuard><AppShell title="Tra cứu" subtitle="Tìm kiếm quy định pháp luật" /></AuthGuard>}>
           <Route index element={
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="h-full">
               <ChatPage />
@@ -106,13 +106,14 @@ export default function App() {
   return (
     <BrowserRouter>
       <Toaster
-        theme="dark"
+        theme="light"
         position="bottom-right"
         toastOptions={{
           style: {
-            background: '#0F172A',
-            border: '1px solid rgba(226, 232, 240, 0.1)',
-            color: '#F5F0E8',
+            background: '#FAF7F0',
+            border: '1px solid rgba(11, 28, 26, 0.1)',
+            color: '#0B1C1A',
+            fontFamily: 'Manrope, sans-serif',
           },
         }}
       />

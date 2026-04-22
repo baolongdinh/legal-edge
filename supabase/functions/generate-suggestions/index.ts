@@ -1,9 +1,7 @@
-// Edge Function: generate-suggestions
-// Description: Generate follow-up question suggestions after AI response
-
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3';
 import { corsHeaders } from '../_shared/cors.ts';
+import { callLLM } from '../shared/types.ts';
 
 // Types
 interface SuggestionsRequest {
@@ -17,7 +15,6 @@ interface SuggestionsRequest {
 // Generate cache key from messages
 function generateCacheKey(userMessage: string, aiResponse: string): string {
   const combined = `${userMessage}|${aiResponse}`;
-  // Simple hash for cache key
   let hash = 0;
   for (let i = 0; i < combined.length; i++) {
     const char = combined.charCodeAt(i);
@@ -27,80 +24,6 @@ function generateCacheKey(userMessage: string, aiResponse: string): string {
   return `suggestions:${Math.abs(hash)}`;
 }
 
-// Call Gemini for suggestions
-async function callGeminiForSuggestions(
-  userMessage: string,
-  aiResponse: string,
-  documentContext: any,
-  apiKey: string
-): Promise<string[]> {
-  const docContextText = documentContext ?
-    `\nTài liệu tham khảo: ${JSON.stringify(documentContext)}` : '';
-
-  const prompt = `Dựa trên cuộc tư vấn pháp lý này, hãy tạo 3-4 câu hỏi tiếp theo liên quan:
-
-Câu hỏi của người dùng: ${userMessage}
-
-Câu trả lời của AI: ${aiResponse}${docContextText}
-
-Yêu cầu:
-- Các câu hỏi nên khuyến khích tìm hiểu sâu hơn về chủ đề pháp lý
-- Các câu hỏi phải liên quan trực tiếp đến nội dung vừa thảo luận
-- Các câu hỏi phải bằng tiếng Việt
-- Tối đa 3-4 câu hỏi
-- Mỗi câu hỏi trên một dòng riêng biệt
-- Câu hỏi phải kết thúc bằng dấu chấm hỏi (?)
-- Câu hỏi nên cụ thể và có ý nghĩa, không quá chung chung
-
-Ví dụ định dạng:
-1. Câu hỏi thứ nhất?
-2. Câu hỏi thứ hai?
-3. Câu hỏi thứ ba?
-
-Câu hỏi gợi ý:`;
-
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-
-  const response = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      contents: [{ parts: [{ text: prompt }] }],
-      generationConfig: {
-        temperature: 0.8,
-        maxOutputTokens: 500,
-      }
-    })
-  });
-
-  if (!response.ok) {
-    throw new Error(`Gemini API error: ${response.status}`);
-  }
-
-  const data = await response.json();
-  const text = data.candidates?.[0]?.content?.parts?.[0]?.text || '';
-
-  // Parse suggestions from response
-  return text
-    .split('\n')
-    .map(line => {
-      // Remove leading numbers and dots
-      let cleaned = line.replace(/^\s*\d+[.\-)\]]\s*/, '').trim();
-      // Remove "Câu hỏi gợi ý:" or similar prefixes
-      cleaned = cleaned.replace(/^(Câu hỏi gợi ý[:：]\s*)/i, '');
-      return cleaned;
-    })
-    .filter(line => {
-      // Filter valid questions
-      return line.length > 10 &&
-        line.length < 200 &&
-        line.endsWith('?') &&
-        !line.includes('Ví dụ') &&
-        !line.includes('câu hỏi');
-    })
-    .slice(0, 4);
-}
-
 // Main handler
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
@@ -108,23 +31,16 @@ serve(async (req) => {
   }
 
   try {
-    // Create Supabase client
+    const authHeader = req.headers.get('Authorization');
     const supabaseClient = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
-      Deno.env.get('SUPABASE_ANON_KEY') ?? '',
-      { global: { headers: { Authorization: req.headers.get('Authorization')! } } }
+      Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || (Deno.env.get('SUPABASE_ANON_KEY') ?? ''),
+      {
+        auth: { persistSession: false },
+        global: { headers: authHeader ? { Authorization: authHeader } : undefined }
+      }
     );
 
-    // Get user
-    const { data: { user }, error: userError } = await supabaseClient.auth.getUser();
-    if (userError || !user) {
-      return new Response(
-        JSON.stringify({ error: 'Unauthorized' }),
-        { status: 401, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Parse request
     const body: SuggestionsRequest = await req.json();
     const {
       user_message,
@@ -141,52 +57,61 @@ serve(async (req) => {
       );
     }
 
-    // Get Gemini API key (support plural rotation)
-    const geminiKeysRaw = Deno.env.get('GEMINI_API_KEYS') || Deno.env.get('GEMINI_API_KEY') || '';
-    const geminiKeys = geminiKeysRaw.split(',').map(k => k.trim()).filter(Boolean);
-
-    if (geminiKeys.length === 0) {
-      return new Response(
-        JSON.stringify({ error: 'Gemini API key not configured' }),
-        { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
-      );
-    }
-
-    // Pick a random key for rotation
-    const geminiApiKey = geminiKeys[Math.floor(Math.random() * geminiKeys.length)];
-
-    // Check cache first (using Supabase cache table or Redis)
+    // Check cache first
     const cacheKey = generateCacheKey(user_message, ai_response);
     let suggestions: string[] = [];
     let fromCache = false;
 
     try {
-      // Try to get from cache
       const { data: cached } = await supabaseClient
         .from('semantic_cache')
         .select('response, created_at')
         .eq('cache_key', cacheKey)
         .single();
 
-      if (cached && new Date(cached.created_at).getTime() > Date.now() - 24 * 60 * 60 * 1000) {
+      if (cached && new Date(cached.created_at).getTime() > Date.now() - 7 * 24 * 60 * 60 * 1000) {
         suggestions = JSON.parse(cached.response);
         fromCache = true;
-        console.log('Suggestions served from cache');
+        console.log(`[Suggestions] Cache hit for ${cacheKey}`);
       }
     } catch {
-      // Cache miss, continue to generate
+      // Cache miss
     }
 
     // Generate suggestions if not cached
     if (suggestions.length === 0) {
-      suggestions = await callGeminiForSuggestions(
-        user_message,
-        ai_response,
-        document_context,
-        geminiApiKey
-      );
+      console.log(`[Suggestions] Generating new suggestions for ${conversation_id || 'unknown'}`);
 
-      // Cache the suggestions
+      const docContextText = document_context ?
+        `\nTài liệu liên quan: ${typeof document_context === 'string' ? document_context : JSON.stringify(document_context)}` : '';
+
+      const prompt = `Dựa trên cuộc tư vấn pháp lý này, hãy tạo 3-4 câu hỏi mà NGƯỜI DÙNG có khả năng sẽ đặt ra tiếp theo để đào sâu vào câu trả lời của AI.
+
+Yêu cầu QUAN TRỌNG:
+- Các câu hỏi phải được viết dưới góc nhìn của NGƯỜI DÙNG (ngôi thứ nhất, xưng "Tôi", "Làm thế nào để tôi...", "Tôi cần chuẩn bị gì...", v.v.).
+- Câu hỏi phải mang tính "đào sâu" vào các chi tiết mà AI vừa trả lời (ví dụ: hỏi về thủ tục cụ thể, rủi ro cụ thể, hoặc bằng chứng cần thiết).
+- KHÔNG để AI hỏi ngược lại người dùng theo kiểu "Bạn có muốn...". Hãy để người dùng là người chủ động đặt câu hỏi.
+- Ngôn ngữ: Tiếng Việt trang trọng, chuyên nghiệp.
+- Định dạng: Mỗi câu hỏi trên một dòng riêng biệt, không có số thứ tự ở đầu.
+- Mỗi câu phải kết thúc bằng dấu hỏi (?).
+- KHÔNG bao gồm văn bản dẫn nhập hay kết luận.
+
+Câu hỏi người dùng muốn đặt tiếp theo:`;
+
+      const responseText = await callLLM([
+        { role: 'system', content: 'Bạn là chuyên gia tư vấn pháp lý tài ba, luôn biết cách đặt câu hỏi gợi mở để làm rõ vấn đề.' },
+        { role: 'user', content: prompt }
+      ], {
+        temperature: 0.7,
+        maxTokens: 500
+      });
+
+      suggestions = responseText
+        .split('\n')
+        .map(line => line.replace(/^\s*[-•\d.]+\s*/, '').trim()) // Clear bullet points/numbers
+        .filter(line => line.length > 10 && line.endsWith('?'))
+        .slice(0, 4);
+
       if (suggestions.length > 0) {
         try {
           await supabaseClient
@@ -197,20 +122,23 @@ serve(async (req) => {
               created_at: new Date().toISOString()
             }, { onConflict: 'cache_key' });
         } catch (cacheError) {
-          console.warn('Failed to cache suggestions:', cacheError);
+          console.warn('[Suggestions] Cache save failed:', cacheError);
         }
       }
     }
 
-    // Update message with suggestions if message_id provided
-    if (message_id) {
-      try {
-        await supabaseClient
-          .from('messages')
-          .update({ follow_up_suggestions: suggestions })
-          .eq('id', message_id);
-      } catch (updateError) {
-        console.warn('Failed to update message with suggestions:', updateError);
+    // Update message persistence
+    if (message_id && suggestions.length > 0) {
+      console.log(`[Suggestions] Persisting ${suggestions.length} suggestions to message ${message_id}`);
+      const { error: updateError } = await supabaseClient
+        .from('messages')
+        .update({ follow_up_suggestions: suggestions })
+        .eq('id', message_id);
+
+      if (updateError) {
+        console.error(`[Suggestions] DATABASE UPDATE FAILED for message ${message_id}: ${updateError.message}`);
+      } else {
+        console.log(`[Suggestions] Successfully updated message ${message_id}`);
       }
     }
 
@@ -225,12 +153,12 @@ serve(async (req) => {
     );
 
   } catch (error) {
-    console.error('Suggestions generation error:', error);
+    console.error('[Suggestions] Handler Error:', error);
     return new Response(
       JSON.stringify({
         success: false,
         error: error instanceof Error ? error.message : 'Internal server error',
-        suggestions: [] // Return empty array on error
+        suggestions: []
       }),
       { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
     );
