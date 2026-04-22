@@ -2,6 +2,10 @@
 
 LegalShield is a specialized AI platform designed for high-precision **Legal & Regulatory Research**. It transitions from a simple "chat" interface to a robust "Search & Reference" engine, empowering users to verify information against authoritative legal sources in real-time.
 
+<img width="1921" height="961" alt="image" src="https://github.com/user-attachments/assets/2bbf548a-f95e-43d6-b5c1-b4301a999d00" />
+
+### Try now: https://legalshield-sandy.vercel.app
+
 ---
 
 ## ⚖️ The Problem & Our Mission
