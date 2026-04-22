@@ -11,6 +11,7 @@ export interface Message {
   document_context?: any;
   token_count?: number;
   created_at?: string;
+  intent_eval?: any;
 }
 
 export interface StreamingState {
@@ -37,6 +38,7 @@ interface ChatState {
   // Actions
   addMessage: (message: Message) => void;
   updateLastMessage: (content: string) => void;
+  updateMessageSuggestions: (messageId: string, suggestions: string[]) => void;
   setMessages: (messages: Message[]) => void;
   clearMessages: () => void;
 
@@ -108,6 +110,14 @@ export const useChatStore = create<ChatState>()(
           }
           return { messages };
         });
+      },
+
+      updateMessageSuggestions: (messageId, suggestions) => {
+        set((state) => ({
+          messages: state.messages.map((msg) =>
+            msg.id === messageId ? { ...msg, follow_up_suggestions: suggestions } : msg
+          ),
+        }));
       },
 
       setMessages: (messages) => {

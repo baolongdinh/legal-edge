@@ -7,11 +7,11 @@ export default {
     theme: {
         extend: {
             colors: {
-                border: "hsl(var(--border))",
-                input: "hsl(var(--input))",
-                ring: "hsl(var(--ring))",
-                background: "hsl(var(--background))",
-                foreground: "hsl(var(--foreground))",
+                border: "var(--border)",
+                input: "var(--input)",
+                ring: "var(--ring)",
+                background: "var(--background)",
+                foreground: "var(--foreground)",
                 lex: {
                     deep: '#0B1C1A',        // Forest Night (True Dark Green)
                     midnight: '#050D0C',    // Deeper Forest
@@ -53,12 +53,12 @@ export default {
                     foreground: "hsl(var(--accent-foreground))",
                 },
                 popover: {
-                    DEFAULT: "hsl(var(--popover))",
-                    foreground: "hsl(var(--popover-foreground))",
+                    DEFAULT: "var(--popover)",
+                    foreground: "var(--popover-foreground)",
                 },
                 card: {
-                    DEFAULT: "hsl(var(--card))",
-                    foreground: "hsl(var(--card-foreground))",
+                    DEFAULT: "var(--card)",
+                    foreground: "var(--card-foreground)",
                 },
                 on: {
                     surface: {
@@ -92,11 +92,11 @@ export default {
                 'slate-muted': '#757682',
             },
             fontFamily: {
-                serif: ['Noto Serif', 'serif'],
-                sans: ['Manrope', 'sans-serif'],
-                headline: ['Noto Serif'],
-                body: ['Manrope'],
-                label: ['Manrope'],
+                serif: ['Merriweather', 'serif'],
+                sans: ['Inter', 'sans-serif'],
+                headline: ['Merriweather', 'serif'],
+                body: ['Inter', 'sans-serif'],
+                label: ['Inter', 'sans-serif'],
             },
             borderRadius: {
                 DEFAULT: '0.5rem',

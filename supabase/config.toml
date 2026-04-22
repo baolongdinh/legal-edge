@@ -51,9 +51,11 @@ verify_jwt = false
 [functions.save-message]
 verify_jwt = false
 
-
 [functions.generate-suggestions]
 verify_jwt = false
 
 [functions.summarize-conversation]
+verify_jwt = false
+
+[functions.generate-contract]
 verify_jwt = false

@@ -31,6 +31,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     setCurrentSuggestions,
     setStreamingEvidence,
     setStreamingStatus,
+    updateMessageSuggestions,
     attachedDocument,
     streaming,
   } = useChatStore();
@@ -139,6 +140,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       resetStreaming();
 
       const assistantMessage: Message = {
+        id: savedMessageId,
         role: 'assistant',
         content: assistantContent,
         follow_up_suggestions: suggestions,
@@ -158,6 +160,9 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
           .then((res) => {
             if (res?.suggestions?.length > 0) {
               setCurrentSuggestions(res.suggestions);
+              if (savedMessageId) {
+                updateMessageSuggestions(savedMessageId, res.suggestions);
+              }
             }
           })
           .catch((err) => console.warn('[Suggestions] Background generation failed:', err));

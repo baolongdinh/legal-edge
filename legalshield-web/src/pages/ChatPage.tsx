@@ -4,7 +4,6 @@ import { motion } from 'framer-motion';
 import { LayoutDashboard, Menu } from 'lucide-react';
 import { MessageList } from '../components/chat/MessageList';
 import { ChatInput } from '../components/chat/ChatInput';
-import { FollowUpSuggestions } from '../components/chat/FollowUpSuggestions';
 import { ConversationSidebar } from '../components/chat/ConversationSidebar';
 import { ConversationSummary } from '../components/chat/ConversationSummary';
 import { useConversation } from '../hooks/useConversation';
@@ -30,10 +29,10 @@ export function ChatPage() {
     currentConversationId,
     attachedDocument,
     setAttachedDocument,
-    currentSuggestions,
-    setCurrentSuggestions,
-    isStreaming: isChatStreaming,
+    streaming,
   } = useChatStore();
+
+  const isChatStreaming = streaming.isStreaming;
 
   const [isSummaryOpen, setIsSummaryOpen] = useState(false);
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
@@ -41,7 +40,6 @@ export function ChatPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const {
-    isStreaming,
     sendMessage: sendStreamingMessage,
   } = useStreamingChat({
     conversationId: currentConversationId || undefined,
@@ -58,15 +56,19 @@ export function ChatPage() {
       return;
     }
 
-    if (selectedConversation?.id !== conversationId) {
+    // Trigger loading if ID mismatch OR if ID matches but messages are empty (likely a page reload)
+    const needsSelection = selectedConversation?.id !== conversationId ||
+      (selectedConversation?.id === conversationId && messages.length === 0);
+
+    if (needsSelection && !isLoadingConversations && conversations.length > 0) {
       const conv = conversations.find((c) => c.id === conversationId);
       if (conv) {
         selectConversation(conv);
-      } else if (!isLoadingConversations && conversations.length > 0) {
+      } else {
         navigate('/chat', { replace: true });
       }
     }
-  }, [conversationId, conversations, selectedConversation?.id, selectConversation, isLoadingConversations, navigate]);
+  }, [conversationId, conversations, selectedConversation?.id, messages.length, selectConversation, isLoadingConversations, navigate]);
 
   const handleSendMessage = useCallback(
     async (content: string) => {
@@ -118,9 +120,8 @@ export function ChatPage() {
   const handleSuggestionClick = useCallback(
     (suggestion: string) => {
       handleSendMessage(suggestion);
-      setCurrentSuggestions([]);
     },
-    [handleSendMessage, setCurrentSuggestions]
+    [handleSendMessage]
   );
 
   const handleRegenerateSummary = useCallback(async () => {
@@ -148,7 +149,7 @@ export function ChatPage() {
   }, [currentConversationId]);
 
   return (
-    <div className="flex h-full bg-surface transition-colors duration-500 overflow-hidden relative">
+    <div className="flex h-full bg-background transition-colors duration-500 overflow-hidden relative">
       <ConversationSidebar
         isMobileOpen={isMobileSidebarOpen}
         onClose={() => setIsMobileSidebarOpen(false)}
@@ -156,53 +157,48 @@ export function ChatPage() {
 
       <div className="flex-1 flex flex-col min-w-0 bg-transparent relative">
         {/* Mobile Header Toggle */}
-        <div className="lg:hidden flex items-center h-16 px-6 border-b border-lex-border bg-white/50 backdrop-blur-md z-50">
+        <div className="lg:hidden flex items-center h-14 px-4 border-b border-lex-border bg-white/80 backdrop-blur-md z-50">
           <button
             onClick={() => setIsMobileSidebarOpen(true)}
-            className="p-2 -ml-2 text-lex-lawyer hover:text-lex-deep transition-colors"
+            className="p-2 -ml-1 text-lex-lawyer hover:text-lex-deep transition-colors"
             aria-label="Mở menu"
           >
-            <Menu size={24} />
+            <Menu size={20} />
           </button>
-          <div className="ml-4 flex flex-col">
-            <span className="text-sm font-serif italic text-lex-deep">LegalShield</span>
-            <span className="text-[8px] uppercase tracking-widest text-lex-lawyer font-bold opacity-40">AI Archive</span>
+          <div className="ml-3 flex flex-col">
+            <span className="text-xs font-serif italic text-lex-deep font-bold leading-tight">LegalShield</span>
+            <span className="text-[7px] uppercase tracking-[0.3em] text-lex-lawyer font-black opacity-30 leading-tight text-nowrap">AI Archive</span>
           </div>
         </div>
-        <div className="flex-1 overflow-hidden">
-          <MessageList onSuggestionClick={handleSuggestionClick} />
-        </div>
-
-        {currentSuggestions.length > 0 && !isChatStreaming && (
-          <div className="px-6 md:px-10 py-4 bg-transparent mt-auto lg:mt-0">
-            <FollowUpSuggestions
-              suggestions={currentSuggestions}
-              onSelect={handleSuggestionClick}
-            />
+        <div className="flex-1 overflow-hidden relative">
+          <div className="max-w-[800px] mx-auto h-full">
+            <MessageList onSuggestionClick={handleSuggestionClick} />
           </div>
-        )}
 
-        <div className="px-6 md:px-10 pb-6 md:pb-10">
-          <div className="max-w-4xl mx-auto w-full">
-            {!isChatStreaming && messages.length >= 2 && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="flex justify-center mb-6"
+          {!isChatStreaming && messages.length >= 2 && (
+            <motion.div
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="absolute top-6 right-6 md:right-10 z-20"
+            >
+              <button
+                onClick={() => setIsSummaryOpen(true)}
+                className="group flex items-center gap-3 px-6 py-2.5 bg-lex-deep text-white rounded-full hover:bg-lex-midnight transition-all shadow-xl hover:shadow-lex-deep/20 border border-lex-midnight"
               >
-                <button
-                  onClick={() => setIsSummaryOpen(true)}
-                  className="group flex items-center gap-3 px-6 py-2.5 bg-white border border-lex-border rounded-full hover:border-lex-gold transition-all shadow-sm hover:shadow-lex-gold/5"
-                >
-                  <LayoutDashboard size={14} className="text-lex-gold" />
-                  <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-lex-lawyer group-hover:text-lex-deep">
-                    Xem Insight Tổng Hợp
-                  </span>
-                </button>
-              </motion.div>
-            )}
+                <LayoutDashboard size={16} className="text-lex-gold" />
+                <span className="text-[10px] font-black uppercase tracking-[0.25em] group-hover:text-lex-gold transition-colors">
+                  Xem Insight
+                </span>
+              </button>
+            </motion.div>
+          )}
+        </div>
 
-            <div className="bg-surface-bright p-4 md:p-6 rounded-2xl md:rounded-3xl border border-lex-border shadow-2xl shadow-lex-deep/5">
+
+
+        <div className="px-4 md:px-10 pb-4 md:pb-10">
+          <div className="max-w-[800px] mx-auto w-full">
+            <div className="bg-white/95 backdrop-blur-xl p-3 md:p-6 rounded-2xl md:rounded-[2.5rem] border border-lex-border shadow-2xl shadow-lex-deep/5 transition-all hover:shadow-lex-deep/10">
               <input
                 type="file"
                 ref={fileInputRef}
@@ -218,9 +214,6 @@ export function ChatPage() {
                 isStreaming={isChatStreaming}
                 disabled={isChatStreaming}
               />
-              <p className="text-[10px] text-center mt-4 text-lex-lawyer uppercase tracking-[0.3em] font-bold opacity-30">
-                Institutional AI Archive • LegalShield v2.0
-              </p>
             </div>
           </div>
         </div>

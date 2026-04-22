@@ -69,8 +69,8 @@ export function ChatInput({
         </div>
       )}
 
-      {/* Quick Action Bubbles */}
-      <div className="flex gap-2 mb-4 overflow-x-auto custom-scrollbar pb-2">
+      {/* Quick Action Bubbles - More compact */}
+      <div className="flex gap-2 mb-3 overflow-x-auto custom-scrollbar pb-1.5 no-scrollbar">
         {[
           { label: 'Tóm tắt điều khoản', action: 'Tóm tắt các điều khoản quan trọng trong hồ sơ này' },
           { label: 'Kiểm tra tính pháp lý', action: 'Kiểm tra tính pháp lý và các rủi ro tiềm ẩn' },
@@ -81,7 +81,7 @@ export function ChatInput({
             key={item.label}
             onClick={() => onSend(item.action)}
             disabled={disabled || isStreaming}
-            className="flex-shrink-0 px-4 py-2 bg-surface-container-lowest border border-lex-border rounded-full text-[10px] font-bold uppercase tracking-wider text-lex-lawyer hover:bg-lex-gold/5 hover:border-lex-gold/30 hover:text-lex-gold transition-all duration-300 shadow-sm"
+            className="flex-shrink-0 px-3 py-1.5 bg-white/50 border border-lex-border rounded-full text-[9px] font-bold uppercase tracking-wider text-lex-lawyer/70 hover:bg-lex-gold/5 hover:border-lex-gold/30 hover:text-lex-gold transition-all duration-300 shadow-sm whitespace-nowrap"
           >
             {item.label}
           </button>
@@ -89,7 +89,7 @@ export function ChatInput({
       </div>
 
       {/* Input container - Premium Redesign */}
-      <div className="relative flex items-end gap-3 bg-surface-container-lowest/80 backdrop-blur-md border border-lex-border rounded-2xl p-3 shadow-2xl shadow-lex-deep/[0.03] focus-within:border-lex-gold/40 focus-within:shadow-lex-deep/10 transition-all duration-500">
+      <div className="relative flex items-end gap-3 bg-white/80 backdrop-blur-xl border border-lex-border rounded-2xl p-3 subtle-elevation focus-within:border-lex-gold/40 transition-all duration-500">
         <button
           onClick={onAttachDocument}
           className="p-3 text-lex-lawyer/40 hover:text-lex-gold hover:bg-lex-gold/5 transition-all rounded-xl"

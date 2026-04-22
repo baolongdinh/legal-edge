@@ -1,60 +1,35 @@
 import { memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Loader2, AlertCircle, RotateCcw, Scale, BookOpen, Search, CheckCircle2, ChevronRight } from 'lucide-react';
+import { Scale, BookOpen, AlertCircle, RotateCcw } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { Button } from '../ui/Button';
-import { clsx, type ClassValue } from 'clsx';
+import { cn } from '../../lib/utils';
 import { useChatStore } from '../../store/chatStore';
 
-function cn(...inputs: ClassValue[]) {
-  return clsx(inputs);
+interface StreamingMessageProps {
+  content: string;
+  isStreaming: boolean;
+  error?: string | null;
+  onRetry?: () => void;
+  className?: string;
 }
 
-// Granular step resolver for the progress tracker
-const AGENT_STEPS = [
-  { id: 'analyze', label: 'Phân tích yêu cầu', match: ['phân tích', 'tư duy', 'hiểu'] },
-  { id: 'search', label: 'Tìm kiếm pháp lý', match: ['nguồn', 'tìm kiếm', 'truy xuất'] },
-  { id: 'extract', label: 'Trích xuất điều luật', match: ['trích xuất', 'điều luật', 'văn bản'] },
-  { id: 'draft', label: 'Đang phản hồi', match: ['soạn thảo', 'phản hồi', 'trả lời'] },
-];
-
-function ProgressTracker({ currentStatus }: { currentStatus: string }) {
-  const activeStepIndex = AGENT_STEPS.findIndex(step =>
-    step.match.some(m => currentStatus.toLowerCase().includes(m))
-  ) || 0;
-
-  return (
-    <div className="flex items-center gap-3 py-4 overflow-hidden">
-      {AGENT_STEPS.map((step, index) => {
-        const isCompleted = index < activeStepIndex;
-        const isActive = index === activeStepIndex;
-
-        return (
-          <div key={step.id} className="flex items-center gap-2 group">
-            <div className={cn(
-              "flex items-center justify-center w-6 h-6 rounded-full border transition-all duration-500",
-              isCompleted ? "bg-lex-deep border-lex-deep text-lex-gold" :
-                isActive ? "border-lex-gold text-lex-gold animate-pulse shadow-[0_0_10px_rgba(201,149,74,0.3)]" :
-                  "border-lex-border text-lex-lawyer/20"
-            )}>
-              {isCompleted ? <CheckCircle2 size={12} /> : <span className="text-[10px] font-bold">{index + 1}</span>}
-            </div>
-            <span className={cn(
-              "text-[9px] font-bold uppercase tracking-widest hidden sm:inline whitespace-nowrap transition-colors",
-              isActive ? "text-lex-deep" : "text-lex-lawyer/40"
-            )}>
-              {step.label}
-            </span>
-            {index < AGENT_STEPS.length - 1 && (
-              <ChevronRight size={10} className="text-lex-border mx-1 opacity-50" />
-            )}
-          </div>
-        );
-      })}
-    </div>
-  );
-}
+const markdownComponents = {
+  a: ({ children }: any) => {
+    const text = children?.[0]?.toString() || '';
+    const match = text.match(/^(\d+)$/);
+    if (match) {
+      const index = parseInt(match[1]);
+      return (
+        <span className="inline-flex items-center justify-center w-5 h-5 -translate-y-1 bg-lex-gold/10 text-lex-gold border border-lex-gold/20 rounded-md text-[10px] font-bold mx-0.5 shadow-sm">
+          {index}
+        </span>
+      );
+    }
+    return <span>{children}</span>;
+  },
+};
 
 export const StreamingMessage = memo(({
   content,
@@ -67,46 +42,8 @@ export const StreamingMessage = memo(({
   const statusText = streaming.status || 'Đang khởi tạo phiên...';
   const hasEvidence = streaming.evidence?.length > 0;
 
-  // --- Initial wait (no content yet) ---
-  if (isStreaming && !content) {
-    return (
-      <motion.div
-        initial={{ opacity: 0, y: 10 }}
-        animate={{ opacity: 1, y: 0 }}
-        className={cn(
-          'max-w-[92%] lg:max-w-[85%] p-10 font-sans leading-relaxed bg-white border border-lex-border rounded-[2.5rem] shadow-2xl shadow-lex-deep/[0.03]',
-          className
-        )}
-      >
-        <div className="flex items-center gap-5 mb-8 pb-8 border-b border-lex-border/60">
-          <div className="w-12 h-12 bg-lex-deep rounded-2xl flex items-center justify-center shadow-2xl shadow-lex-deep/20 border border-lex-midnight">
-            <Scale size={24} className="text-lex-gold" />
-          </div>
-          <div>
-            <h3 className="font-serif font-bold text-lex-deep leading-none text-xl tracking-tight">Hệ thống Cố vấn AI</h3>
-            <div className="flex items-center gap-3 mt-2.5">
-              <div className="w-2.5 h-2.5 bg-lex-gold rounded-full animate-pulse" />
-              <span className="text-[10px] uppercase tracking-[0.4em] font-bold text-lex-gold">
-                Institutional Core
-              </span>
-            </div>
-          </div>
-        </div>
+  const processedContent = content.replace(/\[(?:#)?(\d+)\]/g, '[$1](#citation-$1)');
 
-        <div className="space-y-8">
-          <ProgressTracker currentStatus={statusText} />
-          <div className="flex items-center gap-4 p-6 bg-surface-container-low/50 rounded-2xl border border-lex-border/40">
-            <Loader2 className="h-4 w-4 animate-spin text-lex-gold" />
-            <span className="text-xs font-bold text-lex-lawyer/80 leading-relaxed uppercase tracking-widest">
-              {statusText}
-            </span>
-          </div>
-        </div>
-      </motion.div>
-    );
-  }
-
-  // --- Error state ---
   if (error) {
     return (
       <motion.div
@@ -123,7 +60,6 @@ export const StreamingMessage = memo(({
           </div>
           <div>
             <span className="text-xs font-bold uppercase tracking-widest block">Lỗi hệ thống</span>
-            <span className="text-[10px] uppercase opacity-60 tracking-tighter">Node ID: LS-FAILED</span>
           </div>
         </div>
         <p className="text-sm text-red-700/80 leading-relaxed font-medium pl-2 border-l-2 border-red-200 ml-5">{error}</p>
@@ -144,71 +80,70 @@ export const StreamingMessage = memo(({
     );
   }
 
-  // --- Streaming content display ---
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.98, y: 10 }}
       animate={{ opacity: 1, scale: 1, y: 0 }}
       className={cn(
-        'max-w-[92%] lg:max-w-[85%] p-10 md:p-12 font-sans leading-relaxed bg-white border border-lex-border rounded-[2.5rem] shadow-2xl shadow-lex-deep/[0.03]',
+        'flex flex-col mb-4 md:mb-8 w-full animate-in fade-in slide-in-from-bottom-4 duration-500',
         className
       )}
     >
-      {/* Header */}
-      <div className="flex items-center gap-5 mb-10 pb-8 border-b border-lex-border/60">
-        <div className="w-12 h-12 bg-lex-deep rounded-2xl flex items-center justify-center shadow-2xl shadow-lex-deep/20 border border-lex-midnight">
-          <Scale size={24} className="text-lex-gold" />
-        </div>
-        <div className="flex-1">
-          <h3 className="font-serif font-bold text-lex-deep leading-none text-xl tracking-tight">Hệ thống Cố vấn AI</h3>
-          <div className="flex items-center gap-3 mt-2.5">
-            <div className="w-2 h-2 bg-lex-gold rounded-full animate-pulse shadow-[0_0_8px_rgba(201,149,74,0.6)]" />
-            <span className="text-[10px] uppercase tracking-[0.4em] font-bold text-lex-gold">
-              Đang soạn thảo...
-            </span>
+      <div className="p-3 md:p-6 bg-white border border-lex-border text-lex-deep shadow-2xl shadow-lex-deep/[0.02] rounded-xl md:rounded-[2rem] relative overflow-hidden">
+        {/* Assistant Branding Section */}
+        <div className="flex items-center gap-3 md:gap-4 mb-6 pb-6 md:mb-12 md:pb-10 border-b border-lex-border/60">
+          <div className="w-10 h-10 md:w-14 md:h-14 bg-lex-deep rounded-xl md:rounded-2xl flex items-center justify-center shadow-2xl shadow-lex-deep/20 border border-lex-midnight transform rotate-3 transition-transform">
+            <Scale size={20} className="text-lex-gold md:hidden" />
+            <Scale size={28} className="text-lex-gold hidden md:block" />
           </div>
-        </div>
-
-        {/* Evidence badge — appears when citations arrive */}
-        <AnimatePresence>
-          {hasEvidence && (
-            <motion.div
-              initial={{ opacity: 0, x: 20 }}
-              animate={{ opacity: 1, x: 0 }}
-              className="flex items-center gap-2 px-4 py-2 bg-lex-gold/10 border border-lex-gold/30 rounded-xl"
-            >
-              <BookOpen size={14} className="text-lex-gold" />
-              <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-lex-gold">
-                {streaming.evidence.length} Phát hiện
+          <div className="flex-1">
+            <h3 className="font-serif font-bold text-lex-deep leading-tight text-lg md:text-2xl tracking-tight">Cố vấn Pháp lý Cơ quan</h3>
+            <div className="flex flex-wrap items-center gap-2 md:gap-3 mt-1.5 md:mt-3">
+              <div className="w-1.5 h-1.5 md:w-2 md:h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(34,197,94,0.8)]"></div>
+              <span className="text-[8px] md:text-[10px] uppercase tracking-[0.3em] md:tracking-[0.5em] font-black text-green-600 opacity-80">
+                ONLINE
               </span>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </div>
+              <span className="w-1.5 md:w-2 h-[1px] bg-lex-border" />
+              <span className="text-[7px] md:text-[9px] font-black px-2 md:px-3 py-0.5 rounded-full border border-lex-gold/20 bg-lex-gold/10 text-lex-gold tracking-[0.1em] md:tracking-[0.2em] uppercase">
+                {isStreaming ? (statusText.toUpperCase() || 'ĐANG PHÂN TÍCH...') : 'PHÂN TÍCH HOÀN TẤT'}
+              </span>
+            </div>
+          </div>
 
-      {/* Markdown content */}
-      <div className="prose prose-lex max-w-none text-lex-deep/90 prose-p:leading-[1.8] prose-p:mb-6 prose-headings:font-serif prose-headings:text-lex-deep prose-strong:text-lex-deep prose-strong:font-bold prose-li:marker:text-lex-gold selection:bg-lex-gold/10">
-        <ReactMarkdown remarkPlugins={[remarkGfm]}>
-          {content + (isStreaming ? ' \u2588' : '')}
-        </ReactMarkdown>
-      </div>
-
-      {/* Granular Progress Tracker Footer */}
-      {isStreaming && (
-        <div className="mt-12 pt-8 border-t border-lex-border/60">
-          <ProgressTracker currentStatus={statusText} />
+          <AnimatePresence>
+            {hasEvidence && (
+              <motion.div
+                initial={{ opacity: 0, x: 20 }}
+                animate={{ opacity: 1, x: 0 }}
+                className="hidden sm:flex items-center gap-2 px-4 py-2 bg-lex-gold/10 border border-lex-gold/30 rounded-xl"
+              >
+                <BookOpen size={14} className="text-lex-gold" />
+                <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-lex-gold text-nowrap">
+                  {streaming.evidence.length} Tài liệu
+                </span>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-      )}
+
+        <div className="prose prose-lex max-w-none">
+          <ReactMarkdown
+            remarkPlugins={[remarkGfm]}
+            components={markdownComponents}
+          >
+            {processedContent}
+          </ReactMarkdown>
+          {isStreaming && (
+            <motion.span
+              animate={{ opacity: [0, 1, 0] }}
+              transition={{ repeat: Infinity, duration: 0.8 }}
+              className="inline-block w-2 h-5 bg-lex-gold/40 ml-1 translate-y-1 rounded-full"
+            />
+          )}
+        </div>
+      </div>
     </motion.div>
   );
 });
 
 StreamingMessage.displayName = 'StreamingMessage';
-
-interface StreamingMessageProps {
-  content: string;
-  isStreaming: boolean;
-  error?: string | null;
-  onRetry?: () => void;
-  className?: string;
-}

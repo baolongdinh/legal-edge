@@ -10,9 +10,6 @@ import {
     Gavel,
     Search,
     ShieldCheck,
-    Globe,
-    Mail,
-    Share2
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/Button';

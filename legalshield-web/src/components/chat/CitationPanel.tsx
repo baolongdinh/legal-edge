@@ -1,7 +1,6 @@
 import React from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, ExternalLink, ShieldCheck, FileText, Download, Scale } from 'lucide-react';
-import { Typography } from '../ui/Typography';
 
 interface CitationPanelProps {
     isOpen: boolean;
@@ -29,7 +28,7 @@ export const CitationPanel: React.FC<CitationPanelProps> = ({ isOpen, onClose, c
                         animate={{ opacity: 1 }}
                         exit={{ opacity: 0 }}
                         onClick={onClose}
-                        className="fixed inset-0 bg-lex-deep/20 backdrop-blur-sm z-[100]"
+                        className="fixed inset-0 bg-lex-deep/40 backdrop-blur-sm z-[100]"
                     />
 
                     {/* Panel */}
@@ -37,105 +36,116 @@ export const CitationPanel: React.FC<CitationPanelProps> = ({ isOpen, onClose, c
                         initial={{ x: '100%' }}
                         animate={{ x: 0 }}
                         exit={{ x: '100%' }}
-                        transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-                        className="fixed right-0 top-0 h-full w-full max-w-2xl bg-ivory-warm shadow-[-20px_0_50px_rgba(0,0,0,0.1)] z-[101] flex flex-col border-l border-lex-border"
+                        transition={{ type: 'spring', damping: 30, stiffness: 300 }}
+                        className="fixed right-0 top-0 h-full w-full max-w-2xl bg-white shadow-2xl z-[101] flex flex-col border-l border-lex-border"
                     >
                         {/* Header */}
-                        <div className="p-6 md:p-8 border-b border-lex-border flex items-center justify-between bg-white/50 backdrop-blur-md sticky top-0 z-10">
+                        <div className="p-6 md:p-8 border-b border-lex-border flex items-center justify-between bg-lex-ivory/30">
                             <div className="flex items-center gap-4">
-                                <div className="w-10 h-10 bg-lex-gold/10 rounded-xl flex items-center justify-center border border-lex-gold/20">
-                                    <FileText className="text-lex-gold" size={20} />
+                                <div className="w-12 h-12 bg-lex-deep rounded-2xl flex items-center justify-center shadow-lg shadow-lex-deep/10 border border-lex-midnight">
+                                    <FileText size={24} className="text-lex-gold" />
                                 </div>
                                 <div>
-                                    <Typography variant="h3" className="font-serif italic text-lex-deep leading-tight">
-                                        Legal Citation Review
-                                    </Typography>
-                                    <p className="text-[10px] uppercase tracking-[0.2em] font-bold text-lex-lawyer/40 mt-1">
-                                        Institutional Verification System
-                                    </p>
+                                    <h2 className="text-2xl font-serif font-black text-lex-deep tracking-tight">Citation Review</h2>
+                                    <div className="flex items-center gap-3 mt-1">
+                                        <div className="w-2 h-2 bg-lex-gold rounded-full shadow-[0_0_8px_rgba(201,149,74,0.6)]" />
+                                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-lex-lawyer opacity-60">Verified Document Source</span>
+                                    </div>
                                 </div>
                             </div>
                             <button
                                 onClick={onClose}
-                                className="p-3 text-lex-lawyer/40 hover:text-lex-deep hover:bg-lex-lawyer/5 rounded-xl transition-all"
+                                className="p-3 hover:bg-lex-deep hover:text-white rounded-xl transition-all border border-lex-border group"
                             >
-                                <X size={24} />
+                                <X size={20} className="group-hover:rotate-90 transition-transform duration-500" />
                             </button>
                         </div>
 
                         {/* Content Body */}
-                        <div className="flex-1 overflow-y-auto p-6 md:p-10 space-y-8 md:space-y-12 custom-scrollbar">
-                            {/* Citation Title & Source */}
+                        <div className="flex-1 overflow-y-auto custom-scrollbar p-6 md:p-10 space-y-12">
+                            {/* Citation Status & Title */}
                             <section className="space-y-6">
-                                <div className="flex items-center gap-3">
-                                    <span className="flex items-center gap-1.5 text-[9px] font-bold uppercase tracking-wider text-emerald-600 bg-emerald-50 border border-emerald-100 rounded-full px-3 py-1">
-                                        <ShieldCheck size={12} />
-                                        Hồ sơ gốc
-                                    </span>
-                                    {citation.source_domain && (
-                                        <span className="text-[10px] font-mono text-lex-lawyer/40">
-                                            {citation.source_domain}
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-3">
+                                        <span className="flex items-center gap-1.5 text-[10px] font-black uppercase tracking-wider text-emerald-700 bg-emerald-50 border border-emerald-100 rounded-lg px-3 py-1.5 shadow-sm">
+                                            <ShieldCheck size={12} />
+                                            Authentic Source
                                         </span>
-                                    )}
+                                        {citation.source_domain && (
+                                            <span className="text-[10px] font-black uppercase tracking-widest text-lex-lawyer opacity-30">
+                                                {citation.source_domain}
+                                            </span>
+                                        )}
+                                    </div>
                                 </div>
 
-                                <h2 className="text-3xl font-serif font-bold text-lex-deep leading-tight tracking-tight">
+                                <h2 className="text-3xl font-serif font-black text-lex-deep leading-tight tracking-tight">
                                     {citation.title || citation.source}
                                 </h2>
 
-                                <div className="flex flex-wrap gap-4 pt-2">
+                                <div className="flex flex-wrap gap-4 pt-4">
                                     {citation.url && (
                                         <a
                                             href={citation.url}
                                             target="_blank"
                                             rel="noopener noreferrer"
-                                            className="flex items-center gap-2 px-5 py-2.5 bg-lex-deep text-lex-ivory rounded-xl text-xs font-bold transition-all hover:scale-[1.02] shadow-lg shadow-lex-deep/10"
+                                            className="flex items-center gap-2 px-6 py-3 bg-lex-deep text-white rounded-xl text-xs font-black uppercase tracking-widest transition-all hover:scale-[1.02] shadow-xl shadow-lex-deep/20 active:scale-95"
                                         >
-                                            <ExternalLink size={14} />
-                                            Xem Văn bản Gốc
+                                            <ExternalLink size={16} />
+                                            View Original Document
                                         </a>
                                     )}
-                                    <button className="flex items-center gap-2 px-5 py-2.5 border border-lex-border text-lex-lawyer rounded-xl text-xs font-bold transition-all hover:bg-lex-lawyer/5">
-                                        <Download size={14} />
-                                        Tải về (.PDF)
+                                    <button className="flex items-center gap-2 px-6 py-3 border border-lex-border text-lex-lawyer rounded-xl text-xs font-black uppercase tracking-widest transition-all hover:bg-lex-ivory active:scale-95">
+                                        <Download size={16} />
+                                        Download PDF
                                     </button>
                                 </div>
                             </section>
 
+                            <div className="h-px bg-gradient-to-r from-transparent via-lex-border to-transparent" />
+
                             {/* Full Text Analysis */}
                             <section className="space-y-6">
-                                <div className="flex items-center gap-3 text-lex-gold">
-                                    <Scale size={18} />
-                                    <Typography variant="body" className="font-bold uppercase tracking-[0.2em] text-[10px]">
-                                        Nội dung trích lục chi tiết
-                                    </Typography>
+                                <div className="flex items-center gap-4">
+                                    <div className="p-2.5 bg-lex-gold/10 text-lex-gold rounded-xl border border-lex-gold/20 shadow-sm shadow-lex-gold/5">
+                                        <Scale size={18} />
+                                    </div>
+                                    <h3 className="text-xs font-black uppercase tracking-[0.3em] text-lex-lawyer">
+                                        Detailed Extract
+                                    </h3>
                                 </div>
 
-                                <div className="bg-white/40 p-6 md:p-10 rounded-2xl md:rounded-[2rem] border border-lex-border shadow-inner-lg">
-                                    <div className="prose prose-lex max-w-none text-lex-deep/90 leading-[1.8] font-serif text-lg">
+                                <div className="bg-lex-ivory/20 p-8 rounded-[2rem] border border-lex-border/80 shadow-sm">
+                                    <div className="prose prose-lex max-w-none prose-p:text-lg prose-p:leading-[1.8] prose-p:font-serif prose-p:italic prose-p:text-lex-deep prose-p:opacity-90">
                                         {citation.content || "Không có nội dung chi tiết được lưu trữ cho nguồn này."}
                                     </div>
                                 </div>
                             </section>
 
                             {/* Legal Context Note */}
-                            <div className="p-8 bg-lex-midnight/5 border-l-4 border-lex-gold rounded-r-2xl">
-                                <p className="text-sm font-sans text-lex-lawyer/80 leading-relaxed">
-                                    <strong className="text-lex-deep block mb-2 font-serif text-base">Lưu ý Pháp lý:</strong>
-                                    Thông tin trích dẫn trên được AI trích xuất tự động từ cơ sở dữ liệu pháp luật.
-                                    Người dùng chịu trách nhiệm đối chiếu trực tiếp với văn bản quy phạm pháp luật đang có hiệu lực thi hành
-                                    trước khi áp dụng vào thực tế hồ sơ.
-                                </p>
+                            <div className="p-8 bg-lex-deep text-white rounded-[2rem] shadow-2xl relative overflow-hidden group">
+                                <div className="absolute top-0 right-0 w-32 h-32 bg-lex-gold opacity-10 rounded-full blur-3xl -mr-10 -mt-10 transition-transform group-hover:scale-150 duration-700" />
+                                <div className="relative z-10">
+                                    <div className="flex items-center gap-3 mb-4">
+                                        <div className="w-8 h-8 rounded-lg bg-lex-gold/20 flex items-center justify-center">
+                                            <ShieldCheck size={16} className="text-lex-gold" />
+                                        </div>
+                                        <h4 className="text-xs font-black uppercase tracking-[0.3em] text-lex-gold">Legal Disclaimer</h4>
+                                    </div>
+                                    <p className="text-sm font-serif italic text-lex-ivory/80 leading-relaxed">
+                                        This information is automatically extracted. Legal practitioners must verify against official gazettes before taking formal action.
+                                    </p>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Footer Actions */}
-                        <div className="p-6 md:p-8 bg-surface-container-low border-t border-lex-border">
+                        {/* Footer */}
+                        <div className="p-6 md:p-8 border-t border-lex-border bg-lex-ivory/10">
                             <button
                                 onClick={onClose}
-                                className="w-full py-4 text-center bg-transparent border border-lex-deep text-lex-deep font-bold uppercase tracking-widest text-[11px] rounded-xl hover:bg-lex-deep hover:text-lex-ivory transition-all duration-500"
+                                className="w-full py-4 bg-white border border-lex-deep text-lex-deep font-black uppercase tracking-[0.3em] text-[10px] rounded-xl hover:bg-lex-deep hover:text-white transition-all duration-300 shadow-sm active:scale-[0.98]"
                             >
-                                Đóng Phiên Kiểm duyệt
+                                Close Document Review
                             </button>
                         </div>
                     </motion.div>

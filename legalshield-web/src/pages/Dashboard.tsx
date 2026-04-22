@@ -6,9 +6,7 @@ import {
     Plus,
     Trash2,
     Clock,
-    Bell,
     Gavel,
-    History,
     ShieldAlert,
     ChevronRight,
     SearchCheck
@@ -134,7 +132,7 @@ export function Dashboard() {
 
     if (loading) {
         return (
-            <div className="h-full bg-surface p-8 space-y-8">
+            <div className="h-full bg-background p-8 space-y-8">
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                     <Skeleton height={160} className="rounded-2xl" />
                     <Skeleton height={160} className="rounded-2xl" />
@@ -148,7 +146,7 @@ export function Dashboard() {
     }
 
     return (
-        <div className="h-full flex flex-col bg-surface overflow-y-auto">
+        <div className="h-full flex flex-col bg-background overflow-y-auto">
             <Dialog
                 isOpen={!!confirmId}
                 onClose={() => setConfirmId(null)}
@@ -160,28 +158,28 @@ export function Dashboard() {
             />
 
             {/* Header section - Premium Editorial Style */}
-            <header className="px-10 pt-10 pb-6 flex justify-between items-end w-full">
+            <header className="px-6 md:px-10 pt-6 md:pt-10 pb-4 md:pb-6 flex flex-col md:flex-row md:justify-between items-start md:items-end w-full gap-4 md:gap-0">
                 <div>
                     <div className="flex items-center gap-2 mb-2">
                         <SearchCheck size={16} className="text-lex-gold" />
                         <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-lex-deep/40">Tổng quan hệ thống</span>
                     </div>
-                    <h2 className="font-serif text-4xl font-bold text-lex-deep tracking-tight">Khu lưu trữ Chủ quyền</h2>
-                    <p className="text-sm font-sans text-on-surface/50 mt-2 font-medium">Báo cáo tình trạng pháp lý hiện tại của tổ chức.</p>
+                    <h2 className="font-serif text-2xl md:text-4xl font-bold text-lex-deep tracking-tight leading-tight">Khu lưu trữ Chủ quyền</h2>
+                    <p className="text-xs md:text-sm font-sans text-slate-gray mt-2 font-medium">Báo cáo tình trạng pháp lý hiện tại của tổ chức.</p>
                 </div>
-                <div className="flex items-center gap-4">
+                <div className="flex items-center gap-3 md:gap-4 w-full md:w-auto">
                     <button
                         onClick={handleRefresh}
                         className={cn(
-                            "flex items-center gap-2 px-4 py-2 rounded-full border border-outline-variant hover:bg-surface-container-low transition-all text-xs font-bold text-lex-deep uppercase tracking-wider",
+                            "flex-1 md:flex-none flex items-center justify-center gap-2 px-4 py-2 rounded-xl md:rounded-full border border-outline-variant hover:bg-surface-container-low transition-all text-[10px] md:text-xs font-bold text-lex-deep uppercase tracking-wider",
                             isRefreshing && "opacity-50 pointer-events-none"
                         )}
                     >
                         <Clock size={14} className={cn(isRefreshing && "animate-spin")} />
                         Làm mới
                     </button>
-                    <Link to="/analysis">
-                        <Button variant="primary" className="flex items-center gap-2 px-6 rounded-full shadow-lg shadow-lex-deep/10">
+                    <Link to="/analysis" className="flex-1 md:flex-none">
+                        <Button variant="primary" className="w-full flex items-center justify-center gap-2 px-6 rounded-xl md:rounded-full shadow-lg shadow-lex-deep/10 text-[10px] md:text-xs">
                             <Plus size={18} />
                             Hợp đồng mới
                         </Button>
@@ -189,7 +187,7 @@ export function Dashboard() {
                 </div>
             </header>
 
-            <div className="px-10 pb-12 space-y-10">
+            <div className="px-6 md:px-10 pb-8 md:pb-12 space-y-6 md:space-y-10">
                 {/* Bento Stats Grid */}
                 <section className="grid grid-cols-1 md:grid-cols-3 gap-8">
                     <StatCard
@@ -223,15 +221,15 @@ export function Dashboard() {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay: 0.4 }}
-                        className="lg:col-span-8 bg-surface-bright rounded-3xl p-10 border border-lex-border shadow-[0_4px_30px_-4px_rgba(11,28,26,0.04)]"
+                        className="lg:col-span-8 bg-white rounded-2xl md:rounded-3xl p-6 md:p-10 subtle-elevation"
                     >
-                        <div className="flex justify-between items-center mb-10">
+                        <div className="flex justify-between items-center mb-6 md:mb-10">
                             <div className="flex items-center gap-3">
-                                <div className="w-1.5 h-8 bg-lex-gold rounded-full" />
-                                <h3 className="font-serif text-3xl font-bold text-lex-deep">Hồ sơ gần đây</h3>
+                                <div className="w-1 md:w-1.5 h-6 md:h-8 bg-lex-gold rounded-full" />
+                                <h3 className="font-serif text-xl md:text-3xl font-bold text-lex-deep">Hồ sơ gần đây</h3>
                             </div>
-                            <Link to="/analysis" className="text-[10px] font-sans uppercase tracking-[0.3em] text-lex-gold font-bold hover:text-lex-midnight transition-all hover:tracking-[0.4em]">
-                                Xem kho lưu trữ
+                            <Link to="/analysis" className="text-[9px] md:text-[10px] font-sans uppercase tracking-[0.2em] md:tracking-[0.3em] text-lex-gold font-bold hover:text-lex-midnight transition-all">
+                                Xem tất cả
                             </Link>
                         </div>
 
@@ -269,11 +267,11 @@ export function Dashboard() {
                                                     </div>
                                                 </div>
                                             </div>
-                                            <div className="flex items-center gap-10 ml-4">
-                                                <div className="scale-110">
+                                            <div className="flex items-center gap-4 md:gap-10 ml-4">
+                                                <div className="scale-90 md:scale-110">
                                                     <RiskBadge level={contract.max_risk_level} />
                                                 </div>
-                                                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-all translate-x-4 group-hover:translate-x-0">
+                                                <div className="flex gap-1 md:gap-2 opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all md:translate-x-4 md:group-hover:translate-x-0">
                                                     <button
                                                         onClick={(e) => {
                                                             e.preventDefault();
@@ -364,30 +362,33 @@ function StatCard({ icon, label, value, sub, variant = 'default', delay = 0 }: {
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.8, ease: [0.16, 1, 0.3, 1], delay }}
             className={cn(
-                "p-10 rounded-[2.5rem] flex flex-col justify-between h-64 transition-all duration-700 shadow-[0_8px_30px_rgb(0,0,0,0.02)] group border",
+                "p-6 md:p-10 rounded-[1.5rem] md:rounded-[2.5rem] flex flex-col justify-between h-44 md:h-64 transition-all duration-700 shadow-[0_8px_30px_rgb(0,0,0,0.02)] group border",
                 variant === 'dark'
                     ? "bg-lex-deep text-white shadow-lex-deep/20 border-lex-midnight"
-                    : "bg-surface-bright text-lex-deep hover:shadow-2xl hover:shadow-lex-deep/5 hover:-translate-y-2 border-lex-border"
+                    : "bg-white text-lex-deep subtle-elevation hover:-translate-y-2"
             )}
         >
             <div className="flex justify-between items-start">
                 <div className={cn(
-                    "p-4 rounded-2xl transition-all duration-500",
+                    "p-3 md:p-4 rounded-xl md:rounded-2xl transition-all duration-500",
                     variant === 'dark' ? "bg-lex-midnight text-lex-gold" : "bg-surface text-lex-gold group-hover:bg-lex-gold group-hover:text-white"
                 )}>
-                    {icon}
+                    {/* Scale down icon on mobile */}
+                    <div className="scale-75 md:scale-100">
+                        {icon}
+                    </div>
                 </div>
                 <span className={cn(
-                    "text-[10px] font-sans uppercase tracking-[0.4em] font-bold",
+                    "text-[8px] md:text-[10px] font-sans uppercase tracking-[0.4em] font-bold",
                     variant === 'dark' ? "text-lex-gold" : "text-lex-lawyer/40"
                 )}>
                     {label}
                 </span>
             </div>
-            <div className="mt-6">
-                <h3 className="text-6xl font-serif font-bold tracking-tighter mb-2">{value}</h3>
+            <div className="mt-3 md:mt-6">
+                <h3 className="text-3xl md:text-6xl font-serif font-bold tracking-tighter mb-1 md:mb-2">{value}</h3>
                 <p className={cn(
-                    "text-[10px] font-bold uppercase tracking-[0.2em]",
+                    "text-[8px] md:text-[10px] font-bold uppercase tracking-[0.2em]",
                     variant === 'dark' ? "text-lex-ivory/40" : "text-lex-lawyer/50"
                 )}>{sub}</p>
             </div>

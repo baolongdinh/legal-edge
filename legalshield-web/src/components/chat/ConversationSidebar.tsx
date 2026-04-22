@@ -35,7 +35,7 @@ const ConversationItem = memo(({ conv, isSelected, onSelect, onDelete, formatDat
             animate={{ opacity: 1, x: 0 }}
             onClick={() => !isTemp && onSelect(conv)}
             className={clsx(
-                "group relative p-5 rounded-[1.5rem] cursor-pointer transition-all duration-500 mb-2 border",
+                "group relative p-4 rounded-xl cursor-pointer transition-all duration-500 mb-2 border",
                 isSelected
                     ? "bg-surface-container-lowest shadow-2xl shadow-lex-deep/5 border-lex-border z-10 scale-[1.01]"
                     : "hover:bg-surface-container-lowest/80 text-lex-lawyer border-transparent",
@@ -53,7 +53,7 @@ const ConversationItem = memo(({ conv, isSelected, onSelect, onDelete, formatDat
                         <Typography
                             variant="body"
                             className={clsx(
-                                "line-clamp-1 transition-colors text-sm",
+                                "line-clamp-1 transition-colors text-base",
                                 isSelected ? "text-lex-deep font-bold" : "text-lex-lawyer font-semibold"
                             )}
                         >
@@ -65,7 +65,7 @@ const ConversationItem = memo(({ conv, isSelected, onSelect, onDelete, formatDat
                     </div>
                     {/* Status Tag */}
                     <div className={clsx(
-                        "inline-flex items-center text-[8px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border self-start transition-all duration-500",
+                        "inline-flex items-center text-[9px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full border self-start transition-all duration-500",
                         status.color
                     )}>
                         {status.label}
@@ -76,7 +76,7 @@ const ConversationItem = memo(({ conv, isSelected, onSelect, onDelete, formatDat
                 )}
             </div>
 
-            <div className="flex items-center gap-2 text-[9px] text-lex-lawyer uppercase tracking-wider opacity-40 pl-2 font-bold mb-2">
+            <div className="flex items-center gap-2 text-[10px] text-lex-lawyer uppercase tracking-wider opacity-40 pl-2 font-bold mb-2">
                 <span>{isTemp ? 'Mới' : formatDate(conv.updated_at)}</span>
                 <span className="w-0.5 h-0.5 bg-lex-lawyer rounded-full" />
                 <span>{conv.message_count} tin nhắn</span>
@@ -84,7 +84,7 @@ const ConversationItem = memo(({ conv, isSelected, onSelect, onDelete, formatDat
 
             {/* Summary preview */}
             {conv.summary_level_1 && !isTemp && (
-                <p className="text-[10px] text-lex-lawyer/60 leading-relaxed pl-2 line-clamp-2 font-sans italic">
+                <p className="text-xs text-lex-lawyer/60 leading-relaxed pl-2 line-clamp-2 font-sans italic">
                     {conv.summary_level_1}
                 </p>
             )}
@@ -164,7 +164,7 @@ export function ConversationSidebar({ isMobileOpen, onClose }: ConversationSideb
                 isMobileOpen ? "translate-x-0 shadow-2xl" : "-translate-x-full lg:flex"
             )}>
                 {/* Header */}
-                <div className="p-8 space-y-8">
+                <div className="p-6 space-y-6 md:p-8 md:space-y-8">
                     <div className="flex items-center justify-between">
                         <Typography variant="h3" className="font-serif italic text-lex-deep text-2xl tracking-tight">
                             Archive
@@ -173,17 +173,17 @@ export function ConversationSidebar({ isMobileOpen, onClose }: ConversationSideb
                     </div>
                     <Button
                         onClick={() => createConversation()}
-                        className="w-full justify-start gap-4 bg-gradient-to-br from-lex-deep to-lex-midnight text-lex-ivory hover:scale-[1.02] active:scale-[0.98] transition-all duration-500 shadow-2xl shadow-lex-deep/20 rounded-2xl py-7 group border border-lex-midnight/50"
+                        className="w-full justify-start gap-4 bg-gradient-to-br from-lex-deep to-lex-midnight text-lex-ivory hover:scale-[1.02] active:scale-[0.98] transition-all duration-500 shadow-2xl shadow-lex-deep/20 rounded-2xl py-5 group border border-lex-midnight/50"
                     >
                         <div className="bg-lex-gold/10 p-2 rounded-xl group-hover:bg-lex-gold/20 transition-colors duration-500">
                             <Plus size={20} className="text-lex-gold group-hover:rotate-90 transition-transform duration-500" />
                         </div>
-                        <span className="font-bold uppercase tracking-[0.2em] text-[11px]">Tư vấn mới</span>
+                        <span className="font-bold uppercase tracking-[0.2em] text-xs">Tư vấn mới</span>
                     </Button>
                 </div>
 
                 {/* Search */}
-                <div className="px-8 mb-6">
+                <div className="px-6 mb-6 md:px-8">
                     <div className="relative group">
                         <Search className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-lex-lawyer/40 group-focus-within:text-lex-gold transition-colors" />
                         <input
@@ -225,11 +225,6 @@ export function ConversationSidebar({ isMobileOpen, onClose }: ConversationSideb
                     )}
                 </div>
 
-                {/* Footer */}
-                <div className="p-6 border-t border-lex-border flex items-center justify-between text-[10px] text-lex-lawyer uppercase tracking-[0.3em] font-bold opacity-30 italic">
-                    <span>Institutional Suite</span>
-                    <span className="text-lex-gold">●</span>
-                </div>
             </div>
         </>
     );

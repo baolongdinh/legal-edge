@@ -2,7 +2,7 @@
 // RAG pipeline: embed prompt → similarity search on document_chunks → stream via Gemini Pro
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.3'
 import {
     buildLegalAnswerPayload,
     corsHeaders,
@@ -414,7 +414,7 @@ interface AnalysisResult {
 function analyzeUserProvidedInfo(prompt: string, answers: Record<string, string>, chatMemory: string | undefined, requirements: QuickRequirement[]): AnalysisResult {
     const fullText = [prompt, JSON.stringify(answers), chatMemory || ''].join(' ').toLowerCase()
     const normalized = normalizeVietnamese(fullText)
-    
+
     const provided = new Set<string>()
     const missing: string[] = []
 
@@ -519,7 +519,7 @@ function buildDraftPrompt(
     topEvidence: Array<any>,
     templateContent: string,
     templateReferences: Array<any>,
-    intake_answers?: Record<string,string>,
+    intake_answers?: Record<string, string>,
     chatMemory?: string,
     current_draft?: string,
     selection_context?: string,
@@ -708,7 +708,7 @@ async function generateContractTextFromPrompt(
     const content = generationData.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
     if (!content) {
         const fallbackTitle = documentRule.label || 'Hợp đồng';
-        return `${fallbackTitle} mẫu ban đầu:\n${Object.entries(intake_answers ?? {}).map(([k,v]) => `- ${k}: ${v}`).join('\n')}\n\nCác điều khoản chi tiết sẽ được soạn sau.`
+        return `${fallbackTitle} mẫu ban đầu:\n${Object.entries(intake_answers ?? {}).map(([k, v]) => `- ${k}: ${v}`).join('\n')}\n\nCác điều khoản chi tiết sẽ được soạn sau.`
     }
 
     return content
@@ -859,24 +859,24 @@ export const handler = async (req: Request): Promise<Response> => {
         // ============================================================
         // ENHANCED EXPORT: Markdown-aware formatter for Vietnamese legal documents
         // ============================================================
-        
+
         interface MarkdownNode {
             type: 'heading' | 'paragraph' | 'list' | 'separator' | 'signature'
             level?: number
             content: string
             items?: string[]
         }
-        
+
         function parseMarkdownToNodes(markdown: string): MarkdownNode[] {
             const nodes: MarkdownNode[] = []
             const lines = markdown.split('\n')
-            
+
             for (let i = 0; i < lines.length; i++) {
                 const line = lines[i].trim()
-                
+
                 // Skip empty lines but add spacing
                 if (!line) continue
-                
+
                 // Headings (# ## ###)
                 if (line.startsWith('# ')) {
                     nodes.push({ type: 'heading', level: 1, content: line.slice(2).trim() })
@@ -913,10 +913,10 @@ export const handler = async (req: Request): Promise<Response> => {
                     }
                 }
             }
-            
+
             return nodes
         }
-        
+
         function formatVietnameseLegalText(text: string): string {
             // Normalize Vietnamese legal formatting
             return text
@@ -924,7 +924,7 @@ export const handler = async (req: Request): Promise<Response> => {
                 .replace(/\[Ref #(\d+)\]/g, '(Tham khảo $1)')
                 .trim()
         }
-        
+
         function wrapTextForPDF(text: string, maxChars = 90): string[] {
             const lines: string[] = []
             text.split('\n').forEach((rawLine) => {
@@ -937,7 +937,7 @@ export const handler = async (req: Request): Promise<Response> => {
                         breakPoint--
                     }
                     if (breakPoint === 0) breakPoint = maxChars
-                    
+
                     lines.push(current.slice(0, breakPoint).trim())
                     current = current.slice(breakPoint).trim()
                 }
@@ -976,7 +976,7 @@ export const handler = async (req: Request): Promise<Response> => {
             if (type === 'docx' || type === 'both') {
                 // Parse markdown nodes
                 const nodes = parseMarkdownToNodes(contractText)
-                
+
                 // Build DOCX paragraphs from nodes
                 const children: any[] = [
                     // Header - Quốc hiệu/Tiêu ngữ
@@ -997,25 +997,25 @@ export const handler = async (req: Request): Promise<Response> => {
                         spacing: { after: 200 },
                     }),
                 ]
-                
+
                 // Process each markdown node
                 for (const node of nodes) {
                     switch (node.type) {
                         case 'heading':
                             children.push(new Paragraph({
                                 text: formatVietnameseLegalText(node.content),
-                                heading: node.level === 1 ? HeadingLevel.HEADING_1 : 
-                                         node.level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3,
+                                heading: node.level === 1 ? HeadingLevel.HEADING_1 :
+                                    node.level === 2 ? HeadingLevel.HEADING_2 : HeadingLevel.HEADING_3,
                                 alignment: node.level === 1 ? AlignmentType.CENTER : AlignmentType.LEFT,
                                 spacing: { before: 200, after: 100 },
                                 bold: true,
                             }))
                             break
-                            
+
                         case 'paragraph':
                             children.push(new Paragraph({
-                                children: [new TextRun({ 
-                                    text: formatVietnameseLegalText(node.content), 
+                                children: [new TextRun({
+                                    text: formatVietnameseLegalText(node.content),
                                     size: 24,
                                     font: 'Times New Roman'
                                 })],
@@ -1023,12 +1023,12 @@ export const handler = async (req: Request): Promise<Response> => {
                                 alignment: AlignmentType.JUSTIFIED,
                             }))
                             break
-                            
+
                         case 'list':
                             for (const item of (node.items || [])) {
                                 children.push(new Paragraph({
-                                    children: [new TextRun({ 
-                                        text: '• ' + formatVietnameseLegalText(item), 
+                                    children: [new TextRun({
+                                        text: '• ' + formatVietnameseLegalText(item),
                                         size: 24,
                                         font: 'Times New Roman'
                                     })],
@@ -1037,18 +1037,18 @@ export const handler = async (req: Request): Promise<Response> => {
                                 }))
                             }
                             break
-                            
+
                         case 'separator':
                             children.push(new Paragraph({
                                 text: '',
                                 spacing: { before: 200, after: 200 },
                             }))
                             break
-                            
+
                         case 'signature':
                             children.push(new Paragraph({
-                                children: [new TextRun({ 
-                                    text: formatVietnameseLegalText(node.content), 
+                                children: [new TextRun({
+                                    text: formatVietnameseLegalText(node.content),
                                     size: 24,
                                     bold: true
                                 })],
@@ -1057,7 +1057,7 @@ export const handler = async (req: Request): Promise<Response> => {
                             break
                     }
                 }
-                
+
                 const doc = new Document({
                     sections: [{
                         properties: {
@@ -1097,10 +1097,10 @@ export const handler = async (req: Request): Promise<Response> => {
                 const margin = 50
                 let page = pdfDoc.addPage([pageWidth, pageHeight])
                 let y = pageHeight - margin
-                
+
                 // Parse markdown nodes
                 const nodes = parseMarkdownToNodes(contractText)
-                
+
                 // Draw header - Quốc hiệu/Tiêu ngữ
                 const drawHeader = () => {
                     page.drawText('CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM', {
@@ -1111,7 +1111,7 @@ export const handler = async (req: Request): Promise<Response> => {
                         color: rgb(0, 0, 0),
                     })
                     y -= 18
-                    
+
                     page.drawText('Độc lập - Tự do - Hạnh phúc', {
                         x: pageWidth / 2 - 100,
                         y: y,
@@ -1120,7 +1120,7 @@ export const handler = async (req: Request): Promise<Response> => {
                         color: rgb(0, 0, 0),
                     })
                     y -= 25
-                    
+
                     page.drawText('-------------------', {
                         x: pageWidth / 2 - 50,
                         y: y,
@@ -1130,9 +1130,9 @@ export const handler = async (req: Request): Promise<Response> => {
                     })
                     y -= 30
                 }
-                
+
                 drawHeader()
-                
+
                 // Process each node
                 for (const node of nodes) {
                     switch (node.type) {
@@ -1141,14 +1141,14 @@ export const handler = async (req: Request): Promise<Response> => {
                                 page = pdfDoc.addPage([pageWidth, pageHeight])
                                 y = pageHeight - margin
                             }
-                            
+
                             const isCenter = node.level === 1
                             const fontSize = node.level === 1 ? 14 : node.level === 2 ? 12 : 11
                             const useFont = node.level === 1 ? boldFont : font
                             const text = formatVietnameseLegalText(node.content)
                             const textWidth = useFont.widthOfTextAtSize(text, fontSize)
                             const x = isCenter ? (pageWidth - textWidth) / 2 : margin
-                            
+
                             page.drawText(text, {
                                 x,
                                 y,
@@ -1158,11 +1158,11 @@ export const handler = async (req: Request): Promise<Response> => {
                             })
                             y -= (fontSize + 8)
                             break
-                            
+
                         case 'paragraph':
                             const paraText = formatVietnameseLegalText(node.content)
                             const paraLines = wrapTextForPDF(paraText, 85)
-                            
+
                             for (const line of paraLines) {
                                 if (y < margin + 20) {
                                     page = pdfDoc.addPage([pageWidth, pageHeight])
@@ -1179,7 +1179,7 @@ export const handler = async (req: Request): Promise<Response> => {
                             }
                             y -= 5 // Paragraph spacing
                             break
-                            
+
                         case 'list':
                             for (const item of (node.items || [])) {
                                 if (y < margin + 20) {
@@ -1188,7 +1188,7 @@ export const handler = async (req: Request): Promise<Response> => {
                                 }
                                 const itemText = '• ' + formatVietnameseLegalText(item)
                                 const itemLines = wrapTextForPDF(itemText, 80)
-                                
+
                                 for (const line of itemLines) {
                                     if (y < margin + 20) {
                                         page = pdfDoc.addPage([pageWidth, pageHeight])
@@ -1206,18 +1206,18 @@ export const handler = async (req: Request): Promise<Response> => {
                             }
                             y -= 5
                             break
-                            
+
                         case 'separator':
                             y -= 20
                             break
-                            
+
                         case 'signature':
                             if (y < margin + 150) {
                                 page = pdfDoc.addPage([pageWidth, pageHeight])
                                 y = pageHeight - margin
                             }
                             y -= 30 // Extra space before signature
-                            
+
                             const sigText = formatVietnameseLegalText(node.content)
                             page.drawText(sigText, {
                                 x: margin,
@@ -1256,8 +1256,7 @@ export const handler = async (req: Request): Promise<Response> => {
         let userId = ''
         const authHeader = req.headers.get('Authorization')
         if (authHeader) {
-            const tempClient = createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_ANON_KEY')!)
-            const { data: { user } } = await tempClient.auth.getUser(authHeader.replace('Bearer ', ''))
+            const { data: { user } } = await supabase.auth.getUser(authHeader.replace('Bearer ', ''))
             userId = user?.id || ''
         }
 
@@ -1386,7 +1385,7 @@ export const handler = async (req: Request): Promise<Response> => {
 
         // 2. ENHANCED: Production-grade retrieval pipeline
         console.log(`[Draft AI] Running enhanced retrieval pipeline...`);
-        
+
         let retrievalResult: RetrievalResult;
         try {
             retrievalResult = await retrieveLegalEvidenceProduction(retrievalQuery, supabase, {
@@ -1394,10 +1393,10 @@ export const handler = async (req: Request): Promise<Response> => {
                 minResults: 3,
                 maxResults: 3,
             });
-            
+
             // Log quality metrics
             console.log(`[Draft AI] Retrieval complete: Authority=${retrievalResult.authorityScore}, Coverage=${retrievalResult.coverageScore}, Official=${retrievalResult.hasOfficialSource}`);
-            
+
         } catch (err) {
             console.warn('[Draft AI] Enhanced retrieval failed, fallback to basic:', err);
             // Fallback: use internal + web results directly
@@ -1409,7 +1408,7 @@ export const handler = async (req: Request): Promise<Response> => {
                 source_type: e.source_type || 'secondary',
                 retrieved_at: new Date().toISOString(),
             }));
-            
+
             retrievalResult = {
                 evidence: fallbackEvidence,
                 topEvidence: fallbackEvidence,
@@ -1424,13 +1423,13 @@ export const handler = async (req: Request): Promise<Response> => {
                 },
             };
         }
-        
+
         // Validate evidence sufficiency
         const sufficiency = hasSufficientEvidence(retrievalResult.topEvidence, 1);
         if (!sufficiency.sufficient) {
             console.warn(`[Draft AI] Evidence quality warning: ${sufficiency.reason}`);
         }
-        
+
         const topEvidence = retrievalResult.topEvidence;
 
         // 3. Build Unified Context
@@ -1496,24 +1495,24 @@ export const handler = async (req: Request): Promise<Response> => {
             }
 
             const requiresCitation = requiresLegalCitation(`${mergedPrompt}\n${content}`)
-            
+
             // VALIDATION LAYER: Verify claims against evidence
             console.log(`[Draft AI] Running claim validation...`)
             const claimAudit = auditClaimsAgainstEvidence(content, topEvidence as any)
             const unsupportedClaims = claimAudit.filter(a => !a.supported)
-            
+
             if (unsupportedClaims.length > 0) {
-                console.warn(`[Draft AI] Found ${unsupportedClaims.length} unsupported claims:`, 
+                console.warn(`[Draft AI] Found ${unsupportedClaims.length} unsupported claims:`,
                     unsupportedClaims.map(c => c.claim.slice(0, 100)))
             }
-            
+
             // If too many unsupported claims, add warning to content
             if (unsupportedClaims.length >= 3) {
                 content += '\n\n---\n**Lưu ý**: Một số điều khoản trong bản soạn thảo cần được xác thực thêm với luật sư.'
             }
-            
+
             const payload = buildLegalAnswerPayload(content, topEvidence as any, requiresCitation)
-            
+
             // Add claim audit to payload
             payload.claim_audit = claimAudit
 
