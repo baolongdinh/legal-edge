@@ -34,16 +34,31 @@ supabase/.env.local
 supabase/.temp/
 supabase/functions/.env
 
-# AI / Agents
+# AI / Agents / Assistants
 .gitnexus/
 .agents/
+.agent/
 .stitch/
 .claude/
 .gemini/
 .agent/
 _agents/
 _agent/
-AGENTS.md
-CLAUDE.md
+
+
+**/.agent/
+**/.agents/
+**/.gemini/
+**/.task/
+**/brain/
+**/task.md
+**/implementation_plan.md
+**/walkthrough.md
 
 playwright-report/
+
+
+AGENTS.md
+CLAUDE.md
+DESIGN.md
+package-lock.json
