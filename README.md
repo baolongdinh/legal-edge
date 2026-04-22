@@ -1,170 +1,67 @@
-# LegalShield - AI-Powered Contract Auditor & Assistant
+# 🚀 LegalShield - AI-Powered Regulatory Search Engine
 
-LegalShield is a modern Progressive Web App (PWA) designed to automate legal contract review, risk detection, and clause optimization using advanced Artificial Intelligence.
+LegalShield is a specialized AI platform designed for high-precision **Legal & Regulatory Research**. It transitions from a simple "chat" interface to a robust "Search & Reference" engine, empowering users to verify information against authoritative legal sources in real-time.
 
-## 🚀 Key Features
+---
 
-- **AI Risk Analysis**: Automatically detect legal risks (Critical, Moderate, Note) in seconds using LLMs.
-- **High-Performance Document Processing**: Offloads heavy PDF/DOCX parsing to Web Workers (via Comlink) to maintain a smooth 60fps UI.
-- **Token-Saving Deduplication**: Hash-based content identification prevents redundant AI analysis, significantly reducing API costs.
-- **Offline-First Persistence**: Leverages IndexedDB (idb-keyval) and Zustand to cache analysis results locally for offline access.
-- **Hybrid Search Architecture**: Combines Full-Text Search (FTS) and Vector Search (pgvector) for lightning-fast retrieval of legal precedents and similar clauses.
-- **Multi-Channel Payments**: Integrated Stripe, MoMo, and VNPAY for seamless subscription upgrades.
+## ⚖️ The Problem & Our Mission
 
-## 🧜 Core Workflows
+### The Challenge
+Navigating the complex landscape of Vietnamese law and regulations is often slow, prone to human error, and expensive. General-purpose AI models frequently hallucinate legal "advice" or quote non-existent articles, creating significant legal liabilities for businesses.
 
-### 1. Contract Analysis Pipeline
-This workflow highlights our "Zero UI Lag" strategy using Web Workers and "Token-Saving" deduplication.
+### Our Solution
+LegalShield acts as a **Digital Sovereignty Archive**. We combine **Deep RAG (Retrieval-Augmented Generation)** with verified legal databases to provide a tool that doesn't just "chat," but "finds and verifies." 
 
-```mermaid
-sequenceDiagram
-    participant U as User
-    participant F as Frontend (Main Thread)
-    participant W as Web Worker (Comlink)
-    participant S as Supabase (DB/RPC)
-    participant E as Edge Function (AI)
+**Core Mission**: To mitigate legal liability by providing instantly verifiable regulatory evidence.
 
-    U->>F: Upload Contract (PDF/DOCX)
-    F->>W: Send ArrayBuffer
-    W->>W: Generate SHA-256 Hash
-    W->>F: Return Hash
-    F->>S: RPC: check_contract_hash(hash)
-    alt Cache Hit
-        S-->>F: Return Existing Analysis
-        F->>U: Display Cached Results (Instant)
-    else Cache Miss
-        F->>W: Parse Document to Text
-        W-->>F: Return Extracted Text
-        F->>S: Register Document (Pending)
-        F->>E: Invoke risk-review (Gemini/Groq)
-        E->>S: Store Findings & Update Status
-        S-->>F: Realtime Update
-        F->>U: Display AI Analysis
-    end
-```
+---
+
+## 🌟 Key Workflows
+
+### 1. Regulatory Audit (`Đối soát Quy chuẩn`)
+Automatically scan contracts and documents to detect non-compliance or potential risks against 700+ current regulations.
+
+### 2. Deep Legal Search (`Tra cứu Chuyên sâu`)
+A unified search engine that retrieves primary law articles and real-time web evidence (via Exa), merging them into a single, cited response.
+
+### 3. Integrated Document Assistant (`Trợ lý Văn bản`)
+Edit and draft documents with a side-by-side legal reference assistant that suggests improvements based on regulatory standards.
+
+---
+
+## 🎨 Showcase
+
+````carousel
+### Premium Landing Experience
+Modern, authoritative design focused on "Digital Sovereignty".
+![Landing](file:///home/aiozlong/.gemini/antigravity/brain/aca93391-acfa-409b-b255-fdd9348a974d/rebranded_landing_verification.png)
+<!-- slide -->
+### High-Density Dashboard
+A professional cockpit for tracking regulatory audits and system status.
+![Dashboard](file:///home/aiozlong/.gemini/antigravity/brain/aca93391-acfa-409b-b255-fdd9348a974d/dashboard_mobile_view_1776828029131.png)
+<!-- slide -->
+### Verified Search Interface
+Optimized for mobile with clear citations and persistent legal disclaimers.
+![Chat](file:///home/aiozlong/.gemini/antigravity/brain/aca93391-acfa-409b-b255-fdd9348a974d/chat_mobile_view_1776828041231.png)
+````
+
+---
 
 ## 🛠 Tech Stack
 
-- **Frontend**: React 19, Vite, Tailwind CSS, Zustand, Lucide Icons.
-- **Backend/Infrastructure**: Supabase (PostgreSQL + pgvector).
-- **AI Engine**: Edge Functions (Gemini & Groq), Semantic Cache with RLS.
-- **Automation**: Makefile, PWA, Web Workers.
+- **Frontend**: React 19, Vite, Tailwind CSS, Zustand.
+- **Intelligence**: Deep RAG (Hybrid Search + Jina Reranker v2).
+- **Compute**: Supabase Edge Functions (Gemini 1.5 Flash & Groq).
+- **Infrastructure**: PostgreSQL + pgvector, Vercel, PWA.
 
-## 📋 Prerequisites
+---
 
-- **Node.js**: v18+
-- **Supabase CLI**: For database & Edge Function management.
-- **Docker**: (Required) for local Edge Function testing and development.
+## � Technical Documentation
 
-## ⚙️ Setup & Installation
+For installation, environment configuration, and deployment instructions, please see:
 
-### 1. Clone the repository and install dependencies
+👉 **[SETUP.md](file:///home/aiozlong/DATA/CODE/SELF_PROD/LegalEdge/SETUP.md)**
 
-```bash
-git clone <your-repo-url>
-cd LegalEdge
+---
 
-# Install frontend dependencies
-cd legalshield-web
-npm install
-```
-
-### 2. Configure Environment Variables
-
-Create a `.env` file in the `legalshield-web/` directory:
-```env
-VITE_SUPABASE_URL=your_supabase_url
-VITE_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-Configure Secrets for Supabase Edge Functions in `supabase/.env`:
-```env
-GEMINI_API_KEYS=key1,key2
-STRIPE_SECRET_KEY=...
-MOMO_SECRET_KEY=...
-VNPAY_TMN_CODE=...
-```
-
-### 3. Initialize Database & Functions
-
-To deploy to a live Supabase project:
-```bash
-# Link to your Supabase project
-npx supabase link --project-ref <your-project-id>
-
-# Deploy all database migrations and edge functions
-make deploy-supabase
-```
-
-### 4. Run the Application
-
-```bash
-cd legalshield-web
-npm run dev
-```
-
-### 5. AI Knowledge Ingestion (RAG)
-
-To empower the AI with legal knowledge and contract templates, you must seed the database:
-
-1.  **Configure API Keys**: Ensure `JINA_API_KEY` (primary embedding) and `GEMINI_API_KEYS` are set in `supabase/.env`.
-2.  **Crawl & Index**:
-    ```bash
-    # 1. Crawl latest legal sources from the web
-    make crawl-templates
-    
-    # 2. Seed and Embed (Jina/Voyage/Gemini)
-    # This will chunk documents and generate the 768-D vectors
-    make init-templates
-    ```
-3.  **Full Pipeline**: Run `make sync-templates` to perform the entire end-to-end crawl -> refine -> index workflow.
-
-## 🧠 Dual-Source Deep RAG Architecture
-
-LegalShield implements a state-of-the-art **Deep RAG** pipeline that ensures every AI response is grounded in both authoritative internal law and real-time web evidence. This architecture is unified across all core services (`legal-chat`, `generate-contract`, `risk-review`).
-
-### 1. High-Precision Retrieval Flow
-
-```mermaid
-flowchart TD
-    subgraph Input
-        A[User Query / Contract Clause]
-    end
-
-    subgraph Parallel_Retrieval [Step 1: Parallel Multi-Source Retrieval]
-        B1[(Internal Law DB)] -- Hybrid Search: Vector + FTS --> C1[15+ Official Articles]
-        B2{External Web: Exa} -- Live Real-time Search --> C2[5+ Verified Web Links]
-    end
-
-    subgraph Reranking [Step 2: Global Intelligence Rerank]
-        D[Global Candidate Pool] -- All Sources Merged --> E{Jina Reranker v2}
-        E -- Semantic Cross-Encoder --> F[Top 5 'Golden' Evidence]
-    end
-
-    subgraph Generation [Step 3: Grounded Synthesis]
-        F --> G[Gemini 1.5 Flash / Groq]
-        G -- Strict In-line Citations --> H[Verified Legal Response]
-    end
-
-    A --> B1
-    A --> B2
-    C1 --> D
-    C2 --> D
-```
-
-### 2. Key Components
-- **Hybrid Search**: Combines semantic embeddings (Vector) with keyword matching (Full-Text Search) in PostgreSQL to ensure specific Article numbers (e.g., "Điều 5") are never missed.
-- **Global Reranking**: Uses **Jina Reranker v2** to eliminate "Lost in the Middle" bias. It evaluates internal matches and web links on the same semantic scale.
-- **Semantic Caching**: AI responses are hashed and stored. Similar future queries are served instantly from the cache, reducing API latency by 90%.
-- **Hallucination Firewall**: The LLM is restricted to the "Golden Evidence" pool and must provide citations for every legal claim.
-
-## 📂 Project Structure
-
-- `/legalshield-web`: React frontend source code.
-  - `/src/workers`: Performance-critical file parsing (Web Workers).
-  - `/src/store`: Global state management (Zustand).
-  - `/src/lib`: Document parsing logic & Supabase client.
-- `/supabase`: Backend configuration.
-  - `/migrations`: Optimized SQL scripts (Vector search, Cache, Materialized Views).
-  - `/functions`: AI processing and Payment gateway Edge Functions.
-- `Makefile`: Automation commands for streamlined deployment.
+*LegalShield is a reference utility. Verify all information against official gazettes.*

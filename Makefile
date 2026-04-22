@@ -7,7 +7,7 @@ SHELL := /usr/bin/env bash
 WEB_DIR := legalshield-web
 SUPABASE_ENV := ./supabase/.env
 WEB_ENV := ./legalshield-web/.env
-# Pin Supabase CLI version to avoid auto-update issues (2.92.1 has bundling bugs)
+
 SUPABASE_CLI := npx supabase
 SUPABASE_PROJECT_ID := xrfhkyjwesxpybsooeot
 COLOR_YELLOW := \033[1;33m
