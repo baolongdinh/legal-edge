@@ -92,7 +92,6 @@ deploy-supabase:
 	npx supabase functions deploy parse-document --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
 	npx supabase functions deploy ingest-contract --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
 	npx supabase functions deploy legal-chat --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
-	npx supabase functions deploy export-pdf --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
 	npx supabase functions deploy create-checkout-session --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
 	npx supabase functions deploy momo-payment --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
 	npx supabase functions deploy vnpay-payment --project-ref "$$SUPABASE_PROJECT_ID" --no-verify-jwt && \
@@ -138,7 +137,7 @@ sync-templates: crawl-templates promote-templates snapshot-templates refine-temp
 init-templates:
 	@echo "▶ Seeding repo templates into public.templates ..."
 	@set -a && . $(SUPABASE_ENV) && . $(WEB_ENV) && set +a && \
-	node ./scripts/init_templates.mjs
+	INIT_INCLUDE_CRAWLED=today node ./scripts/init_templates.mjs
 
 # Testing Suites
 test-frontend:

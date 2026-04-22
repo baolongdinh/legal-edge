@@ -2,6 +2,7 @@
 // Import path: ../shared/types.ts
 import { Redis } from 'https://esm.sh/@upstash/redis@1.28.0'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+export { createClient }
 
 export interface AuthenticatedUser {
     id: string
@@ -32,6 +33,8 @@ export interface RiskClause {
     clause_ref: string
     level: 'critical' | 'moderate' | 'note'
     description: string
+    risk_quote?: string
+    suggested_revision?: string
     citation: string
     citation_url?: string
     citation_text?: string
@@ -50,6 +53,14 @@ export interface ChunkMatch {
     law_article: string
     source_url: string
     similarity: number
+}
+
+export interface ChatMemoryEntry {
+    content: string
+    role: 'user' | 'assistant'
+    similarity?: number
+    fts_rank?: number
+    content_type?: 'message' | 'evidence'
 }
 
 export type CitationVerificationStatus =
@@ -182,6 +193,34 @@ export async function jinaEmbed(text: string, _unused?: string, dims = 512): Pro
     const data = await res.json()
     return data.data[0].embedding as number[]
 }
+
+/**
+ * Jina AI Reranker Integration.
+ * Improves RAG accuracy by re-evaluating top candidates with a cross-encoder.
+ */
+/**
+ * Jina AI Reranker Integration.
+ * Improves RAG accuracy by re-evaluating top candidates with a cross-encoder.
+ */
+export async function jinaRerank(query: string, documents: string[], topN = 5): Promise<{ index: number; score: number }[]> {
+    if (documents.length === 0) return []
+
+    const res = await fetchWithRetry('https://api.jina.ai/v1/rerank', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            model: 'jina-reranker-v2-base-multilingual',
+            query,
+            top_n: topN,
+            documents
+        })
+    }, { listEnvVar: 'JINA_API_KEYS', fallbackEnvVar: 'JINA_API_KEY' })
+
+    const data = await res.json()
+    // Returns objects of {index, score} in their new ranked order
+    return data.results.map((r: any) => ({ index: r.index, score: r.relevance_score }))
+}
+
 export async function voyageEmbed(text: string, _unused?: string, dims = 512): Promise<number[]> {
     const res = await fetchWithRetry('https://api.voyageai.com/v1/embeddings', {
         method: 'POST',
@@ -398,7 +437,9 @@ export function rewriteLegalQuery(input: string): string[] {
 
 export async function retrieveLegalEvidence(query: string, numResults = 5): Promise<LegalSourceEvidence[]> {
     const redis = getRedisClient()
-    const cacheKey = buildCacheKey('cache:legal_evidence', normalizeLegalQuery(query), numResults)
+    // Sort tokens before hashing → order-invariant cache key
+    const sortedQuery = normalizeLegalQuery(query).split(' ').sort().join(' ')
+    const cacheKey = buildCacheKey('cache:legal_evidence', sortedQuery, numResults)
     if (redis) {
         const cached = await redis.get<LegalSourceEvidence[]>(cacheKey)
         if (cached && Array.isArray(cached) && cached.length > 0) {
@@ -406,11 +447,11 @@ export async function retrieveLegalEvidence(query: string, numResults = 5): Prom
         }
     }
 
-    const queryVariants = rewriteLegalQuery(query).slice(0, 3)
-    const allResults = (await Promise.all(queryVariants.map((variant) => exaSearch(variant, '', numResults)))).flat()
+    // Consolidated Exa search for better cost efficiency and focus
+    const results = await exaSearch(query, '', numResults * 3)
 
     const deduped = new Map<string, LegalSourceEvidence>()
-    for (const result of allResults) {
+    for (const result of results) {
         if (!result.url || !isAllowedLegalUrl(result.url)) continue
         if (!deduped.has(result.url)) {
             deduped.set(result.url, {
@@ -420,15 +461,29 @@ export async function retrieveLegalEvidence(query: string, numResults = 5): Prom
         }
     }
 
-    const ranked = [...deduped.values()]
-        .sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
-        .slice(0, numResults)
+    let ranked = [...deduped.values()]
 
-    if (redis && ranked.length > 0) {
-        await redis.set(cacheKey, ranked, { ex: 60 * 60 * 6 })
+    // Apply Reranking for maximum accuracy
+    if (ranked.length > 1) {
+        try {
+            const docTexts = ranked.map(r => `${r.title}\n${r.content.slice(0, 800)}`)
+            const rankedResults = await jinaRerank(query, docTexts, numResults)
+            ranked = rankedResults.map(r => ranked[r.index]).filter(Boolean)
+        } catch (e) {
+            console.warn('Reranking failed, falling back to heuristic scoring:', (e as Error).message)
+            ranked = ranked.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
+        }
+    } else {
+        ranked = ranked.sort((a, b) => (b.score ?? 0) - (a.score ?? 0))
     }
 
-    return ranked
+    const finalResults = ranked.slice(0, numResults)
+
+    if (redis && finalResults.length > 0) {
+        await redis.set(cacheKey, finalResults, { ex: 60 * 60 * 6 })
+    }
+
+    return finalResults
 }
 
 /**
@@ -459,7 +514,7 @@ export async function fetchWithRetry(
         timeoutMs?: number
     }
 ): Promise<Response> {
-    const { listEnvVar, fallbackEnvVar, maxRetries = 5, backoffBase = 1000, timeoutMs = 20_000 } = config
+    const { listEnvVar, fallbackEnvVar, maxRetries = 4, backoffBase = 50, timeoutMs = 15_000 } = config
     let lastError: Error | null = null
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -740,6 +795,27 @@ function extractCitationText(answer: string, evidence: LegalSourceEvidence): str
 }
 
 export function buildLegalCitationsFromEvidence(answer: string, evidence: LegalSourceEvidence[]): LegalCitation[] {
+    // 1. Explicit Footnote Extraction (Prompt matched)
+    const explicitMatches = [...answer.matchAll(/\[(?:#|Nguồn\s*)(\d+)\]/gi)]
+    const explicitIndexes = [...new Set(explicitMatches.map(m => parseInt(m[1], 10) - 1))].filter(i => i >= 0 && i < evidence.length)
+
+    if (explicitIndexes.length > 0) {
+        return explicitIndexes.map(index => {
+            const item = evidence[index]
+            return {
+                citation_text: extractCitationText(answer, item),
+                citation_url: item.url,
+                source_domain: item.source_domain,
+                source_title: item.title,
+                source_excerpt: item.content.slice(0, 280),
+                source_type: item.source_type,
+                verification_status: item.source_type === 'official' ? 'official_verified' : 'secondary_verified',
+                retrieved_at: item.retrieved_at,
+            }
+        })
+    }
+
+    // 2. Fallback keyword heuristic mapping
     const rankedEvidence = evidence
         .map((item) => ({ item, score: scoreEvidenceForClaim(answer, item) }))
         .filter(({ score }) => score >= 35)
@@ -794,6 +870,182 @@ export function buildAbstainPayload(message: string, requiresCitation = true, ev
         verification_summary,
         abstained: true,
     }
+}
+
+/**
+ * Retrieves relevant chat memory from pgvector.
+ * Returns both message entries and evidence entries separately.
+ */
+export async function retrieveChatMemory(
+    supabase: any,
+    queryEmbedding: number[],
+    userId: string,
+    queryText?: string,
+    sessionId?: string,
+    matchThreshold = 0.3,
+    matchCount = 20
+): Promise<ChatMemoryEntry[]> {
+    // 1. Always fetch the 5 most recent messages for the user/session as 'short-term' context
+    const { data: recentMessages, error: recentError } = await supabase
+        .from('chat_memory')
+        .select('content, role, content_type')
+        .eq('user_id', userId)
+        .eq('content_type', 'message')
+        .order('created_at', { ascending: false })
+        .limit(5)
+
+    // 2. Fetch semantic memory via pgvector
+    const { data: semanticData, error: semanticError } = await supabase.rpc('match_chat_memory', {
+        query_embedding: queryEmbedding,
+        match_threshold: matchThreshold,
+        match_count: matchCount,
+        p_user_id: userId,
+        p_session_id: sessionId,
+        p_query_text: queryText || null,
+    })
+
+    if (recentError || semanticError) {
+        console.error('Memory retrieval error:', recentError || semanticError)
+    }
+
+    const seenContents = new Set<string>()
+    const combined: ChatMemoryEntry[] = []
+
+    // Add recent messages first (reverse back to chronological)
+    if (recentMessages) {
+        for (const m of [...recentMessages].reverse()) {
+            combined.push(m)
+            seenContents.add(m.content)
+        }
+    }
+
+    // Add semantic messages if not already in combined
+    if (semanticData) {
+        for (const m of semanticData) {
+            if (!seenContents.has(m.content)) {
+                combined.push(m)
+                seenContents.add(m.content)
+            }
+        }
+    }
+
+    return combined.slice(0, 15) // Return a total of 15 entries for rich context
+}
+
+/**
+ * Checks the semantic cache for a similar previously answered query.
+ */
+export async function getSemanticCache(
+    supabase: any,
+    embedding: number[],
+    threshold = 0.1 // Distance threshold: smaller is stricter
+): Promise<any | null> {
+    const { data, error } = await supabase.rpc('find_semantic_match', {
+        p_embedding: embedding,
+        p_threshold: threshold
+    })
+
+    if (error) {
+        console.warn('Semantic cache match error:', error.message)
+        return null
+    }
+
+    if (data && data.length > 0) {
+        return data[0].result_json
+    }
+
+    return null
+}
+
+/**
+ * Persists an AI result to the semantic cache.
+ */
+export async function setSemanticCache(
+    supabase: any,
+    query: string,
+    embedding: number[],
+    result: any
+) {
+    const content_hash = simpleHash(normalizeLegalQuery(query))
+    const { error } = await supabase.from('semantic_cache').upsert({
+        content_hash,
+        content_text: query,
+        embedding,
+        result_json: result
+    }, { onConflict: 'content_hash' })
+
+    if (error) {
+        console.warn('Error setting semantic cache:', error.message)
+    }
+}
+
+/**
+ * Stores a message or evidence entry in chat memory.
+ * Includes Redis-based deduplication to prevent noisy duplicates.
+ */
+export async function storeChatMemory(
+    supabase: any,
+    entry: {
+        user_id: string
+        session_id?: string
+        role: 'user' | 'assistant'
+        content: string
+        embedding: number[]
+        content_type?: 'message' | 'evidence'
+    }
+) {
+    // Dedup check: prevent storing near-identical content within 10 minutes
+    const redis = getRedisClient()
+    if (redis) {
+        const dedupKey = `mem:dedup:${entry.user_id}:${simpleHash(entry.content.slice(0, 200))}`
+        const exists = await redis.get(dedupKey)
+        if (exists) return // Skip duplicate
+        await redis.set(dedupKey, 1, { ex: 600 }) // 10 min TTL
+    }
+    const { error } = await supabase.from('chat_memory').insert({
+        ...entry,
+        content_type: entry.content_type ?? 'message',
+    })
+    if (error) {
+        console.error('Error storing chat memory:', error)
+    }
+}
+
+/**
+ * Stores Exa evidence items as 'evidence' entries in chat_memory.
+ * This allows future retrieval WITHOUT calling Exa again.
+ * Fire-and-forget — errors are swallowed gracefully.
+ */
+export async function storeEvidenceInMemory(
+    supabase: any,
+    userId: string,
+    evidence: LegalSourceEvidence[]
+): Promise<void> {
+    if (evidence.length === 0) return
+    const embeds = await Promise.allSettled(
+        evidence.map(async (item) => {
+            const compact = `[LEGAL SOURCE] ${item.title} | ${item.source_domain}${item.matched_article ? ` | Điều: ${item.matched_article}` : ''}\n${item.content.slice(0, 350)}`
+            const embedding = await embedText(compact, undefined, 768)
+            return storeChatMemory(supabase, {
+                user_id: userId,
+                role: 'assistant',
+                content: compact,
+                embedding,
+                content_type: 'evidence',
+            })
+        })
+    )
+    const failed = embeds.filter(r => r.status === 'rejected').length
+    if (failed > 0) console.warn(`storeEvidenceInMemory: ${failed}/${evidence.length} items failed`)
+}
+
+/**
+ * Checks if retrieved memory already contains fresh legal evidence from trusted sources.
+ * When true, the caller can skip the Exa API call entirely.
+ */
+export function hasRecentLegalEvidence(memories: ChatMemoryEntry[]): boolean {
+    const evidenceEntries = memories.filter(m => m.content_type === 'evidence')
+    return evidenceEntries.length >= 2
 }
 
 export function buildLegalAnswerPayload(answer: string, evidence: LegalSourceEvidence[], requiresCitation: boolean): LegalAnswerPayload {

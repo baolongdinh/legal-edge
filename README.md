@@ -43,28 +43,6 @@ sequenceDiagram
     end
 ```
 
-### 2. Payment & Subscription Flow
-Unified handling for international (Stripe) and local (MoMo, VNPAY) gateways.
-
-```mermaid
-graph TD
-    A[User Selects Plan] --> B{Provider?}
-    B -- Stripe --> C[create-checkout-session EF]
-    B -- MoMo --> D[momo-payment EF]
-    B -- VNPAY --> E[vnpay-payment EF]
-    
-    C & D & E --> F[Redirect to Gateway UI]
-    F --> G[User Completes Payment]
-    G --> H[payment-webhook EF]
-    
-    H --> I{Verify Signature}
-    I -- Valid --> J[Update subscriptions Table]
-    I -- Invalid --> K[Log Security Alert]
-    
-    J --> L[Realtime Sync on Frontend]
-    L --> M[Enable Pro Features]
-```
-
 ## 🛠 Tech Stack
 
 - **Frontend**: React 19, Vite, Tailwind CSS, Zustand, Lucide Icons.
@@ -124,6 +102,29 @@ make deploy-supabase
 cd legalshield-web
 npm run dev
 ```
+
+### 5. AI Knowledge Ingestion (RAG)
+
+To empower the AI with legal knowledge and contract templates, you must seed the database:
+
+1.  **Configure API Keys**: Ensure `JINA_API_KEY` (primary embedding) and `GEMINI_API_KEYS` are set in `supabase/.env`.
+2.  **Crawl & Index**:
+    ```bash
+    # 1. Crawl latest legal sources from the web
+    make crawl-templates
+    
+    # 2. Seed and Embed (Jina/Voyage/Gemini)
+    # This will chunk documents and generate the 768-D vectors
+    make init-templates
+    ```
+3.  **Full Pipeline**: Run `make sync-templates` to perform the entire end-to-end crawl -> refine -> index workflow.
+
+## 🧠 Knowledge Retrieval (RAG) Architecture
+
+LegalShield uses a multi-layered retrieval strategy to ensure accuracy:
+1.  **Semantic Retrieval**: `match_document_chunks` (pgvector) finds the most relevant legal articles using Jina Embeddings v3.
+2.  **Short-Term Memory**: The `legal-chat` and `generate-contract` functions always inject the last 5 session messages to maintain perfect continuity.
+3.  **Cross-Reference**: AI agents use a "Reference-First" prompt to cite every claim with a `source_url` from the database.
 
 ## 📂 Project Structure
 

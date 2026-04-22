@@ -60,8 +60,88 @@ const derivedSupabaseUrl = process.env.SUPABASE_PROJECT_ID
 const supabaseUrl = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || derivedSupabaseUrl
 const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY
 
-if (!supabaseUrl) fail('Missing SUPABASE_URL or VITE_SUPABASE_URL in environment.')
 if (!serviceRoleKey) fail('Missing SUPABASE_SERVICE_ROLE_KEY in environment.')
+const EMBEDDING_PROVIDER = (process.env.EMBEDDING_PROVIDER || 'jina').toLowerCase()
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || process.env.GEMINI_API_KEYS?.split(',')[0]?.trim()
+const JINA_API_KEY = process.env.JINA_API_KEY || process.env.JINA_API_KEYS?.split(',')[0]?.trim()
+const VOYAGE_API_KEY = process.env.VOYAGE_API_KEY || process.env.VOYAGE_API_KEYS?.split(',')[0]?.trim()
+
+async function embedText(text, dims = 768) {
+  // Try Jina first if enabled
+  if ((EMBEDDING_PROVIDER === 'jina' || !EMBEDDING_PROVIDER) && JINA_API_KEY) {
+    try {
+      const res = await fetch('https://api.jina.ai/v1/embeddings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${JINA_API_KEY}` },
+        body: JSON.stringify({
+          model: 'jina-embeddings-v3',
+          task: 'retrieval.passage',
+          dimensions: dims,
+          late_chunking: false,
+          input: [text]
+        })
+      })
+      const data = await res.json()
+      return data.data[0].embedding
+    } catch (e) { console.warn('Jina embed failed, falling back...') }
+  }
+
+  // Try Voyage
+  if ((EMBEDDING_PROVIDER === 'voyage' || EMBEDDING_PROVIDER === 'jina') && VOYAGE_API_KEY) {
+    try {
+      const res = await fetch('https://api.voyageai.com/v1/embeddings', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${VOYAGE_API_KEY}` },
+        body: JSON.stringify({ model: 'voyage-3', input: [text], output_dimension: dims })
+      })
+      const data = await res.json()
+      return data.data[0].embedding
+    } catch (e) { console.warn('Voyage embed failed, falling back...') }
+  }
+
+  // Final fallback to Gemini
+  if (GEMINI_API_KEY) {
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key=${GEMINI_API_KEY}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model: 'models/text-embedding-004', content: { parts: [{ text }] }, outputDimensionality: dims })
+      })
+      const data = await res.json()
+      return data.embedding?.values || null
+    } catch (e) { console.error('Gemini fallback failed:', e.message) }
+  }
+  return null
+}
+
+function semanticChunk(text) {
+  // Enhanced regex to match at start of string or after newline
+  const semanticRegex = /(?:^|\n)\s*(?:Điều|Chương|Phần|Mục)\s+(?:\d+|[IVXLCDM]+)[\.\:\s]/gi
+
+  // Use a different approach: split by parts but keep the delimiters
+  const rawChunks = text.split(/(?=(?:^|\n)\s*(?:Điều|Chương|Phần|Mục)\s+(?:\d+|[IVXLCDM]+)[\.\:\s])/gi)
+
+  const chunks = []
+  let current = ''
+  for (const raw of rawChunks) {
+    const s = raw.trim()
+    if (!s) continue
+    if (current.length + s.length > 2000 && current.length > 500) {
+      chunks.push(current.trim())
+      current = s
+    } else {
+      current += (current ? '\n\n' : '') + s
+    }
+  }
+  if (current.trim()) chunks.push(current.trim())
+
+  // If still empty but text exists, return full text as one chunk
+  if (chunks.length === 0 && text.trim().length > 20) {
+    chunks.push(text.trim())
+  }
+
+  return chunks.filter(c => c.length > 30)
+}
 
 const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
 
@@ -94,7 +174,7 @@ const libraryRows = await Promise.all(manifest.map(async (entry) => {
 // Optionally include crawled templates
 // INIT_INCLUDE_CRAWLED values: 'none' (default), 'today', 'all', or 'file:<filename.json>'
 // INIT_CRAWLED_IS_PUBLIC: 'true' | 'false' (default true)
-const includeMode = (process.env.INIT_INCLUDE_CRAWLED || 'none').toLowerCase()
+const includeMode = (process.env.INIT_INCLUDE_CRAWLED || 'today').toLowerCase()
 const crawledIsPublic = String(process.env.INIT_CRAWLED_IS_PUBLIC || 'true').toLowerCase() === 'true'
 const pruneMissing = String(process.env.INIT_PRUNE_MISSING || 'true').toLowerCase() === 'true'
 
@@ -164,7 +244,7 @@ async function loadCrawledRows() {
             rendered_pdf_generated_at: it.rendered_pdf_generated_at || null,
           })
         }
-      } catch {}
+      } catch { }
     }
     return rows
   } catch {
@@ -250,6 +330,9 @@ let skippedExisting = 0
 const nextSeedKeys = new Set(rows.map((row) => row.seed_key).filter(Boolean))
 
 for (const row of rows) {
+  // Skip legal intelligence types from the 'templates' table sync - they go to document_chunks only
+  if (row.template_kind?.startsWith('legal_')) continue
+
   const existing = existingTemplates.get(row.seed_key)
   if (!existing) {
     rowsToInsert.push(row)
@@ -342,6 +425,112 @@ if (rowsToDelete.length > 0) {
 
     if (!deleteResponse.ok) {
       fail(`Failed to delete missing templates: ${await deleteResponse.text()}`)
+    }
+  }
+}
+
+// --- Phase 2: Handle Legal RAG Ingestion (Document Chunks) ---
+const legalRows = rows.filter(r => r.template_kind === 'legal_doc')
+if (legalRows.length > 0) {
+  console.log(`\nIndexing ${legalRows.length} legal documents into document_chunks...`)
+
+  // 1. Ensure we have a "System" user or use the first user
+  const userRes = await fetch(`${supabaseUrl}/rest/v1/users?select=id&limit=1`, {
+    headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` }
+  })
+  if (!userRes.ok) console.error(' !! Failed to fetch users:', await userRes.text())
+  const users = await userRes.json()
+  const systemUserId = users[0]?.id
+  if (!systemUserId) console.warn(' !! No user found in public.users. Ingestion will likely fail.')
+  else console.log(` ++ Using user_id: ${systemUserId}`)
+
+  for (const doc of legalRows) {
+    console.log(` - Processing: ${doc.name}`)
+
+    // a. Create a document entry if not exists
+    const docEntryRes = await fetch(`${supabaseUrl}/rest/v1/documents?filename=eq.${encodeURIComponent(doc.name)}&select=id`, {
+      headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` }
+    })
+    let docId = (await docEntryRes.json())[0]?.id
+
+    if (!docId) {
+      const newDocRes = await fetch(`${supabaseUrl}/rest/v1/documents`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`,
+          Prefer: 'return=representation'
+        },
+        body: JSON.stringify({
+          user_id: systemUserId,
+          filename: doc.name,
+          storage_path: doc.source_url || 'crawled_legal',
+          file_url: doc.source_url || 'crawled_legal', // Added to satisfy NOT NULL constraint
+          text_content: doc.content_md
+        })
+      })
+      if (!newDocRes.ok) {
+        console.error(`   !! Document creation failed for ${doc.name}:`, await newDocRes.text())
+        continue
+      }
+      const newDocs = await newDocRes.json()
+      docId = newDocs[0]?.id
+    }
+
+    if (docId) {
+      // Check if chunks already exist to avoid re-embedding (very slow/expensive)
+      const chunkCountRes = await fetch(`${supabaseUrl}/rest/v1/document_chunks?document_id=eq.${docId}&select=id&limit=1`, {
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}`, Prefer: 'count=exact' }
+      })
+      const countHeader = chunkCountRes.headers.get('content-range')
+      if (countHeader && !countHeader.endsWith('/0')) {
+        console.log(`   ++ Already indexed. Skipping.`)
+        continue
+      }
+    }
+
+    if (!docId) continue
+
+    // b. Semantic Chunking
+    const chunks = semanticChunk(doc.content_md)
+    console.log(`   -> Found ${chunks.length} semantic chunks.`)
+
+    // c. Embedding & Ingest
+    const chunkToInsert = []
+    for (let i = 0; i < chunks.length; i++) {
+      const text = chunks[i]
+      const embedding = await embedText(text)
+      if (!embedding) continue
+
+      chunkToInsert.push({
+        document_id: docId,
+        chunk_index: i,
+        content: text,
+        embedding,
+        source_url: doc.source_url,
+        law_article: doc.name // fallback to title as law_article precursor
+      })
+    }
+
+    if (chunkToInsert.length > 0) {
+      // Simple UPSERT via delete old chunks first to keep it clean
+      await fetch(`${supabaseUrl}/rest/v1/document_chunks?document_id=eq.${docId}`, {
+        method: 'DELETE',
+        headers: { apikey: serviceRoleKey, Authorization: `Bearer ${serviceRoleKey}` }
+      })
+
+      const ingestRes = await fetch(`${supabaseUrl}/rest/v1/document_chunks`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${serviceRoleKey}`
+        },
+        body: JSON.stringify(chunkToInsert)
+      })
+      if (!ingestRes.ok) console.error(`   !! Ingest failed for ${doc.name}:`, await ingestRes.text())
+      else console.log(`   ++ Successfully indexed ${chunkToInsert.length} chunks.`)
     }
   }
 }

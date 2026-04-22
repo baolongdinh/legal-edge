@@ -4,7 +4,6 @@ import {
     Bot,
     Check,
     ChevronRight,
-    Download,
     FileText,
     Globe,
     Loader2,
@@ -17,6 +16,7 @@ import { Button } from '../components/ui/Button'
 import { Typography } from '../components/ui/Typography'
 import { useEditorStore, type DraftIntakeQuestion } from '../store'
 import { generateContractSuggestion, supabase } from '../lib/supabase'
+import { exportToPDF, exportToDocx } from '../lib/export'
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
@@ -167,7 +167,6 @@ export function DraftEditor() {
     const [step, setStep] = useState<Step>('input')
     const [clarifyCount, setClarifyCount] = useState(0)
     const [isLoading, setIsLoading] = useState(false)
-    const [isExporting, setIsExporting] = useState(false)
     const [isSaving, setIsSaving] = useState(false)
     const [saveState, setSaveState] = useState<'saved' | 'saving' | 'unsaved'>('saved')
     const [researchCitations, setResearchCitations] = useState<Citation[]>([])
@@ -330,67 +329,70 @@ export function DraftEditor() {
         }
     }, [activeDraft, activeDraftId, draftTitle, setDraftDocument])
 
-    const handleExport = useCallback(async () => {
+    const handleExport = async (format: 'pdf' | 'docx' | 'print') => {
         if (!activeDraft.trim()) return
-        setIsExporting(true)
-        try {
-            // We use a dedicated print-friendly approach to ensure perfect Vietnamese font support
-            // jsPDF standard fonts don't support Unicode accents, and embedding fonts is heavy.
-            // window.print() is the most reliable way to get high-quality PDF with perfect text and fonts.
 
-            const printableContent = `
-                <div style="font-family: 'Times New Roman', Times, serif; font-size: 13pt; line-height: 1.8; margin: 2cm 2.5cm; color: #111; text-align: justify; white-space: pre-wrap;">
-                    <h1 style="text-align: center; font-size: 16pt; text-transform: uppercase; margin-bottom: 24pt;">${draftTitle || 'HỢP ĐỒNG'}</h1>
-                    ${activeDraft
-                    .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>') // Simple markdown bold
-                    .replace(/\n\n/g, '<br/><br/>')
-                    .replace(/\n/g, '<br/>')
-                }
-                </div>
-            `;
+        const title = draftTitle || 'Hợp đồng LegalShield'
 
-            const printFrame = document.createElement('iframe');
-            printFrame.style.position = 'fixed';
-            printFrame.style.right = '0';
-            printFrame.style.bottom = '0';
-            printFrame.style.width = '0';
-            printFrame.style.height = '0';
-            printFrame.style.border = '0';
-            document.body.appendChild(printFrame);
+        if (format === 'print') {
+            const printIframe = document.createElement('iframe')
+            printIframe.style.position = 'fixed'
+            printIframe.style.right = '0'
+            printIframe.style.bottom = '0'
+            printIframe.style.width = '0'
+            printIframe.style.height = '0'
+            printIframe.style.border = '0'
+            document.body.appendChild(printIframe)
 
-            const doc = printFrame.contentWindow?.document || printFrame.contentDocument;
-            if (doc) {
-                doc.open();
-                doc.write(`
-                    <html>
-                        <head>
-                            <title>${draftTitle || 'Hợp đồng'}</title>
-                            <style>
-                                @page { size: A4; margin: 0; }
-                                body { margin: 0; padding: 0; }
-                            </style>
-                        </head>
-                        <body onload="window.focus(); window.print();">${printableContent}</body>
-                    </html>
-                `);
-                doc.close();
+            const content = `
+                <!DOCTYPE html>
+                <html>
+                <head>
+                    <title>${title}</title>
+                    <style>
+                        body { font-family: 'Times New Roman', serif; padding: 40px; line-height: 1.6; color: #000; }
+                        h1 { text-align: center; text-transform: uppercase; margin-bottom: 30px; font-size: 20px; }
+                        p { margin-bottom: 12px; text-align: justify; font-size: 14px; }
+                        .header { text-align: center; margin-bottom: 40px; }
+                    </style>
+                </head>
+                <body>
+                    <div class="header">
+                        <strong>CỘNG HÒA XÃ HỘI CHỦ NGHĨA VIỆT NAM</strong><br>
+                        Độc lập - Tự do - Hạnh phúc<br>
+                        -------------------
+                    </div>
+                    <h1>${title}</h1>
+                    ${activeDraft.split('\n').map(line => `<p>${line || '&nbsp;'}</p>`).join('')}
+                </body>
+                </html>
+            `
 
-                // Cleanup after a delay to allow the print dialog to open
-                setTimeout(() => {
-                    document.body.removeChild(printFrame);
-                }, 1000);
-            }
+            printIframe.contentWindow?.document.open()
+            printIframe.contentWindow?.document.write(content)
+            printIframe.contentWindow?.document.close()
 
-            toast.success('Đã chuẩn bị bản in / PDF.')
-        } catch (err) {
-            console.error('Export failed:', err)
-            toast.error((err as Error).message || 'Không thể xuất PDF.')
-        } finally {
-            setIsExporting(false)
+            setTimeout(() => {
+                printIframe.contentWindow?.focus()
+                printIframe.contentWindow?.print()
+                setTimeout(() => document.body.removeChild(printIframe), 1000)
+            }, 500)
+            return
         }
-    }, [activeDraft, draftTitle])
 
-    // ── Reset ─────────────────────────────────────────────────────────────────
+        const toastId = toast.loading(`Đang tạo file ${format.toUpperCase()}...`)
+        try {
+            if (format === 'pdf') {
+                await exportToPDF(title, activeDraft)
+            } else {
+                await exportToDocx(title, activeDraft)
+            }
+            toast.success(`Đã xuất file ${format.toUpperCase()} thành công!`, { id: toastId })
+        } catch (error) {
+            console.error(`Export ${format} failed:`, error)
+            toast.error(`Lỗi khi xuất file ${format.toUpperCase()}`, { id: toastId })
+        }
+    }
 
     const handleReset = () => {
         resetDraft()
@@ -418,23 +420,57 @@ export function DraftEditor() {
                 </div>
 
                 {step === 'result' && (
-                    <div className="flex items-center gap-2 flex-wrap">
-                        <span className={clsx(
-                            'text-xs uppercase tracking-[0.14em]',
-                            saveState === 'saved' ? 'text-emerald-400' : saveState === 'saving' ? 'text-gold-primary' : 'text-slate-muted'
-                        )}>
-                            {saveState === 'saved' ? 'Đã lưu' : saveState === 'saving' ? 'Đang lưu…' : 'Chưa lưu'}
-                        </span>
-                        <Button variant="outline" size="sm" onClick={() => void handleSave()} disabled={isSaving}>
-                            {isSaving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-                            Lưu
+                    <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-2 mr-2">
+                            <span className={clsx(
+                                'text-xs uppercase tracking-[0.14em]',
+                                saveState === 'saved' ? 'text-emerald-400' : saveState === 'saving' ? 'text-gold-primary' : 'text-slate-muted'
+                            )}>
+                                {saveState === 'saved' ? 'Đã lưu' : saveState === 'saving' ? 'Đang lưu…' : 'Chưa lưu'}
+                            </span>
+                        </div>
+
+                        <div className="flex bg-navy-base/60 p-1 rounded-xl border border-slate-border/50">
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void handleExport('print')}
+                                className="h-8 gap-2 text-[11px] font-bold uppercase tracking-wider text-paper-dark/60 hover:text-gold-primary hover:bg-gold-primary/5"
+                            >
+                                In
+                            </Button>
+                            <div className="w-px h-4 bg-slate-border/30 self-center" />
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void handleExport('pdf')}
+                                className="h-8 gap-2 text-[11px] font-bold uppercase tracking-wider text-paper-dark/60 hover:text-gold-primary hover:bg-gold-primary/5"
+                            >
+                                PDF
+                            </Button>
+                            <div className="w-px h-4 bg-slate-border/30 self-center" />
+                            <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => void handleExport('docx')}
+                                className="h-8 gap-2 text-[11px] font-bold uppercase tracking-wider text-paper-dark/60 hover:text-gold-primary hover:bg-gold-primary/5"
+                            >
+                                Word
+                            </Button>
+                        </div>
+
+                        <Button variant="outline" size="sm" onClick={() => void handleSave()} disabled={isSaving} className="h-9 px-4 gap-2">
+                            {isSaving ? <Loader2 size={14} className="animate-spin" /> : <Save size={14} />}
+                            Lưu bản thảo
                         </Button>
-                        <Button variant="ghost" size="sm" onClick={() => void handleExport()} disabled={isExporting}>
-                            {isExporting ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
-                            Xuất PDF
-                        </Button>
-                        <Button variant="ghost" size="sm" onClick={handleReset}>
-                            <RotateCcw size={13} />
+
+                        <Button
+                            variant="primary"
+                            size="sm"
+                            className="h-9 px-4 gap-2 bg-gold-primary text-navy-base font-bold shadow-gold-sm"
+                            onClick={handleReset}
+                        >
+                            <RotateCcw size={14} />
                             Tạo mới
                         </Button>
                     </div>

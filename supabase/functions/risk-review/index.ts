@@ -24,6 +24,7 @@ import {
   summarizeVerification,
   setCachedLegalAnswer,
   validateJSONCitations,
+  RiskClause,
 } from '../shared/types.ts'
 
 const GROQ_API_URL = 'https://api.groq.com/openai/v1/chat/completions'
@@ -106,12 +107,13 @@ export const handler = async (req: Request): Promise<Response> => {
 
     // 2. Agentic Search-First Phase (Extract specific risks -> Targeted Search)
     console.log('[Agentic Risk] Identifying specific risks for targeted search...')
-    const riskExtractorPrompt = `Phân tích sơ bộ điều khoản hợp đồng sau và xác định các khía cạnh pháp lý tiềm ẩn rủi ro.
-    Với mỗi rủi ro, hãy tạo một câu truy vấn (search_query) tối ưu để tìm quy định pháp luật Việt Nam tương ứng.
-
-    Nội dung điều khoản: ${clause_text}
-
-    Trả về JSON: { "extracted_risks": [ { "topic": "...", "search_query": "..." } ] }`
+    const riskExtractorPrompt = `Bạn là chuyên gia phân tích rủi ro hợp đồng. Hãy phân tích điều khoản sau và xác định các điểm GÂY BẤT LỢI hoặc THIẾU MINH BẠCH cho người ký.
+110:     Hãy lờ đi các điều khoản mẫu (boilerplate) thông thường trừ khi chúng có biến tướng gây hại.
+111:     Với mỗi rủi ro thực sự, hãy tạo một câu truy vấn (search_query) để tìm căn cứ pháp lý tại Việt Nam.
+112: 
+113:     Nội dung: ${clause_text}
+114: 
+115:     Trả về JSON: { "extracted_risks": [ { "topic": "...", "search_query": "..." } ] }`
 
     const extractorRes = await fetchWithRetry(
       `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`,
@@ -138,33 +140,36 @@ export const handler = async (req: Request): Promise<Response> => {
     const allSearchUrls = searchResults.flat().map(r => r.url)
 
     // 3. Synthesis Phase (Final Report)
-    const systemPrompt = `Bạn là chuyên gia pháp lý Việt Nam cấp cao.
-    Nhiệm vụ: Phân tích rủi ro của điều khoản hợp đồng dựa trên bối cảnh pháp lý thực tế được cung cấp.
+    const systemPrompt = `Bạn là chuyên gia pháp lý Việt Nam cấp cao, chuyên về thẩm định hợp đồng (Legal Due Diligence).
+142:     Nhiệm vụ: Phân tích rủi ro CHI TIẾT cho điều khoản được cung cấp.
+143: 
+144:     [BỐI CẢNH PHÁP LUẬT THẬT]:
+145:     ${webContext || 'Không tìm thấy dữ liệu pháp luật cụ thể.'}
+146: 
+147:     YÊU CẦU NGHIÊM NGẶT:
+148:     1. **risk_quote**: Phải trích dẫn CHÍNH XÁC câu văn/cụm từ trong hợp đồng gây ra rủi ro này.
+149:     2. **description**: Giải thích rõ tại sao nó rủi ro, dựa trên [BỐI CẢNH PHÁP LUẬT THẬT]. Không nói chung chung.
+150:     3. **suggested_revision**: Đưa ra đoạn văn bản thay thế cụ thể, chuyên nghiệp để bảo vệ quyền lợi người dùng.
+151:     4. **citation**: Nêu tên Điều, Luật cụ thể.
+152:     5. **level**: critical (nguy hiểm), moderate (cần sửa), note (lưu ý).
+153: 
+154:     Cấu trúc JSON:
+155:     {
+156:       "risks": [
+157:         {
+158:           "clause_ref": "Điều X.Y",
+159:           "level": "...",
+160:           "risk_quote": "đoạn trích gây rủi ro...",
+161:           "description": "giải thích rủi ro...",
+162:           "suggested_revision": "đề xuất sửa đổi...",
+163:           "citation": "...",
+164:           "citation_url": "..."
+165:         }
+166:       ]
+167:     }
+168:     Chỉ trả về JSON.`
 
-    [BỐI CẢNH PHÁP LUẬT THẬT (Từ Internet)]:
-    ${webContext || 'Không tìm thấy dữ liệu pháp luật cụ thể.'}
-
-    Yêu cầu bắt buộc:
-    1. Phân loại rủi ro (critical/moderate/note).
-    2. Trích dẫn CHÍNH XÁC điều luật từ [BỐI CẢNH PHÁP LUẬT THẬT].
-    3. MỖI RỦI RO PHẢI kèm theo "citation_url" trích từ [BỐI CẢNH PHÁP LUẬT THẬT].
-    4. Ưu tiên đường link KHÁC NHAU cho các rủi ro khác nhau nếu có trong ngữ cảnh.
-
-    Cấu trúc JSON:
-    {
-      "risks": [
-        {
-          "clause_ref": "Điều X.Y của hợp đồng",
-          "level": "critical|moderate|note",
-          "description": "Mô tả rủi ro chuyên nghiệp",
-          "citation": "Điều X Luật Y",
-          "citation_url": "URL thật duy nhất dẫn tới luật này"
-        }
-      ]
-    }
-    Chỉ trả về JSON.`
-
-    let risks = { risks: [] }
+    let risks: { risks: RiskClause[] } = { risks: [] }
     const synthesisBody = {
       contents: [{ parts: [{ text: `${systemPrompt}\n\nĐIỀU KHOẢN HỢP ĐỒNG:\n${clause_text}` }] }],
       generationConfig: { response_mime_type: "application/json" }
