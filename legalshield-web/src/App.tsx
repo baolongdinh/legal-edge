@@ -5,6 +5,9 @@ import { useEffect } from 'react'
 import { Sidebar } from './components/layout/Sidebar'
 import { Topbar } from './components/layout/Topbar'
 import { Landing } from './pages/Landing'
+import { Platform } from './pages/Platform'
+import { Solutions } from './pages/Solutions'
+import { Resources } from './pages/Resources'
 import { Dashboard } from './pages/Dashboard'
 import { Pricing } from './pages/Pricing'
 import { ContractAnalysis } from './pages/ContractAnalysis'
@@ -24,7 +27,7 @@ function AppShell({ title, subtitle }: { title: string; subtitle?: string }) {
   }, [syncUser])
 
   return (
-    <div className="flex h-screen overflow-hidden bg-surface">
+    <div className="flex h-[100dvh] w-full overflow-hidden bg-surface">
       <Sidebar />
       <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
         <Topbar title={title} subtitle={subtitle} />
@@ -51,6 +54,21 @@ function AnimatedRoutes() {
         <Route path="/pricing" element={
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
             <Pricing />
+          </motion.div>
+        } />
+        <Route path="/platform" element={
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <Platform />
+          </motion.div>
+        } />
+        <Route path="/solutions" element={
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <Solutions />
+          </motion.div>
+        } />
+        <Route path="/resources" element={
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
+            <Resources />
           </motion.div>
         } />
 

@@ -1,5 +1,5 @@
-import { Bell, User, LogOut } from 'lucide-react'
-import { useUserStore } from '../../store'
+import { Bell, User, LogOut, Menu } from 'lucide-react'
+import { useUserStore, useUIStore } from '../../store'
 
 interface TopbarProps {
     title: string
@@ -8,6 +8,7 @@ interface TopbarProps {
 
 export function Topbar({ title, subtitle }: TopbarProps) {
     const { user, subscription, logout } = useUserStore()
+    const { toggleSidebar } = useUIStore()
 
     const planLabel: Record<typeof subscription, string> = {
         free: 'Miễn phí',
@@ -16,17 +17,25 @@ export function Topbar({ title, subtitle }: TopbarProps) {
     }
 
     return (
-        <header className="h-16 flex items-center justify-between px-8 bg-lex-ivory sticky top-0 z-40">
+        <header className="h-16 shrink-0 flex items-center justify-between px-4 md:px-8 bg-lex-ivory sticky top-0 z-40 relative">
             {/* Page title */}
-            <div>
-                <h1 className="text-xl font-serif font-bold text-lex-deep tracking-tight">
-                    {title}
-                </h1>
-                {subtitle && (
-                    <p className="text-[10px] text-on-surface/40 font-sans uppercase tracking-[0.1em] font-bold">
-                        {subtitle}
-                    </p>
-                )}
+            <div className="flex items-center gap-3">
+                <button
+                    onClick={toggleSidebar}
+                    className="md:hidden p-2 -ml-2 text-lex-lawyer hover:text-lex-deep hover:bg-lex-midnight/5 rounded-full transition-colors"
+                >
+                    <Menu size={20} />
+                </button>
+                <div>
+                    <h1 className="text-lg md:text-xl font-serif font-bold text-lex-deep tracking-tight line-clamp-1">
+                        {title}
+                    </h1>
+                    {subtitle && (
+                        <p className="text-[10px] text-on-surface/40 font-sans uppercase tracking-[0.1em] font-bold">
+                            {subtitle}
+                        </p>
+                    )}
+                </div>
             </div>
 
             {/* Right side */}

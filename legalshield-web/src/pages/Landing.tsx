@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { Button } from '../components/ui/Button';
+import { PublicNavbar } from '../components/layout/PublicNavbar';
 
 export function Landing() {
     const navigate = useNavigate();
@@ -118,32 +119,7 @@ export function Landing() {
 
     return (
         <div className="bg-surface selection:bg-secondary-container selection:text-on-secondary-container overflow-x-hidden min-h-screen">
-            {/* TopNavBar */}
-            <header className="bg-lex-deep sticky top-0 z-50">
-                <nav className="flex justify-between items-center px-6 md:px-12 py-6 w-full max-w-screen-2xl mx-auto">
-                    <div className="font-serif text-2xl font-bold text-lex-ivory">LegalShield</div>
-                    <div className="hidden md:flex space-x-10 items-center">
-                        <a className="font-sans uppercase tracking-widest text-xs text-secondary border-b border-secondary pb-1" href="#">Nền tảng</a>
-                        <a className="font-sans uppercase tracking-widest text-xs text-lex-ivory opacity-80 hover:text-secondary transition-colors" href="#">Giải pháp</a>
-                        <a className="font-sans uppercase tracking-widest text-xs text-lex-ivory opacity-80 hover:text-secondary transition-colors" href="#">Tài nguyên</a>
-                        <a className="font-sans uppercase tracking-widest text-xs text-lex-ivory opacity-80 hover:text-secondary transition-colors" href="#">Bảng giá</a>
-                    </div>
-                    <div className="flex items-center space-x-6">
-                        <button
-                            onClick={() => { setAuthMode('signin'); setIsAuthModalOpen(true); }}
-                            className="font-sans uppercase tracking-widest text-xs text-lex-ivory opacity-80 hover:opacity-100 transition-opacity"
-                        >
-                            Đăng nhập
-                        </button>
-                        <button
-                            onClick={() => { setAuthMode('signup'); setIsAuthModalOpen(true); }}
-                            className="bg-secondary text-lex-deep px-6 py-2.5 rounded-lg font-bold hover:scale-95 transition-transform shadow-lg shadow-black/10"
-                        >
-                            Bắt đầu ngay
-                        </button>
-                    </div>
-                </nav>
-            </header>
+            <PublicNavbar onAuthClick={(mode) => { setAuthMode(mode); setIsAuthModalOpen(true); }} />
 
             <main>
                 {/* Hero Section */}
@@ -169,7 +145,7 @@ export function Landing() {
                             <div className="flex flex-wrap gap-4 pt-4">
                                 <button
                                     onClick={() => { setAuthMode('signup'); setIsAuthModalOpen(true); }}
-                                    className="bg-secondary text-white px-10 py-4 rounded-lg font-bold text-lg hover:bg-opacity-90 transition-all flex items-center gap-3 shadow-lg shadow-secondary/20"
+                                    className="bg-black text-white px-10 py-4 rounded-lg font-bold text-lg hover:bg-black/90 transition-all flex items-center gap-3 shadow-lg shadow-black/20"
                                 >
                                     Sử dụng ngay
                                     <ArrowRight size={20} />
