@@ -69,11 +69,12 @@ export const messageApi = {
     });
   },
 
-  async saveUserMessage(conversationId: string, content: string, documentContext?: any) {
+  async saveUserMessage(conversationId: string, content: string, documentContext?: any, attachments?: any[]) {
     return this.save(conversationId, {
       role: 'user',
       content,
       document_context: documentContext,
+      attachments,
       token_count: Math.ceil(content.length / 4),
     });
   },
@@ -101,7 +102,8 @@ export const streamingChatApi = {
     onError: (error: string) => void,
     onSuggestions?: (suggestions: string[]) => void,
     onEvidence?: (evidence: any[]) => void,
-    onStatus?: (status: string) => void
+    onStatus?: (status: string) => void,
+    attachments?: any[]
   ) {
     const token = await getAccessToken();
     const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
@@ -116,6 +118,7 @@ export const streamingChatApi = {
         message,
         history,
         conversation_id: conversationId,
+        attachments,
         ...documentContext, // Spread for compatibility (summary, excerpts, etc.)
       }),
     });

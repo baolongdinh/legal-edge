@@ -30,6 +30,9 @@ export function ChatPage() {
     currentConversationId,
     attachedDocument,
     setAttachedDocument,
+    attachedImages,
+    addAttachedImages,
+    removeAttachedImage,
     streaming,
   } = useChatStore();
 
@@ -117,6 +120,18 @@ export function ChatPage() {
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [setAttachedDocument]);
+
+  const handleImagesAttach = useCallback((files: FileList | null) => {
+    if (!files) return;
+
+    const newImages = Array.from(files).map(file => ({
+      id: crypto.randomUUID(),
+      url: URL.createObjectURL(file),
+      file
+    }));
+
+    addAttachedImages(newImages);
+  }, [addAttachedImages]);
 
   const handleSuggestionClick = useCallback(
     (suggestion: string) => {
@@ -208,6 +223,9 @@ export function ChatPage() {
                 attachedDocument={attachedDocument}
                 onAttachDocument={() => fileInputRef.current?.click()}
                 onDetachDocument={() => setAttachedDocument(null)}
+                attachedImages={attachedImages}
+                onAttachImages={handleImagesAttach}
+                onRemoveImage={removeAttachedImage}
                 isStreaming={isChatStreaming}
                 disabled={isChatStreaming}
               />

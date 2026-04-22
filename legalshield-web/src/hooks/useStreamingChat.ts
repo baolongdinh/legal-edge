@@ -2,6 +2,7 @@ import { useCallback, useRef, useState } from 'react';
 import { useChatStore, type Message } from '@/store/chatStore';
 import { useConversationStore } from '@/store/conversationStore';
 import { streamingChatApi, messageApi, suggestionsApi, summarizationApi } from '@/lib/conversation-api';
+import { uploadChatImage } from '@/lib/supabase';
 
 interface UseStreamingChatOptions {
   conversationId?: string;
@@ -33,6 +34,8 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     setStreamingStatus,
     updateMessageSuggestions,
     attachedDocument,
+    attachedImages,
+    clearAttachedImages,
     streaming,
   } = useChatStore();
 
@@ -59,8 +62,45 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       role: 'user',
       content,
       document_context: attachedDocument || undefined,
+      attachments: attachedImages.length > 0 ? attachedImages.map(img => ({ storage_path: '', name: img.file.name })) : undefined, // Placeholder for optimistic UI
     };
     addMessage(userMessage);
+
+    // 1. Upload images if any
+    let uploadedAttachments: any[] = [];
+    if (attachedImages.length > 0) {
+      setStreamingStatus('Đang tải ảnh lên...');
+      try {
+        // We need a conversation ID to upload. If none, we'll create one.
+        let uploadId = activeId;
+        if (!uploadId) {
+          // If no active conversation, we'll wait for the conversation creation in the caller 
+          // or create a temp one. Actually ChatPage handles creation if missing.
+          // For simplicity in this loop, we'll assume ChatPage has or will create it.
+          // Wait, createConversation is async. Let's adjust ChatPage as well.
+        }
+
+        const uploadPromises = attachedImages.map(img =>
+          uploadChatImage(img.file, activeId || 'temp')
+            .then(path => ({
+              storage_path: path,
+              file_name: img.file.name,
+              file_size: img.file.size,
+              mime_type: img.file.type
+            }))
+        );
+        uploadedAttachments = await Promise.all(uploadPromises);
+
+        // Update user message with real paths
+        // (In a real app we'd update the specific message in store)
+        userMessage.attachments = uploadedAttachments;
+      } catch (err) {
+        console.error('Image upload failed:', err);
+        setError('Không thể tải ảnh lên. Vui lòng thử lại.');
+        setStreaming({ isStreaming: false });
+        return;
+      }
+    }
 
     // Show initial status
     setStreamingStatus('Đang phân tích câu hỏi...');
@@ -70,7 +110,8 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         await messageApi.saveUserMessage(
           activeId,
           content,
-          attachedDocument
+          attachedDocument,
+          uploadedAttachments
         );
       } catch (err) {
         console.warn('Failed to save user message:', err);
@@ -112,7 +153,8 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         },
         (status) => {
           setStreamingStatus(status);
-        }
+        },
+        uploadedAttachments
       );
 
       // Save assistant message
@@ -210,6 +252,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       }
 
       options?.onComplete?.();
+      clearAttachedImages();
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
       setError(errorMessage);

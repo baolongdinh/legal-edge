@@ -213,6 +213,20 @@ export async function uploadAndParseDocument(file: File) {
     return invokeEdgeFunction('parse-document', { body: form })
 }
 
+export async function uploadChatImage(file: File, conversationId: string): Promise<string> {
+    const fileExt = file.name.split('.').pop()
+    const fileName = `${conversationId}/${crypto.randomUUID()}.${fileExt}`
+    const filePath = `chat_attachments/${fileName}`
+
+    const { error } = await supabase.storage
+        .from('user-contracts')
+        .upload(filePath, file)
+
+    if (error) throw error
+
+    return filePath
+}
+
 export async function deleteFileAssets(body: {
     contract_id?: string
     document_id?: string

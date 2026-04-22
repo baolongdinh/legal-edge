@@ -109,8 +109,8 @@ function isQuotaExceeded(error: any): boolean {
   if (!error) return false
   const message = error.message || error.toString() || ''
   return message.includes('RESOURCE_EXHAUSTED') ||
-         message.includes('quota exceeded') ||
-         message.includes('Quota exceeded')
+    message.includes('quota exceeded') ||
+    message.includes('Quota exceeded')
 }
 
 /**
@@ -278,7 +278,7 @@ export const handler = async (req: Request): Promise<Response> => {
           if (!extractedResponse) {
             // 2) Fall back to Gemini if GROQ is unavailable
             const geminiExtractorRes = await fetchWithRetry(
-              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent`,
+              `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`,
               {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -427,7 +427,7 @@ export const handler = async (req: Request): Promise<Response> => {
     if (!synthesisSuccess && mode === 'fast') {
       try {
         const geminiRes = await fetchWithRetry(
-          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-lite:generateContent`,
+          `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`,
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

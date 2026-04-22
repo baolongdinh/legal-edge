@@ -12,6 +12,7 @@ export interface Message {
   token_count?: number;
   created_at?: string;
   intent_eval?: any;
+  attachments?: any[];
 }
 
 export interface StreamingState {
@@ -34,6 +35,7 @@ interface ChatState {
 
   // Document context
   attachedDocument: any | null;
+  attachedImages: { id: string; url: string; file: File }[];
 
   // Actions
   addMessage: (message: Message) => void;
@@ -51,6 +53,10 @@ interface ChatState {
   setStreamingStatus: (status: string) => void;
 
   setAttachedDocument: (doc: any | null) => void;
+  setAttachedImages: (images: { id: string; url: string; file: File }[]) => void;
+  addAttachedImages: (images: { id: string; url: string; file: File }[]) => void;
+  removeAttachedImage: (id: string) => void;
+  clearAttachedImages: () => void;
 
   // Suggestions
   currentSuggestions: string[];
@@ -80,6 +86,7 @@ export const useChatStore = create<ChatState>()(
         status: '',
       },
       attachedDocument: null,
+      attachedImages: [],
       currentSuggestions: [],
 
       // Actions
@@ -134,6 +141,7 @@ export const useChatStore = create<ChatState>()(
           messages: [],
           currentSuggestions: [],
           attachedDocument: null,
+          attachedImages: [],
         });
       },
 
@@ -182,6 +190,32 @@ export const useChatStore = create<ChatState>()(
 
       setAttachedDocument: (doc) => {
         set({ attachedDocument: doc });
+      },
+
+      setAttachedImages: (images) => {
+        set({ attachedImages: images });
+      },
+
+      addAttachedImages: (images) => {
+        set((state) => ({
+          attachedImages: [...state.attachedImages, ...images].slice(0, 5),
+        }));
+      },
+
+      removeAttachedImage: (id) => {
+        set((state) => {
+          const removed = state.attachedImages.find(img => img.id === id);
+          if (removed) URL.revokeObjectURL(removed.url);
+          return {
+            attachedImages: state.attachedImages.filter((img) => img.id !== id),
+          };
+        });
+      },
+
+      clearAttachedImages: () => {
+        const state = useChatStore.getState();
+        state.attachedImages.forEach(img => URL.revokeObjectURL(img.url));
+        set({ attachedImages: [] });
       },
 
       setCurrentSuggestions: (suggestions) => {

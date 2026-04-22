@@ -165,6 +165,43 @@ export const MessageItem = memo(({
           {isAssistant && (
             <LegalDisclaimer variant="inline" className="mt-6 pt-4 border-t border-lex-border/40" />
           )}
+
+          {/* Image Attachments */}
+          {message.attachments && message.attachments.length > 0 && (
+            <div className={cn(
+              "grid gap-2 mt-4",
+              message.attachments.length === 1 ? "grid-cols-1" :
+                message.attachments.length === 2 ? "grid-cols-2" : "grid-cols-2 md:grid-cols-3"
+            )}>
+              {message.attachments.map((attachment, index) => {
+                const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+                // Assuming attachments are in 'user-contracts' bucket as defined in supabase.ts
+                const path = attachment.storage_path || attachment.file_path;
+                if (!path) return null;
+
+                const imageUrl = path.startsWith('http')
+                  ? path
+                  : `${supabaseUrl}/storage/v1/object/public/user-contracts/${path}`;
+
+                return (
+                  <motion.div
+                    key={index}
+                    initial={{ opacity: 0, scale: 0.9 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    className="relative aspect-video rounded-lg overflow-hidden border border-lex-border/20 shadow-sm transition-transform hover:scale-[1.02] cursor-zoom-in"
+                    onClick={() => window.open(imageUrl, '_blank')}
+                  >
+                    <img
+                      src={imageUrl}
+                      alt={attachment.file_name || 'Attachment'}
+                      className="w-full h-full object-cover"
+                    />
+                    <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors" />
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
         </div>
 
         {/* Citations Section */}

@@ -13,6 +13,19 @@ export interface IntentEvaluation {
     reasoning: string
 }
 
+export interface MessageAttachment {
+    id?: string
+    message_id?: string
+    user_id?: string
+    storage_path: string
+    file_name: string
+    mime_type: string
+    file_size: number
+    extracted_text?: string
+    visual_summary?: string
+    metadata?: any
+}
+
 export interface AuthenticatedUser {
     id: string
     email?: string | null
@@ -45,11 +58,11 @@ export interface RiskClause {
     risk_quote?: string
     suggested_revision?: string
     citation: string
-    citation_url?: string
+    url?: string
     citation_text?: string
     source_domain?: string
-    source_title?: string
-    source_excerpt?: string
+    title?: string
+    content?: string
     source_type?: CitationSourceType
     verification_status?: CitationVerificationStatus
     retrieved_at?: string
@@ -94,10 +107,10 @@ export interface LegalSourceEvidence {
 
 export interface LegalCitation {
     citation_text: string
-    citation_url: string
+    url: string
     source_domain: string
-    source_title: string
-    source_excerpt: string
+    title: string
+    content: string
     source_type: CitationSourceType
     verification_status: CitationVerificationStatus
     retrieved_at: string
@@ -668,6 +681,86 @@ export async function callLLM(
 }
 
 /**
+ * Specialized LLM caller for Vision tasks using Gemini.
+ * Supports processing multiple images with a text prompt.
+ * @param images Base64 strings or URLs of images.
+ * @param prompt Text instructions for the vision model.
+ */
+export async function callVisionLLM(
+    images: { data: string; mimeType: string }[],
+    prompt: string,
+    options: {
+        maxTokens?: number,
+        temperature?: number,
+    } = {}
+): Promise<string> {
+    const { maxTokens = 4000, temperature = 0.4 } = options
+
+    try {
+        const parts: any[] = [{ text: prompt }]
+        for (const img of images) {
+            parts.push({
+                inlineData: {
+                    data: img.data,
+                    mimeType: img.mimeType
+                }
+            })
+        }
+
+        const geminiRes = await fetchWithRetry(
+            'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent',
+            {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    contents: [{ role: 'user', parts }],
+                    generationConfig: {
+                        maxOutputTokens: maxTokens,
+                        temperature,
+                    }
+                })
+            },
+            { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
+        )
+
+        const data = await geminiRes.json()
+        if (!geminiRes.ok) {
+            throw new Error(`Gemini Vision Error: ${JSON.stringify(data)}`)
+        }
+        return data.candidates?.[0]?.content?.parts?.[0]?.text?.trim() || ''
+    } catch (err) {
+        console.error('[Vision LLM] Gemini Vision failed:', (err as Error).message)
+        throw err
+    }
+}
+
+/**
+ * Fetches an image from Supabase Storage and converts it to a Base64 data object.
+ * @param supabase Authenticated Supabase client or service role client.
+ * @param storagePath Path to the file in the bucket (e.g., 'user-contracts/chat/msg_id/1.jpg').
+ */
+export async function fetchImageFromStorage(
+    supabase: any,
+    storagePath: string
+): Promise<{ data: string; mimeType: string }> {
+    const bucket = storagePath.split('/')[0]
+    const path = storagePath.split('/').slice(1).join('/')
+
+    const { data, error } = await supabase.storage.from(bucket).download(path)
+    if (error) {
+        throw new Error(`Failed to download image from storage: ${error.message}`)
+    }
+
+    const arrayBuffer = await data.arrayBuffer()
+    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+
+    return {
+        data: base64,
+        mimeType: data.type || 'image/jpeg'
+    }
+}
+
+/**
  * Round-robin key selector.
  * Reads GEMINI_API_KEYS or GROQ_API_KEYS (comma-separated list) from env.
  * NOTE: For retry logic, we naturally advance the counter each time.
@@ -899,10 +992,10 @@ export function buildLegalCitationsFromEvidence(answer: string, evidence: LegalS
             const item = evidence[index]
             return {
                 citation_text: extractCitationText(answer, item),
-                citation_url: item.url,
+                url: item.url,
                 source_domain: item.source_domain,
-                source_title: item.title,
-                source_excerpt: item.content.slice(0, 400),
+                title: item.title,
+                content: item.content.slice(0, 400),
                 source_type: item.source_type,
                 verification_status: item.source_type === 'official' ? 'official_verified' : 'secondary_verified',
                 retrieved_at: item.retrieved_at,
@@ -919,10 +1012,10 @@ export function buildLegalCitationsFromEvidence(answer: string, evidence: LegalS
 
     return rankedEvidence.slice(0, 3).map((item) => ({
         citation_text: extractCitationText(answer, item),
-        citation_url: item.url,
+        url: item.url,
         source_domain: item.source_domain,
-        source_title: item.title,
-        source_excerpt: item.content.slice(0, 280),
+        title: item.title,
+        content: item.content.slice(0, 280),
         source_type: item.source_type,
         verification_status: item.source_type === 'official' ? 'official_verified' : 'secondary_verified',
         retrieved_at: item.retrieved_at,
@@ -930,7 +1023,7 @@ export function buildLegalCitationsFromEvidence(answer: string, evidence: LegalS
 }
 
 export function verifyMarkdownLinks(text: string, citations: LegalCitation[]): string {
-    const allowList = citations.map((citation) => citation.citation_url)
+    const allowList = citations.map((citation) => citation.url)
     return validateCitations(text, allowList)
 }
 
@@ -1149,7 +1242,7 @@ export function buildLegalAnswerPayload(answer: string, evidence: LegalSourceEvi
     let processedAnswer = answer;
     citations.forEach((cit, idx) => {
         const marker = `[${idx + 1}]`;
-        if (processedAnswer.includes(marker) && !processedAnswer.includes(`(${cit.citation_url})`)) {
+        if (processedAnswer.includes(marker) && !processedAnswer.includes(`(${cit.url})`)) {
             // Optional: inject link after marker or just let the UI handle it via the citations array
             // The UI usually uses the 'citations' array to render the side panel or tooltips.
         }
@@ -1253,10 +1346,10 @@ export function mapRiskToVerifiedEvidence(risk: RiskClause, evidence: LegalSourc
         ...risk,
         citation: risk.citation_text ?? risk.citation,
         citation_text: risk.citation_text ?? risk.citation ?? extractCitationText(claimText, bestEvidence),
-        citation_url: bestEvidence.url,
+        url: bestEvidence.url,
         source_domain: bestEvidence.source_domain,
-        source_title: bestEvidence.title,
-        source_excerpt: bestEvidence.content.slice(0, 280),
+        title: bestEvidence.title,
+        content: bestEvidence.content.slice(0, 280),
         source_type: bestEvidence.source_type,
         verification_status: bestEvidence.source_type === 'official' ? 'official_verified' : 'secondary_verified',
         retrieved_at: bestEvidence.retrieved_at,
@@ -1395,12 +1488,12 @@ export async function persistAnswerAudit(params: {
             payload.citations.map((citation) => ({
                 answer_audit_id: answerAudit.id,
                 citation_text: citation.citation_text,
-                citation_url: citation.citation_url,
+                citation_url: citation.url,
                 source_domain: citation.source_domain,
                 source_type: citation.source_type,
                 verification_status: citation.verification_status,
                 metadata: {
-                    source_title: citation.source_title,
+                    source_title: citation.title,
                     retrieved_at: citation.retrieved_at,
                 },
             }))

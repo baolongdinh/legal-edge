@@ -107,7 +107,7 @@ serve(async (req) => {
     // Build query
     let query = supabaseClient
       .from('messages')
-      .select('*')
+      .select('*, message_attachments(*)')
       .eq('conversation_id', conversation_id);
 
     // Apply cursor pagination if 'before' is provided
