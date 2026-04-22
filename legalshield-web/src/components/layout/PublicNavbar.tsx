@@ -17,7 +17,7 @@ export function PublicNavbar({ onAuthClick }: PublicNavbarProps) {
     ];
 
     return (
-        <header className="bg-lex-deep sticky top-0 z-50 shadow-md">
+        <header className="bg-lex-deep sticky top-0 z-50 shadow-md pt-[max(env(safe-area-inset-top),16px)]">
             <nav className="flex justify-between items-center px-6 md:px-12 py-5 w-full max-w-screen-2xl mx-auto">
                 <Link to="/" className="flex items-center gap-2 group">
                     <Scale className="text-lex-gold group-hover:scale-110 transition-transform" size={24} />

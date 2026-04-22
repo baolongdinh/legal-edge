@@ -63,7 +63,7 @@ export function Pricing() {
     }
 
     return (
-        <div className="min-h-screen bg-surface font-sans selection:bg-primary/10 relative overflow-hidden">
+        <div className="min-h-screen bg-surface font-sans selection:bg-primary/10 relative overflow-hidden pb-[env(safe-area-inset-bottom)]">
             {/* Background elements */}
             <div className="absolute inset-x-0 top-0 h-[600px] bg-gradient-to-b from-primary/5 via-transparent to-transparent pointer-events-none" />
             <div className="absolute inset-0 bg-grid-slate-900/[0.02] pointer-events-none" />

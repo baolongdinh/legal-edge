@@ -118,7 +118,7 @@ export function Landing() {
     };
 
     return (
-        <div className="bg-surface selection:bg-secondary-container selection:text-on-secondary-container overflow-x-hidden min-h-screen">
+        <div className="bg-surface selection:bg-secondary-container selection:text-on-secondary-container overflow-x-hidden min-h-screen pb-[env(safe-area-inset-bottom)]">
             <PublicNavbar onAuthClick={(mode) => { setAuthMode(mode); setIsAuthModalOpen(true); }} />
 
             <main>

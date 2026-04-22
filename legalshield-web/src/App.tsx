@@ -29,7 +29,7 @@ function AppShell({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
     <div className="flex h-[100dvh] w-full overflow-hidden bg-surface">
       <Sidebar />
-      <div className="flex-1 flex flex-col min-w-0 overflow-hidden">
+      <div className="flex-1 flex flex-col min-w-0 overflow-hidden pb-[env(safe-area-inset-bottom)]">
         <Topbar title={title} subtitle={subtitle} />
         <main className="flex-1 overflow-hidden relative">
           <Outlet />

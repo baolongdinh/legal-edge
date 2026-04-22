@@ -43,7 +43,7 @@ export function Sidebar() {
             />
             <aside
                 className={clsx(
-                    'flex flex-col h-full bg-lex-deep transition-all duration-300 fixed inset-y-0 left-0 z-[100] md:relative md:z-50',
+                    'flex flex-col h-full bg-lex-deep transition-all duration-300 fixed inset-y-0 left-0 z-[100] md:relative md:z-50 pt-[max(env(safe-area-inset-top),16px)] pb-[max(env(safe-area-inset-bottom),16px)]',
                     sidebarExpanded ? 'w-64 translate-x-0' : 'w-64 -translate-x-full md:w-20 md:translate-x-0'
                 )}
             >

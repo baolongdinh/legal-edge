@@ -5,7 +5,7 @@ import { PublicNavbar } from '../components/layout/PublicNavbar'
 
 export function Platform() {
     return (
-        <div className="min-h-screen bg-surface font-sans selection:bg-primary/10 relative overflow-hidden">
+        <div className="min-h-screen bg-surface font-sans selection:bg-primary/10 relative overflow-hidden pb-[env(safe-area-inset-bottom)]">
             {/* Background elements */}
             <div className="absolute inset-x-0 top-0 h-[600px] bg-gradient-to-b from-primary/5 via-transparent to-transparent pointer-events-none" />
 
