@@ -102,7 +102,7 @@ const CHAT_TTL_MS = 24 * 60 * 60 * 1000 // 1 ngày
 const INITIAL_MESSAGE: Message = {
     id: 'initial',
     role: 'assistant',
-    content: 'Xin chào! Tôi là Trợ lý Pháp lý AI của LegalShield. Tôi có thể giúp bạn giải đáp thắc mắc về hợp đồng, quy định pháp luật Việt Nam hoặc tư vấn soạn thảo. Bạn cần hỗ trợ gì hôm nay?'
+    content: 'Xin chào! Tôi là Trợ lý Tra cứu Quy chuẩn AI của LegalShield. Tôi có thể giúp bạn giải đáp thắc mắc về thông tin quy chuẩn, tra cứu văn bản pháp luật hoặc hỗ trợ rà soát soạn thảo. Bạn cần hỗ trợ gì hôm nay?'
 }
 
 function loadMessages(): Message[] {
@@ -426,7 +426,7 @@ export function ChatAI() {
                         <Scale className="text-gold-primary" size={20} />
                     </motion.div>
                     <div>
-                        <Typography variant="h3" className="text-base font-serif">Tư vấn Pháp lý AI</Typography>
+                        <Typography variant="h3" className="text-base font-serif">Tra cứu Quy chuẩn AI</Typography>
                         <div className="flex items-center gap-1.5">
                             <div className="w-1.5 h-1.5 rounded-full bg-green-500 shadow-[0_0_8px_rgba(34,197,94,0.6)]" />
                             <Typography variant="caption" className="text-[10px] text-paper-dark/40 uppercase tracking-widest font-bold">Trực tuyến</Typography>
@@ -500,8 +500,8 @@ export function ChatAI() {
                                         </div>
                                         <div className="mt-1 text-sm leading-relaxed">
                                             {msg.abstained || msg.verification_status === 'unsupported'
-                                                ? 'Câu trả lời này chưa có đủ dẫn chứng pháp lý đáng tin cậy để khẳng định chắc chắn.'
-                                                : 'Một phần nhận định pháp lý chưa được đối chiếu đủ mạnh với nguồn hiện có.'}
+                                                ? 'Câu trả lời này chưa có đủ dẫn chứng quy chuẩn đáng tin cậy để khẳng định chắc chắn.'
+                                                : 'Một phần thông tin tham khảo chưa được đối chiếu đủ mạnh với nguồn hiện có.'}
                                         </div>
                                     </div>
                                 )}
@@ -551,7 +551,7 @@ export function ChatAI() {
                                     <div className="mt-4 pt-4 border-t border-slate-border/20 space-y-3">
                                         <div className="flex items-center gap-2">
                                             <Typography variant="caption" className="text-[10px] uppercase tracking-[0.2em] font-bold text-gold-muted">
-                                                Dẫn chứng pháp lý
+                                                Dẫn chứng quy chuẩn
                                             </Typography>
                                             <span className={clsx(
                                                 "text-[10px] px-2 py-1 rounded-full border uppercase tracking-wide",
@@ -700,7 +700,7 @@ export function ChatAI() {
                         className="flex items-center justify-center gap-2 text-[10px] text-paper-dark/30 uppercase tracking-[0.2em] font-bold"
                     >
                         <Scale size={10} />
-                        <span>Chế độ tư vấn chuyên sâu • AI Powered</span>
+                        <span>Chế độ rà soát chuyên sâu • AI Powered</span>
                     </motion.div>
                 </div>
             </div>

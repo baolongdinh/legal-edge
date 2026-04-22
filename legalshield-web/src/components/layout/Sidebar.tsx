@@ -10,7 +10,7 @@ import { useUIStore } from '../../store'
 const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/analysis', icon: FileSearch, label: 'Phân tích HĐ' },
-    { to: '/chat', icon: MessageSquare, label: 'Tư vấn AI' },
+    { to: '/chat', icon: MessageSquare, label: 'Tra cứu' },
     { to: '/editor', icon: FilePen, label: 'Soạn thảo' },
 ]
 
@@ -45,7 +45,7 @@ export function Sidebar() {
                     </h1>
                 </div>
                 <p className="font-sans text-[10px] uppercase tracking-[0.2em] text-lex-gold/60 font-bold">
-                    Trợ Lý Pháp Lý Luật Việt Nam
+                    Tra cứu quy chuẩn Luật Việt Nam
                 </p>
             </div>
 

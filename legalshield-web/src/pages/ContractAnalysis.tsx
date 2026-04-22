@@ -254,7 +254,7 @@ function UploadZone() {
                         </motion.div>
                         <Typography variant="h3" className="text-2xl mb-3 font-serif text-on-surface">Tải lên hợp đồng</Typography>
                         <Typography variant="body" className="text-on-surface-variant/70 mb-8 max-w-xs mx-auto leading-relaxed">
-                            Bắt đầu phân tích rủi ro pháp lý bằng trí tuệ nhân tạo chuyên sâu.
+                            Bắt đầu đối soát văn bản quy chuẩn bằng trí tuệ nhân tạo chuyên sâu.
                         </Typography>
 
                         <div className="space-y-4 max-w-xs mx-auto">
@@ -431,12 +431,12 @@ function RiskPanel() {
                 </div>
                 <div className="max-w-xs">
                     <Typography variant="h2" className="text-3xl font-serif mb-4 text-on-surface">
-                        {isHashMatch ? 'Lịch sử phân tích' : 'Kiểm tra pháp lý'}
+                        {isHashMatch ? 'Lịch sử tra cứu' : 'Kiểm tra quy chuẩn'}
                     </Typography>
                     <Typography variant="body" className="text-on-surface-variant/60 leading-relaxed text-sm">
                         {isHashMatch
-                            ? 'Dữ liệu phân tích cho hợp đồng này đã có sẵn. Bạn có muốn xem lại các rủi ro đã ghi nhận?'
-                            : 'AI đã sẵn sàng. Hãy kích hoạt Deep Audit để phát hiện mọi kẽ hở pháp lý tiềm ẩn.'}
+                            ? 'Dữ liệu đối soát cho văn bản này đã có sẵn. Bạn có muốn xem lại?'
+                            : 'AI đã sẵn sàng. Hãy kích hoạt Deep Audit để rà soát mọi quy định tương ứng.'}
                     </Typography>
                 </div>
                 <div className="w-full max-w-sm space-y-6">
@@ -486,7 +486,7 @@ function RiskPanel() {
         >
             <div className="flex items-center justify-between mb-8">
                 <div className="flex items-center gap-4">
-                    <Typography variant="h3" className="text-sm uppercase tracking-[0.25em] text-primary font-bold">Phân tích rủi ro</Typography>
+                    <Typography variant="h3" className="text-sm uppercase tracking-[0.25em] text-primary font-bold">Đối soát rủi ro</Typography>
                     {isAnalyzing && (
                         <div className="flex gap-1.5">
                             <span className="w-1 h-1 bg-primary rounded-full animate-pulse [animation-duration:1s]" />
@@ -520,7 +520,7 @@ function RiskPanel() {
                                     <Bot size={20} />
                                 </div>
                                 <div className="flex flex-col">
-                                    <Typography variant="subtitle" className="text-primary font-bold text-sm tracking-tight">AI Counsel</Typography>
+                                    <Typography variant="subtitle" className="text-primary font-bold text-sm tracking-tight">Trợ lý Tra cứu</Typography>
                                     <VerificationBadge status={answerVerification} />
                                 </div>
                             </div>
@@ -564,7 +564,7 @@ function RiskPanel() {
                                 <div className="space-y-4">
                                     <div className="flex items-center gap-2 text-[10px] font-bold uppercase tracking-[0.3em] text-primary/50">
                                         <CheckCircle2 size={12} />
-                                        Cơ sở pháp lý
+                                        Cơ sở quy chuẩn
                                     </div>
                                     <div className="grid gap-3">
                                         {answerCitations.map((citation, idx) => (

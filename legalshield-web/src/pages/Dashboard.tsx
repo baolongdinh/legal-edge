@@ -165,7 +165,7 @@ export function Dashboard() {
                         <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-lex-deep/40">Tổng quan hệ thống</span>
                     </div>
                     <h2 className="font-serif text-2xl md:text-4xl font-bold text-lex-deep tracking-tight leading-tight">Khu lưu trữ Chủ quyền</h2>
-                    <p className="text-xs md:text-sm font-sans text-slate-gray mt-2 font-medium">Báo cáo tình trạng pháp lý hiện tại của tổ chức.</p>
+                    <p className="text-xs md:text-sm font-sans text-slate-gray mt-2 font-medium">Báo cáo tình trạng quy chuẩn hiện tại của tổ chức.</p>
                 </div>
                 <div className="flex items-center gap-3 md:gap-4 w-full md:w-auto">
                     <button
@@ -314,7 +314,7 @@ export function Dashboard() {
                                     </p>
                                 </div>
                                 <button className="w-full py-5 bg-lex-deep text-white rounded-2xl text-xs font-bold uppercase tracking-[0.2em] hover:bg-lex-midnight transition-all shadow-xl shadow-lex-deep/20 hover:scale-[1.02] active:scale-95 duration-300">
-                                    XEM TÁC ĐỘNG PHÁP LÝ
+                                    XEM TÁC ĐỘNG QUY CHUẨN
                                 </button>
                             </div>
                         </motion.div> */}

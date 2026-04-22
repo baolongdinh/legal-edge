@@ -6,6 +6,7 @@ import { MessageList } from '../components/chat/MessageList';
 import { ChatInput } from '../components/chat/ChatInput';
 import { ConversationSidebar } from '../components/chat/ConversationSidebar';
 import { ConversationSummary } from '../components/chat/ConversationSummary';
+import { LegalDisclaimer } from '../components/chat/LegalDisclaimer';
 import { useConversation } from '../hooks/useConversation';
 import { useStreamingChat } from '../hooks/useStreamingChat';
 import { useChatStore } from '../store/chatStore';
@@ -167,7 +168,7 @@ export function ChatPage() {
           </button>
           <div className="ml-3 flex flex-col">
             <span className="text-xs font-serif italic text-lex-deep font-bold leading-tight">LegalShield</span>
-            <span className="text-[7px] uppercase tracking-[0.3em] text-lex-lawyer font-black opacity-30 leading-tight text-nowrap">AI Archive</span>
+            <span className="text-[7px] uppercase tracking-[0.3em] text-lex-lawyer font-black opacity-30 leading-tight text-nowrap">Search Engine</span>
           </div>
         </div>
         <div className="flex-1 overflow-hidden relative">
@@ -215,6 +216,7 @@ export function ChatPage() {
                 disabled={isChatStreaming}
               />
             </div>
+            <LegalDisclaimer variant="banner" className="mt-3" />
           </div>
         </div>
       </div>

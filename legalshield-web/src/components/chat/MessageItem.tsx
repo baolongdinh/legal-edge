@@ -6,6 +6,7 @@ import remarkGfm from 'remark-gfm';
 import { clsx, type ClassValue } from 'clsx';
 import { FollowUpSuggestions } from './FollowUpSuggestions';
 import { CitationPanel } from './CitationPanel';
+import { LegalDisclaimer } from './LegalDisclaimer';
 import type { Message } from '../../store/chatStore';
 
 function cn(...inputs: ClassValue[]) {
@@ -117,7 +118,7 @@ export const MessageItem = memo(({
               <Scale size={28} className="text-lex-gold hidden md:block" />
             </div>
             <div>
-              <h3 className="font-serif font-bold text-lex-deep leading-tight text-lg md:text-2xl tracking-tight">Cố vấn Pháp lý Cơ quan</h3>
+              <h3 className="font-serif font-bold text-lex-deep leading-tight text-lg md:text-2xl tracking-tight">Trợ lý Tra cứu Pháp lý</h3>
               <div className="flex flex-wrap items-center gap-2 md:gap-3 mt-1.5 md:mt-3">
                 <div className="w-1.5 h-1.5 md:w-2 md:h-2 bg-green-500 rounded-full animate-pulse shadow-[0_0_12px_rgba(34,197,94,0.8)]"></div>
                 <span className="text-[8px] md:text-[10px] uppercase tracking-[0.3em] md:tracking-[0.5em] font-black text-green-600 opacity-80">
@@ -133,8 +134,8 @@ export const MessageItem = memo(({
                           "bg-slate-50 text-slate-500 border-slate-200"
                     )}>
                       {message.intent_eval.intent === 'drafting' ? 'CHẾ ĐỘ SOẠN THẢO' :
-                        message.intent_eval.intent === 'analysis' ? 'PHÂN TÍCH PHÁP LÝ' :
-                          'TƯ VẤN CHUNG'}
+                        message.intent_eval.intent === 'analysis' ? 'TRA CỨU CHUYÊN SÂU' :
+                          'TRA CỨU CHUNG'}
                     </span>
                   </>
                 )}
@@ -160,13 +161,17 @@ export const MessageItem = memo(({
               </ReactMarkdown>
             </div>
           )}
+
+          {isAssistant && (
+            <LegalDisclaimer variant="inline" className="mt-6 pt-4 border-t border-lex-border/40" />
+          )}
         </div>
 
         {/* Citations Section */}
         {message.citations && message.citations.length > 0 && (
           <div className="mt-12 pt-10 border-t border-lex-border space-y-6">
-            <p className="text-[10px] md:text-[11px] font-serif uppercase tracking-[0.3em] md:tracking-[0.4em] font-black text-lex-gold flex items-center gap-3 md:gap-4">
-              <span className="w-8 md:w-12 h-[1px] bg-lex-gold/30" />
+            <p className="text-[11px] md:text-sm font-serif uppercase tracking-[0.4em] md:tracking-[0.6em] font-black text-lex-gold flex items-center gap-3 md:gap-4">
+              <span className="w-8 md:w-16 h-[2px] bg-lex-gold/40" />
               Cơ sở pháp lý tham chiếu
             </p>
             <div className="grid gap-5">

@@ -164,7 +164,7 @@ export function Landing() {
                                 Bảo vệ tài sản trí thức trước mọi bản hợp đồng
                             </h1>
                             <p className="text-lg text-on-surface/70 leading-relaxed max-w-xl font-body">
-                                Hệ thống Trí Tuệ Pháp Lý chuyên sâu dành cho ngành luật. Phân tích, lưu trữ và bảo mật tài liệu pháp lý với tiêu chuẩn khắt khe nhất của các tổ chức hàng đầu.
+                                Nền tảng Tra cứu Luật chuyên sâu. Tìm kiếm, lưu trữ và bảo mật tài liệu quy chuẩn với tiêu chuẩn khắt khe nhất của các tổ chức hàng đầu.
                             </p>
                             <div className="flex flex-wrap gap-4 pt-4">
                                 <button
@@ -202,14 +202,14 @@ export function Landing() {
                                             <Gavel size={18} />
                                         </div>
                                         <div>
-                                            <p className="text-[10px] font-sans uppercase tracking-wider text-on-surface/60 font-bold">Phân Tích Hợp Đồng</p>
+                                            <p className="text-[10px] font-sans uppercase tracking-wider text-on-surface/60 font-bold">Đối soát Quy chuẩn</p>
                                             <p className="text-sm font-bold text-primary">Hợp đồng M&A 2024_Final</p>
                                         </div>
                                     </div>
                                     <div className="w-full bg-surface-container rounded-full h-1.5 overflow-hidden">
                                         <div className="bg-secondary w-3/4 h-full"></div>
                                     </div>
-                                    <p className="mt-2 text-[10px] text-on-surface/60 italic">Bảng Điều Khiển Tổng Quan: Đang xử lý 742 điều khoản pháp lý...</p>
+                                    <p className="mt-2 text-[10px] text-on-surface/60 italic">Bảng Điều Khiển Tổng Quan: Đang đối soát 742 quy định hiện hành...</p>
                                 </div>
                             </div>
                         </motion.div>
@@ -249,7 +249,7 @@ export function Landing() {
                     <div className="max-w-screen-2xl mx-auto px-6 md:px-12">
                         <div className="mb-20 text-center max-w-2xl mx-auto">
                             <h2 className="text-5xl font-bold text-primary mb-6 serif">Nghiệp vụ chuyên sâu</h2>
-                            <p className="text-on-surface/70 leading-relaxed font-body">Công cụ hỗ trợ luật sư tối ưu hóa thời gian và giảm thiểu rủi ro sai sót trong mọi quy trình pháp lý.</p>
+                            <p className="text-on-surface/70 leading-relaxed font-body">Công cụ hỗ trợ tra cứu tối ưu hóa thời gian và đảm bảo tính tương thích trong mọi quy trình văn bản.</p>
                         </div>
                         <div className="grid grid-cols-1 md:grid-cols-12 gap-8 auto-rows-[350px]">
                             {/* Feature 1 */}
@@ -262,8 +262,8 @@ export function Landing() {
                                 />
                                 <div className="relative z-20 p-12 h-full flex flex-col justify-end max-w-md">
                                     <ShieldCheck className="text-secondary mb-4" size={48} />
-                                    <h3 className="text-3xl font-bold text-lex-ivory serif mb-4">Phân Tích Hợp Đồng</h3>
-                                    <p className="text-lex-ivory/80 leading-relaxed font-body">Phát hiện các điều khoản ẩn, mâu thuẫn pháp lý và cảnh báo rủi ro bồi thường ngay lập tức.</p>
+                                    <h3 className="text-3xl font-bold text-lex-ivory serif mb-4">Đối soát Văn bản</h3>
+                                    <p className="text-lex-ivory/80 leading-relaxed font-body">Phát hiện các điểm cần lưu ý, đối thẩm định với quy định hiện hành và cảnh báo rủi ro bồi thường.</p>
                                 </div>
                             </div>
                             {/* Feature 2 */}
@@ -280,8 +280,8 @@ export function Landing() {
                                     <Bot className="text-secondary" size={32} />
                                 </div>
                                 <div>
-                                    <h3 className="text-2xl font-bold text-primary serif mb-4">Trợ lý ảo AI</h3>
-                                    <p className="text-on-surface/70 leading-relaxed font-body">AI Chatbot được huấn luyện dựa trên kho dữ liệu pháp luật Việt Nam, giải đáp nhanh mọi thắc mắc chuyên môn.</p>
+                                    <h3 className="text-2xl font-bold text-primary serif mb-4">Trợ lý Tra cứu</h3>
+                                    <p className="text-on-surface/70 leading-relaxed font-body">Công cụ tra cứu dựa trên kho dữ liệu quy định Việt Nam, hỗ trợ tìm kiếm nhanh các văn bản chuyên môn.</p>
                                 </div>
                             </div>
                             {/* Feature 4 */}
@@ -308,9 +308,9 @@ export function Landing() {
                     <div className="absolute bottom-0 left-0 w-96 h-96 bg-secondary/10 blur-[120px] rounded-full -translate-x-1/2 translate-y-1/2" />
 
                     <div className="max-w-screen-xl mx-auto px-6 md:px-12 text-center text-lex-ivory relative z-10">
-                        <h2 className="text-5xl font-bold serif mb-8">Nâng tầm tư duy pháp lý</h2>
+                        <h2 className="text-5xl font-bold serif mb-8">Nâng cao hiệu suất tra cứu</h2>
                         <p className="text-xl opacity-80 mb-12 max-w-2xl mx-auto font-body font-light leading-relaxed">
-                            Tham gia cùng hàng ngàn chuyên gia đang sử dụng LegalShield để định hình lại tương lai của ngành luật và Soạn Thảo Hợp Đồng Chuẩn Mực.
+                            Tham gia cùng hàng ngàn chuyên gia đang sử dụng LegalShield để tối ưu hóa quy trình tìm kiếm và Soạn Thảo Văn Bản Chuẩn Mực.
                         </p>
                         <div className="flex flex-col sm:flex-row justify-center items-center gap-6">
                             <button
@@ -320,7 +320,7 @@ export function Landing() {
                                 Bắt đầu miễn phí
                             </button>
                             <button className="text-lex-ivory flex items-center gap-2 font-bold text-lg hover:underline underline-offset-8">
-                                Liên hệ tư vấn
+                                Liên hệ hỗ trợ
                                 <ArrowRight size={20} />
                             </button>
                         </div>
@@ -334,7 +334,7 @@ export function Landing() {
                     <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-12 border-b border-lex-ivory/10 pb-12 gap-8">
                         <div className="space-y-4">
                             <div className="font-serif text-3xl font-bold text-lex-ivory">LegalShield</div>
-                            <p className="max-w-sm text-sm">Nền tảng Trí Tuệ Pháp Lý tối ưu hóa quy trình pháp lý chuyên nghiệp.</p>
+                            <p className="max-w-sm text-sm">Nền tảng Tra cứu Luật tối ưu hóa quy trình soát xét chuyên nghiệp.</p>
                         </div>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-10">
                             <div className="flex flex-col gap-4">
@@ -344,7 +344,7 @@ export function Landing() {
                                 <a className="text-sm hover:text-secondary transition-colors" href="#">Báo chí</a>
                             </div>
                             <div className="flex flex-col gap-4">
-                                <span className="font-bold text-[10px] uppercase tracking-widest text-secondary">Pháp lý</span>
+                                <span className="font-bold text-[10px] uppercase tracking-widest text-secondary">Văn bản</span>
                                 <a className="text-sm hover:text-secondary transition-colors" href="#">Chính sách bảo mật</a>
                                 <a className="text-sm hover:text-secondary transition-colors" href="#">Điều khoản dịch vụ</a>
                                 <a className="text-sm hover:text-secondary transition-colors" href="#">An ninh</a>
@@ -393,7 +393,7 @@ export function Landing() {
                                     {authMode === 'signin' ? 'Đăng nhập' : 'Tạo tài khoản'}
                                 </h2>
                                 <p className="text-on-surface/50 italic text-sm">
-                                    {authMode === 'signin' ? 'Chào mừng bạn quay lại' : 'Bước đầu tiên để bảo vệ pháp lý'}
+                                    {authMode === 'signin' ? 'Chào mừng bạn quay lại' : 'Bước đầu tiên để bảo vệ bảo mật'}
                                 </p>
                             </div>
 

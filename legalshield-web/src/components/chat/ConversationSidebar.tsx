@@ -1,7 +1,8 @@
 import { useCallback, memo } from 'react';
-import { Plus, MessageSquare, Star, Trash2, Folder, Search } from 'lucide-react';
+import { Plus, MessageSquare, Star, Trash2, Folder, Search, Info } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
+import { LegalDisclaimer } from './LegalDisclaimer';
 import { useConversation } from '../../hooks/useConversation';
 import { Typography } from '../ui/Typography';
 import { Button } from '../ui/Button';
@@ -178,7 +179,7 @@ export function ConversationSidebar({ isMobileOpen, onClose }: ConversationSideb
                         <div className="bg-lex-gold/10 p-2 rounded-xl group-hover:bg-lex-gold/20 transition-colors duration-500">
                             <Plus size={20} className="text-lex-gold group-hover:rotate-90 transition-transform duration-500" />
                         </div>
-                        <span className="font-bold uppercase tracking-[0.2em] text-xs">Tư vấn mới</span>
+                        <span className="font-bold uppercase tracking-[0.2em] text-xs">Tra cứu mới</span>
                     </Button>
                 </div>
 
@@ -225,6 +226,7 @@ export function ConversationSidebar({ isMobileOpen, onClose }: ConversationSideb
                     )}
                 </div>
 
+                <LegalDisclaimer variant="sidebar" />
             </div>
         </>
     );

@@ -9,8 +9,8 @@ const plans = [
     {
         id: 'free',
         name: 'Miễn phí', price: '0đ', period: '/vĩnh viễn',
-        description: 'Dành cho cá nhân làm quen với AI Pháp Lý',
-        features: ['10 phân tích / tháng', 'Dữ liệu VBPL cơ bản', '3 Template chuẩn Quốc tế'],
+        description: 'Dành cho cá nhân làm quen với AI Tra cứu Quy chuẩn',
+        features: ['10 phân tích / tháng', 'Dữ liệu Quy chuẩn cơ bản', '3 Template chuẩn Quốc tế'],
         cta: 'Bắt đầu ngay', ctaVariant: 'ghost' as const,
         highlight: false,
         icon: Shield
@@ -24,7 +24,7 @@ const plans = [
             'RAG Chuyên sâu + Án lệ VN',
             'Soạn thảo AI đa ngôn ngữ',
             'Xuất bản PDF bảo mật cao',
-            'Hỗ trợ Luật sư 24/7'
+            'Hỗ trợ chuyên gia 24/7'
         ],
         cta: 'Nâng cấp Pro', ctaVariant: 'primary' as const,
         highlight: true,
@@ -94,7 +94,7 @@ export function Pricing() {
                     <Typography variant="label" className="mb-6 block tracking-[0.4em] font-bold text-primary/40 uppercase text-[10px]">Lựa chọn đầu tư cho tương lai</Typography>
                     <Typography variant="h1" className="mb-10 font-serif text-5xl sm:text-7xl text-primary leading-tight">Bảng giá chuyên sâu</Typography>
                     <p className="max-w-2xl mx-auto text-on-surface/60 text-lg leading-relaxed font-body">
-                        Nâng cao hiệu suất pháp lý với AI được huấn luyện chuyên biệt cho luật Việt Nam.
+                        Nâng cao hiệu suất tra cứu với AI được huấn luyện chuyên biệt cho quy chuẩn Việt Nam.
                         Tiết kiệm 90% thời gian so với quy trình truyền thống.
                     </p>
                     <div className="w-32 h-1 bg-gradient-to-r from-transparent via-primary/20 to-transparent mx-auto mt-12" />

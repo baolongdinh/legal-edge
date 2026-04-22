@@ -62,7 +62,7 @@ function AnimatedRoutes() {
             </motion.div>
           } />
         </Route>
-        <Route path="/analysis" element={<AuthGuard><AppShell title="Phân tích hợp đồng" subtitle="Xem xét rủi ro pháp lý" /></AuthGuard>}>
+        <Route path="/analysis" element={<AuthGuard><AppShell title="Phòng ngừa rủi ro" subtitle="Đối soát quy định văn bản" /></AuthGuard>}>
           <Route index element={
             <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} className="h-full">
               <ContractAnalysis />
@@ -76,7 +76,7 @@ function AnimatedRoutes() {
             </motion.div>
           } />
         </Route>
-        <Route path="/chat" element={<AuthGuard><AppShell title="Tư vấn AI" subtitle="Giải đáp thắc mắc pháp lý" /></AuthGuard>}>
+        <Route path="/chat" element={<AuthGuard><AppShell title="Tra cứu" subtitle="Tìm kiếm quy định pháp luật" /></AuthGuard>}>
           <Route index element={
             <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="h-full">
               <ChatPage />

@@ -54,7 +54,7 @@ interface GenerationResult {
 
 const STEPS: { id: Step; label: string }[] = [
     { id: 'input', label: 'Yêu cầu' },
-    { id: 'researching', label: 'Nghiên cứu pháp lý' },
+    { id: 'researching', label: 'Nghiên cứu quy chuẩn' },
     { id: 'clarify', label: 'Làm rõ thông tin' },
     { id: 'result', label: 'Hợp đồng' },
 ]
@@ -114,9 +114,9 @@ function ResearchingView({ citations }: { citations: Citation[] }) {
             </div>
 
             <div className="text-center space-y-3">
-                <Typography variant="h3" className="font-serif text-primary">Đang nghiên cứu pháp luật</Typography>
+                <Typography variant="h3" className="font-serif text-primary">Đang nghiên cứu quy chuẩn</Typography>
                 <p className="text-sm leading-relaxed text-on-surface-variant max-w-md mx-auto">
-                    Hệ thống AI đang đối soát các bộ luật chuyên ngành, nghị định và thông tư hiện hành để đảm bảo tính pháp lý cao nhất cho hợp đồng của bạn.
+                    Hệ thống AI đang đối soát các bộ luật chuyên ngành, nghị định và thông tư hiện hành để đảm bảo tính tương thích cao nhất cho văn bản của bạn.
                 </p>
             </div>
 
@@ -417,7 +417,7 @@ export function DraftEditor() {
                     </div>
                     <div>
                         <Typography variant="label" className="text-[10px] uppercase tracking-[0.25em] text-primary/80 font-bold mb-0.5">Agentic soạn thảo</Typography>
-                        <h1 className="text-xl font-serif font-bold text-on-surface">Cố vấn Pháp lý Số</h1>
+                        <h1 className="text-xl font-serif font-bold text-on-surface">Trợ lý Tra cứu Văn bản</h1>
                     </div>
                 </div>
 
@@ -498,7 +498,7 @@ export function DraftEditor() {
                                 </div>
                                 <h2 className="text-4xl font-serif font-medium text-on-surface leading-tight">Bạn muốn soạn thảo văn bản nào?</h2>
                                 <p className="text-base text-on-surface-variant/80 max-w-lg mx-auto leading-relaxed">
-                                    Mô tả ngắn gọn nhu cầu của bạn. AI sẽ lập tức tra cứu tiền lệ pháp luật và đề xuất khung sườn chuyên nghiệp nhất.
+                                    Mô tả ngắn gọn nhu cầu của bạn. AI sẽ lập tức tra cứu quy định hiện hành và đề xuất khung sườn chuyên nghiệp nhất.
                                 </p>
                             </div>
 
@@ -508,7 +508,7 @@ export function DraftEditor() {
                                         value={draftRequest}
                                         onChange={(e) => setDraftRequest(e.target.value)}
                                         rows={8}
-                                        placeholder={`Ví dụ: "Hợp đồng tư vấn giải pháp Chuyển đổi số giữa LegalShield và Client X..."`}
+                                        placeholder={`Ví dụ: "Rà soát quy chuẩn nội dung ký kết giữa LegalShield và Đối tác X..."`}
                                         className="w-full rounded-2xl border-2 border-surface-container-high bg-surface-bright px-6 py-6 text-base leading-relaxed text-on-surface outline-none placeholder:text-on-surface-variant/30 focus:border-primary/30 focus:ring-4 focus:ring-primary/5 resize-none transition-all duration-300 shadow-sm group-hover:shadow-md"
                                     />
                                     <div className="absolute right-4 bottom-4 flex items-center gap-2 text-[10px] font-bold text-on-surface-variant/40 uppercase tracking-widest">
@@ -518,7 +518,7 @@ export function DraftEditor() {
                                     </div>
                                 </div>
                                 <p className="text-xs text-on-surface-variant/60 font-medium px-2">
-                                    * Thông tin càng chi tiết giúp AI nhận diện rủi ro pháp lý chính xác hơn.
+                                    * Thông tin càng chi tiết giúp AI nhận diện tính tương thích quy chuẩn chính xác hơn.
                                 </p>
                             </div>
 
@@ -532,7 +532,7 @@ export function DraftEditor() {
                                 >
                                     {isLoading
                                         ? <><Loader2 size={18} className="animate-spin mr-2" /> Đang cấu trúc dữ liệu…</>
-                                        : <><Bot size={18} className="mr-2" /> Bắt đầu phân tích & soạn thảo</>
+                                        : <><Bot size={18} className="mr-2" /> Bắt đầu rà soát & soạn thảo</>
                                     }
                                 </Button>
 
@@ -541,7 +541,7 @@ export function DraftEditor() {
                                     <h3 className="text-xs font-bold uppercase tracking-[0.2em] text-primary">Các mốc thông tin khuyến nghị</h3>
                                     <div className="grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-4">
                                         {[
-                                            'Mục đích thương mại & Pháp lý chính',
+                                            'Mục đích thương mại & Quy chuẩn chính',
                                             'Nhân diện các bên (Pháp nhân/Cá nhân)',
                                             'Giá trị, tiến độ & phương thức thanh toán',
                                             'Phạm vi trách nhiệm & Bồi thường',
@@ -658,7 +658,7 @@ export function DraftEditor() {
                                                 setSaveState('unsaved')
                                             }}
                                             className="w-full text-center text-3xl font-serif font-bold text-on-surface uppercase tracking-widest bg-transparent outline-none border-b border-transparent focus:border-primary/20 pb-4 transition-all"
-                                            placeholder="Tên văn bản pháp lý"
+                                            placeholder="Tên văn bản rà soát"
                                         />
 
                                         <div className="flex items-center justify-center gap-2 pt-2">
@@ -704,7 +704,7 @@ export function DraftEditor() {
                                     {/* Citations Card */}
                                     <section className="bg-surface-container-low rounded-3xl p-6 border border-on-surface/5 overflow-hidden">
                                         <div className="flex items-center justify-between mb-6">
-                                            <h3 className="text-[10px] font-bold uppercase tracking-[0.25em] text-primary">Cơ sở pháp lý</h3>
+                                            <h3 className="text-[10px] font-bold uppercase tracking-[0.25em] text-primary">Cơ sở quy chuẩn</h3>
                                             <Bot size={14} className="text-primary/40" />
                                         </div>
 
@@ -741,7 +741,7 @@ export function DraftEditor() {
                                             <span className="text-[10px] font-bold uppercase tracking-widest text-primary">Lưu ý chuyên môn</span>
                                         </div>
                                         <p className="text-[11px] leading-relaxed text-on-surface-variant font-medium">
-                                            Các điều khoản trên đã được tối ưu hóa theo quy định hiện hành. Tuy nhiên, với các giao dịch đặc thù, bạn nên tham vấn thêm ý kiến luật sư.
+                                            Các điều khoản trên đã được rà soát theo quy chuẩn hiện hành. Đây là thông tin tham khảo chuyên sâu, bạn nên rà soát lại trước khi sử dụng.
                                         </p>
                                     </div>
                                 </div>
