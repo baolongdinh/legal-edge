@@ -537,7 +537,7 @@ export async function fetchWithRetry(
         timeoutMs?: number
     }
 ): Promise<Response> {
-    const { listEnvVar, fallbackEnvVar, maxRetries = 5, backoffBase = 100, timeoutMs = 30_000 } = config
+    const { listEnvVar, fallbackEnvVar, maxRetries = 3, backoffBase = 10, timeoutMs = 30_000 } = config
     let lastError: Error | null = null
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -589,11 +589,8 @@ export async function fetchWithRetry(
             lastError = new Error(`${listEnvVar} error ${response.status}: ${errorText}`)
 
             if (attempt < maxRetries) {
-                const jitter = Math.random() * 200
-                const backoffDelay = (backoffBase * Math.pow(2, attempt)) + jitter
-                const finalDelay = Math.max(backoffDelay, retryAfterMs)
-                console.log(`[Retry ${attempt}/${maxRetries}] Waiting ${Math.round(finalDelay)}ms before next attempt...`)
-                await new Promise(resolve => setTimeout(resolve, finalDelay))
+                console.log(`[Retry ${attempt}/${maxRetries}] Fetch failed, retrying immediately without wait...`)
+                // No wait delay per user request
                 continue
             }
 
@@ -603,8 +600,7 @@ export async function fetchWithRetry(
             lastError = e as Error
 
             if (attempt < maxRetries) {
-                const delay = backoffBase * Math.pow(2, attempt)
-                await new Promise(resolve => setTimeout(resolve, delay))
+                // Retrying immediately, no delay
                 continue
             }
         }
