@@ -25,6 +25,13 @@ Prevent duplicate API calls and race conditions when switching conversations.
 - [x] T012 Remove duplicate useConversation hook instance from ConversationSidebar in src/components/chat/ConversationSidebar.tsx
 - [x] T013 Fix syncUser being called on every location change in App.tsx
 - [x] T014 Fix syncUser being called on every re-render in Profile.tsx
+- [x] T015 Add memo wrapper to ConversationSidebar to prevent unnecessary re-renders in src/components/chat/ConversationSidebar.tsx
+- [x] T016 Add memo wrapper to MessageList to prevent unnecessary re-renders in src/components/chat/MessageList.tsx
+- [x] T017 Change useEffect to useLayoutEffect for synchronous DOM updates in MessageList to prevent cascading renders
+- [x] T018 Add memo wrapper to ChatInput to prevent unnecessary re-renders in src/components/chat/ChatInput.tsx
+- [x] T019 Add useCallback to ChatInput handlers to prevent recreation on each render in src/components/chat/ChatInput.tsx
+- [x] T020 Add memo wrapper to ConversationSummary to prevent unnecessary re-renders in src/components/chat/ConversationSummary.tsx
+- [x] T021 Add useMemo to layers array in ConversationSummary to prevent recreation in src/components/chat/ConversationSummary.tsx
 - [ ] T004 Test conversation switching with rapid clicks to verify no duplicate API calls
 
 ---

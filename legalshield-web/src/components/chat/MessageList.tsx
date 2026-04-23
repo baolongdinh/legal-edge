@@ -1,4 +1,4 @@
-import { useRef, useEffect, memo, useCallback, useState } from 'react';
+import { useRef, useLayoutEffect, memo, useCallback, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MessageItem } from './MessageItem';
 import { StreamingMessage } from './StreamingMessage';
@@ -18,7 +18,7 @@ interface MessageListProps {
   className?: string;
 }
 
-export function MessageList({
+const MemoizedMessageList = memo(function MessageList({
   onSuggestionClick,
   className,
 }: MessageListProps) {
@@ -47,19 +47,22 @@ export function MessageList({
         behavior: smooth ? 'smooth' : 'auto',
       });
       isAutoScrolling.current = true;
-      setShowScrollButton(false);
+      // Defer state update to avoid synchronous setState in effect
+      requestAnimationFrame(() => {
+        setShowScrollButton(false);
+      });
     }
   }, []);
 
-  // Auto-scroll to bottom
-  useEffect(() => {
+  // Auto-scroll to bottom (useLayoutEffect for synchronous scroll)
+  useLayoutEffect(() => {
     if (isAutoScrolling.current) {
       scrollToBottom(false);
     }
   }, [messages, streaming.streamedContent, streaming.isStreaming, scrollToBottom]);
 
-  // Initial scroll or conversation swap
-  useEffect(() => {
+  // Initial scroll or conversation swap (useLayoutEffect for synchronous scroll)
+  useLayoutEffect(() => {
     isAutoScrolling.current = true;
     scrollToBottom(false);
   }, [currentConversationId, scrollToBottom]);
@@ -174,4 +177,6 @@ export function MessageList({
       )}
     </div>
   );
-}
+});
+
+export { MemoizedMessageList as MessageList };

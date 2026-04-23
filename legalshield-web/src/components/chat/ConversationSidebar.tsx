@@ -123,7 +123,7 @@ interface ConversationSidebarProps {
     onSearchQueryChange: (query: string) => void;
 }
 
-export function ConversationSidebar({
+const MemoizedConversationSidebar = memo(function ConversationSidebar({
     isMobileOpen,
     onClose,
     conversations,
@@ -232,4 +232,6 @@ export function ConversationSidebar({
             </div>
         </>
     );
-}
+});
+
+export { MemoizedConversationSidebar as ConversationSidebar };

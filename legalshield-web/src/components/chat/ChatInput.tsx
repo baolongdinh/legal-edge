@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo, useCallback } from 'react';
 import { Send, Paperclip, X, Loader2, Camera, Image as ImageIcon } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 
@@ -18,7 +18,7 @@ interface ChatInputProps {
   onRemoveImage?: (id: string) => void;
 }
 
-export function ChatInput({
+const MemoizedChatInput = memo(function ChatInput({
   onSend,
   isStreaming,
   disabled,
@@ -35,26 +35,26 @@ export function ChatInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (onAttachImages) onAttachImages(e.target.files);
     setIsImageMenuOpen(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (cameraInputRef.current) cameraInputRef.current.value = '';
-  };
+  }, [onAttachImages]);
 
-  const handleSend = () => {
+  const handleSend = useCallback(() => {
     if (content.trim() && !disabled && !isStreaming) {
       onSend(content.trim());
       setContent('');
     }
-  };
+  }, [content, disabled, isStreaming, onSend]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
-  };
+  }, [handleSend]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -228,4 +228,6 @@ export function ChatInput({
       </div>
     </div>
   );
-}
+});
+
+export { MemoizedChatInput as ChatInput };
