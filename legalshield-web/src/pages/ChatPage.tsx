@@ -6,7 +6,6 @@ import { MessageList } from '../components/chat/MessageList';
 import { ChatInput } from '../components/chat/ChatInput';
 import { ConversationSidebar } from '../components/chat/ConversationSidebar';
 import { ConversationSummary } from '../components/chat/ConversationSummary';
-import { LegalDisclaimer } from '../components/chat/LegalDisclaimer';
 import { useConversation } from '../hooks/useConversation';
 import { useStreamingChat } from '../hooks/useStreamingChat';
 import { useChatStore } from '../store/chatStore';
@@ -228,9 +227,6 @@ export function ChatPage() {
                 isStreaming={isChatStreaming}
                 disabled={isChatStreaming}
               />
-            </div>
-            <div className="hidden lg:block">
-              <LegalDisclaimer variant="banner" className="mt-3" />
             </div>
           </div>
         </div>

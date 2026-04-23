@@ -13,6 +13,7 @@ export interface Message {
   created_at?: string;
   intent_eval?: any;
   attachments?: any[];
+  imageUrls?: string[]; // blob URLs for optimistic UI before upload completes
 }
 
 export interface StreamingState {

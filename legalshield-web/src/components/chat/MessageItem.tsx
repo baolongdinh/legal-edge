@@ -168,42 +168,56 @@ export const MessageItem = memo(({
             </div>
           )}
 
-          {/* Image Attachments */}
-          {message.attachments && message.attachments.length > 0 && (
-            <div className={cn(
-              "grid gap-2 mt-4",
-              message.attachments.length === 1 ? "grid-cols-1" :
-                message.attachments.length === 2 ? "grid-cols-2" : "grid-cols-2 md:grid-cols-3"
-            )}>
-              {message.attachments.map((attachment, index) => {
-                const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-                // Assuming attachments are in 'user-contracts' bucket as defined in supabase.ts
-                const path = attachment.storage_path || attachment.file_path;
-                if (!path) return null;
+          {/* Image Attachments — blob URLs (optimistic) or Supabase URLs */}
+          {(message.imageUrls?.length || message.attachments?.some((a: any) => a.storage_path)) && (() => {
+            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+            // Prefer blob URLs for optimistic display; fallback to Supabase storage URLs
+            const resolvedUrls: string[] = message.imageUrls?.length
+              ? message.imageUrls
+              : (message.attachments || []).reduce((acc: string[], a: any) => {
+                const p = a.storage_path || a.file_path;
+                if (!p) return acc;
+                acc.push(p.startsWith('http') ? p : `${supabaseUrl}/storage/v1/object/public/user-contracts/${p}`);
+                return acc;
+              }, []);
 
-                const imageUrl = path.startsWith('http')
-                  ? path
-                  : `${supabaseUrl}/storage/v1/object/public/user-contracts/${path}`;
+            if (!resolvedUrls.length) return null;
 
-                return (
-                  <motion.div
-                    key={index}
-                    initial={{ opacity: 0, scale: 0.9 }}
-                    animate={{ opacity: 1, scale: 1 }}
-                    className="relative aspect-video rounded-lg overflow-hidden border border-lex-border/20 shadow-sm transition-transform hover:scale-[1.02] cursor-zoom-in"
-                    onClick={() => window.open(imageUrl, '_blank')}
-                  >
-                    <img
-                      src={imageUrl}
-                      alt={attachment.file_name || 'Attachment'}
-                      className="w-full h-full object-cover"
-                    />
-                    <div className="absolute inset-0 bg-black/0 hover:bg-black/10 transition-colors" />
-                  </motion.div>
-                );
-              })}
-            </div>
-          )}
+            const MAX_VISIBLE = 4;
+            const visible = resolvedUrls.slice(0, MAX_VISIBLE);
+            const overflow = resolvedUrls.length - MAX_VISIBLE;
+            const gridClass = visible.length === 1 ? 'grid-cols-1' : 'grid-cols-2';
+
+            return (
+              <div className={cn('grid gap-1.5 mt-3 max-w-xs', gridClass)}>
+                {visible.map((url, idx) => {
+                  const isLast = idx === visible.length - 1;
+                  const showOverlay = isLast && overflow > 0;
+                  return (
+                    <motion.div
+                      key={idx}
+                      initial={{ opacity: 0, scale: 0.92 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ delay: idx * 0.05 }}
+                      className="relative rounded-xl overflow-hidden border border-white/10 shadow-md cursor-zoom-in"
+                      style={{ aspectRatio: '1 / 1' }}
+                      onClick={() => window.open(url, '_blank')}
+                    >
+                      <img src={url} alt={`Ảnh ${idx + 1}`} className="w-full h-full object-cover" />
+                      {showOverlay ? (
+                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
+                          <span className="text-white text-xl font-bold">+{overflow + 1}</span>
+                        </div>
+                      ) : (
+                        <div className="absolute inset-0 bg-black/0 hover:bg-black/15 transition-colors" />
+                      )}
+                    </motion.div>
+                  );
+                })}
+              </div>
+            );
+          })()}
+
         </div>
 
         {/* Citations Section */}

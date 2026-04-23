@@ -62,7 +62,9 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       role: 'user',
       content,
       document_context: attachedDocument || undefined,
-      attachments: attachedImages.length > 0 ? attachedImages.map(img => ({ storage_path: '', name: img.file.name })) : undefined, // Placeholder for optimistic UI
+      // Attach blob URLs immediately for optimistic display in chat bubble
+      imageUrls: attachedImages.length > 0 ? attachedImages.map(img => img.url) : undefined,
+      attachments: attachedImages.length > 0 ? attachedImages.map(img => ({ storage_path: '', name: img.file.name })) : undefined,
     };
     addMessage(userMessage);
 
