@@ -9,8 +9,7 @@ import { ConversationSummary } from '../components/chat/ConversationSummary';
 import { useConversation } from '../hooks/useConversation';
 import { useStreamingChat } from '../hooks/useStreamingChat';
 import { useChatStore } from '../store/chatStore';
-import { useConversationStore } from '../store/conversationStore';
-import { summarizationApi, conversationApi } from '../lib/conversation-api';
+import { summarizationApi } from '../lib/conversation-api';
 
 export function ChatPage() {
   const { conversationId } = useParams<{ conversationId?: string }>();
@@ -21,7 +20,10 @@ export function ChatPage() {
     isLoading: isLoadingConversations,
     selectedConversation,
     createConversation,
+    deleteConversation,
     selectConversation,
+    searchQuery,
+    setSearchQuery,
   } = useConversation();
 
   const {
@@ -41,6 +43,8 @@ export function ChatPage() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const hasLoadedConversation = useRef(false);
+  const previousConversationIdRef = useRef<string | null>(null);
 
   const {
     sendMessage: sendStreamingMessage,
@@ -56,22 +60,34 @@ export function ChatPage() {
       } else if (selectedConversation) {
         selectConversation(null);
       }
+      hasLoadedConversation.current = false;
+      previousConversationIdRef.current = null;
       return;
     }
 
-    // Trigger loading if ID mismatch OR if ID matches but messages are empty (likely a page reload)
-    const needsSelection = selectedConversation?.id !== conversationId ||
-      (selectedConversation?.id === conversationId && messages.length === 0);
+    // Detect actual conversationId change
+    const conversationIdChanged = previousConversationIdRef.current !== conversationId;
+    if (conversationIdChanged) {
+      hasLoadedConversation.current = false;
+      previousConversationIdRef.current = conversationId;
+    }
 
-    if (needsSelection && !isLoadingConversations && conversations.length > 0) {
+    // Only load if not already loaded this conversation
+    if (hasLoadedConversation.current) {
+      return;
+    }
+
+    if (!isLoadingConversations && conversations.length > 0) {
       const conv = conversations.find((c) => c.id === conversationId);
       if (conv) {
         selectConversation(conv);
+        hasLoadedConversation.current = true;
       } else {
         navigate('/chat', { replace: true });
       }
     }
-  }, [conversationId, conversations, selectedConversation?.id, messages.length, selectConversation, isLoadingConversations, navigate]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, selectConversation, isLoadingConversations, navigate]);
 
   const handleSendMessage = useCallback(
     async (content: string) => {
@@ -145,17 +161,12 @@ export function ChatPage() {
     setIsRegeneratingSummary(true);
 
     try {
+      // Trigger summarization - the API responses will update the conversation store directly
       await summarizationApi.summarize(currentConversationId, 1);
       setTimeout(() => summarizationApi.summarize(currentConversationId!, 2), 2000);
 
-      setTimeout(async () => {
-        const response = await conversationApi.list();
-        if (response.success) {
-          const updated = response.conversations.find((c: any) => c.id === currentConversationId);
-          if (updated) {
-            useConversationStore.getState().updateConversation(currentConversationId!, updated);
-          }
-        }
+      // Wait for all summarization levels to complete before stopping loading state
+      setTimeout(() => {
         setIsRegeneratingSummary(false);
       }, 5000);
     } catch (err) {
@@ -169,6 +180,13 @@ export function ChatPage() {
       <ConversationSidebar
         isMobileOpen={isMobileSidebarOpen}
         onClose={() => setIsMobileSidebarOpen(false)}
+        conversations={conversations}
+        selectedConversation={selectedConversation}
+        isLoading={isLoadingConversations}
+        onCreateConversation={createConversation}
+        onDeleteConversation={deleteConversation}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
       />
 
       <div className="flex-1 flex flex-col min-w-0 bg-transparent relative">

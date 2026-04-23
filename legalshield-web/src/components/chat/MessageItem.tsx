@@ -73,6 +73,33 @@ export const MessageItem = memo(({
     return message.content.replace(/\[(?:#)?(\d+)\]/g, '[$1](#citation-$1)');
   }, [message.content, isUser]);
 
+  // Memoize image URL resolution to avoid re-computation on every render
+  const imageAttachments = useMemo(() => {
+    if (!message.imageUrls?.length && !message.attachments?.some((a: any) => a.storage_path)) {
+      return null;
+    }
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    // Prefer blob URLs for optimistic display; fallback to Supabase storage URLs
+    const resolvedUrls: string[] = message.imageUrls?.length
+      ? message.imageUrls
+      : (message.attachments || []).reduce((acc: string[], a: any) => {
+        const p = a.storage_path || a.file_path;
+        if (!p) return acc;
+        acc.push(p.startsWith('http') ? p : `${supabaseUrl}/storage/v1/object/public/user-contracts/${p}`);
+        return acc;
+      }, []);
+
+    if (!resolvedUrls.length) return null;
+
+    const MAX_VISIBLE = 4;
+    const visible = resolvedUrls.slice(0, MAX_VISIBLE);
+    const overflow = resolvedUrls.length - MAX_VISIBLE;
+    const gridClass = visible.length === 1 ? 'grid-cols-1' : 'grid-cols-2';
+
+    return { visible, overflow, gridClass };
+  }, [message.imageUrls, message.attachments]);
+
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -169,54 +196,34 @@ export const MessageItem = memo(({
           )}
 
           {/* Image Attachments — blob URLs (optimistic) or Supabase URLs */}
-          {(message.imageUrls?.length || message.attachments?.some((a: any) => a.storage_path)) && (() => {
-            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-            // Prefer blob URLs for optimistic display; fallback to Supabase storage URLs
-            const resolvedUrls: string[] = message.imageUrls?.length
-              ? message.imageUrls
-              : (message.attachments || []).reduce((acc: string[], a: any) => {
-                const p = a.storage_path || a.file_path;
-                if (!p) return acc;
-                acc.push(p.startsWith('http') ? p : `${supabaseUrl}/storage/v1/object/public/user-contracts/${p}`);
-                return acc;
-              }, []);
-
-            if (!resolvedUrls.length) return null;
-
-            const MAX_VISIBLE = 4;
-            const visible = resolvedUrls.slice(0, MAX_VISIBLE);
-            const overflow = resolvedUrls.length - MAX_VISIBLE;
-            const gridClass = visible.length === 1 ? 'grid-cols-1' : 'grid-cols-2';
-
-            return (
-              <div className={cn('grid gap-1.5 mt-3 max-w-xs', gridClass)}>
-                {visible.map((url, idx) => {
-                  const isLast = idx === visible.length - 1;
-                  const showOverlay = isLast && overflow > 0;
-                  return (
-                    <motion.div
-                      key={idx}
-                      initial={{ opacity: 0, scale: 0.92 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: idx * 0.05 }}
-                      className="relative rounded-xl overflow-hidden border border-white/10 shadow-md cursor-zoom-in"
-                      style={{ aspectRatio: '1 / 1' }}
-                      onClick={() => window.open(url, '_blank')}
-                    >
-                      <img src={url} alt={`Ảnh ${idx + 1}`} className="w-full h-full object-cover" />
-                      {showOverlay ? (
-                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
-                          <span className="text-white text-xl font-bold">+{overflow + 1}</span>
-                        </div>
-                      ) : (
-                        <div className="absolute inset-0 bg-black/0 hover:bg-black/15 transition-colors" />
-                      )}
-                    </motion.div>
-                  );
-                })}
-              </div>
-            );
-          })()}
+          {imageAttachments && (
+            <div className={cn('grid gap-1.5 mt-3 max-w-xs', imageAttachments.gridClass)}>
+              {imageAttachments.visible.map((url, idx) => {
+                const isLast = idx === imageAttachments.visible.length - 1;
+                const showOverlay = isLast && imageAttachments.overflow > 0;
+                return (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, scale: 0.92 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="relative rounded-xl overflow-hidden border border-white/10 shadow-md cursor-zoom-in"
+                    style={{ aspectRatio: '1 / 1' }}
+                    onClick={() => window.open(url, '_blank')}
+                  >
+                    <img src={url} alt={`Ảnh ${idx + 1}`} className="w-full h-full object-cover" />
+                    {showOverlay ? (
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
+                        <span className="text-white text-xl font-bold">+{imageAttachments.overflow + 1}</span>
+                      </div>
+                    ) : (
+                      <div className="absolute inset-0 bg-black/0 hover:bg-black/15 transition-colors" />
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
 
         </div>
 

@@ -127,6 +127,16 @@ function saveMessages(messages: Message[]) {
         // ignore QuotaExceededError
     }
 }
+
+// Debounced save to prevent blocking main thread during streaming
+let saveTimeout: NodeJS.Timeout | null = null
+function debouncedSaveMessages(messages: Message[]) {
+    if (saveTimeout) clearTimeout(saveTimeout)
+    saveTimeout = setTimeout(() => {
+        saveMessages(messages)
+        saveTimeout = null
+    }, 1000) // Save after 1 second of inactivity
+}
 // -----------------------------------------------------------
 
 export function ChatAI() {
@@ -169,9 +179,15 @@ export function ChatAI() {
         }
     }, [messages, loading])
 
-    // Auto-save chat history to localStorage on every change
+    // Auto-save chat history to localStorage on every change (debounced)
     useEffect(() => {
-        saveMessages(messages)
+        debouncedSaveMessages(messages)
+        return () => {
+            if (saveTimeout) {
+                clearTimeout(saveTimeout)
+                saveMessages(messages) // Save immediately on unmount
+            }
+        }
     }, [messages])
 
     const parseDocumentViaServer = async (selected: File, accessToken: string) => {

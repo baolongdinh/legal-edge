@@ -37,6 +37,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     attachedImages,
     clearAttachedImages,
     streaming,
+    clearCachedMessages,
   } = useChatStore();
 
   const stopStreaming = useCallback(() => {
@@ -196,6 +197,11 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       };
       addMessage(assistantMessage);
 
+      // Invalidate cache for this conversation since we just added new messages
+      if (activeId) {
+        clearCachedMessages(activeId);
+      }
+
       if (suggestions.length > 0) {
         setCurrentSuggestions(suggestions);
       }
@@ -216,43 +222,51 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
 
       // --- BACKGROUND: Multi-layer conversation summaries ---
       if (activeId) {
-        // Level 1: Quick Overview (Immediate)
-        summarizationApi
-          .summarize(activeId, 1)
-          .then((res) => {
-            if (res?.success && res.summary) {
-              useConversationStore.getState().updateConversation(activeId, {
-                summary_level_1: res.summary,
-              });
-            }
-          })
-          .catch((err) => console.warn('[Summary] Background Level-1 failed:', err));
+        const conv = useConversationStore.getState().selectedConversation;
 
-        // Level 2: Detailed Legal Insight (3s delay)
-        setTimeout(() => {
-          summarizationApi.summarize(activeId, 2)
+        // Level 1: Quick Overview (Immediate) - only if not already summarized
+        if (!conv?.summary_level_1) {
+          summarizationApi
+            .summarize(activeId, 1)
             .then((res) => {
               if (res?.success && res.summary) {
                 useConversationStore.getState().updateConversation(activeId, {
-                  summary_level_2: res.summary,
+                  summary_level_1: res.summary,
                 });
               }
             })
-            .catch((err) => console.warn('[Summary] Background Level-2 failed:', err));
-        }, 3000);
+            .catch((err) => console.warn('[Summary] Background Level-1 failed:', err));
+        }
 
-        // Level 3: Recommendations (8s delay)
-        setTimeout(() => {
-          summarizationApi.summarize(activeId, 3)
-            .then((res) => {
-              if (res?.success && res.summary) {
-                useConversationStore.getState().updateConversation(activeId, {
-                  summary_level_3: res.summary,
-                });
-              }
-            })
-            .catch((err) => console.warn('[Summary] Background Level-3 failed:', err));
-        }, 8000);
+        // Level 2: Detailed Legal Insight (3s delay) - only if not already summarized
+        if (!conv?.summary_level_2) {
+          setTimeout(() => {
+            summarizationApi.summarize(activeId, 2)
+              .then((res) => {
+                if (res?.success && res.summary) {
+                  useConversationStore.getState().updateConversation(activeId, {
+                    summary_level_2: res.summary,
+                  });
+                }
+              })
+              .catch((err) => console.warn('[Summary] Background Level-2 failed:', err));
+          }, 3000);
+        }
+
+        // Level 3: Recommendations (8s delay) - only if not already summarized
+        if (!conv?.summary_level_3) {
+          setTimeout(() => {
+            summarizationApi.summarize(activeId, 3)
+              .then((res) => {
+                if (res?.success && res.summary) {
+                  useConversationStore.getState().updateConversation(activeId, {
+                    summary_level_3: res.summary,
+                  });
+                }
+              })
+              .catch((err) => console.warn('[Summary] Background Level-3 failed:', err));
+          }, 8000);
+        }
       }
 
       options?.onComplete?.();
