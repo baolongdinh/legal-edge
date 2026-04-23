@@ -16,6 +16,7 @@ import {
   embedText,
   errorResponse,
   fetchWithRetry,
+  fetchImage,
   getCachedLegalAnswer,
   hasRecentLegalEvidence,
   isStandaloneQuestion,
@@ -326,7 +327,7 @@ export const handler = async (req: Request): Promise<Response> => {
     const { user } = await authenticateRequest(req)
 
     const {
-      message,
+      message = '',
       conversation_id,
       history = [],
       document_context,
@@ -336,8 +337,21 @@ export const handler = async (req: Request): Promise<Response> => {
       contract_text, // Consultant context
       risk_report,   // Consultant context
       image_attachments = [], // Array of storage paths
+      attachments = [],      // Alternative naming from frontend
     } = await req.json()
-    if (!message && image_attachments.length === 0) return errorResponse('Thiếu nội dung tin nhắn hoặc hình ảnh', 400)
+
+    // Consolidate and normalize attachments — frontend may send objects OR plain strings
+    const rawAttachments = [...image_attachments, ...(Array.isArray(attachments) ? attachments : [])]
+    const allAttachments: string[] = rawAttachments
+      .map((att: any) => {
+        if (typeof att === 'string') return att
+        return att?.storage_path || att?.url || att?.cloudinary_url || null
+      })
+      .filter(Boolean) as string[]
+
+    console.log('[legal-chat] allAttachments after normalize:', allAttachments.length)
+
+    if (!message && allAttachments.length === 0) return errorResponse('Thiếu nội dung tin nhắn hoặc hình ảnh', 400)
 
     const { allowed } = await checkRateLimit(user.id, 'legal-chat', 8, 60)
     if (!allowed) return errorResponse('Bạn đã gửi quá nhanh. Vui lòng thử lại sau ít phút.', 429)
@@ -350,11 +364,11 @@ export const handler = async (req: Request): Promise<Response> => {
 
     // --- STEP 0: VISION PROCESSING ---
     let visionSummary = ''
-    if (image_attachments.length > 0) {
+    if (allAttachments.length > 0) {
       try {
-        console.log(`[legal-chat] Processing ${image_attachments.length} images...`)
+        console.log(`[legal-chat] Processing ${allAttachments.length} images...`)
         const images = await Promise.all(
-          image_attachments.map((path: string) => fetchImageFromStorage(supabase, path))
+          allAttachments.map((path: string) => fetchImage(supabase, path))
         )
 
         visionSummary = await callVisionLLM(
@@ -386,7 +400,10 @@ export const handler = async (req: Request): Promise<Response> => {
     const normalizedMessage = normalizeLegalQuery(message)
     const needsCitation = intent_eval.needs_citations || requiresLegalCitation(message)
     const isDrafting = intent_eval.is_drafting
-    const standaloneQuery = intent_eval.suggested_standalone_query || await buildStandaloneQuery(history, enrichedMessage)
+    // Always use enrichedMessage (which contains vision extract) for the standalone query
+    const standaloneQuery = visionSummary
+      ? `${enrichedMessage}` // Already has vision context embedded
+      : (intent_eval.suggested_standalone_query || await buildStandaloneQuery(history, enrichedMessage))
 
     // Only cache standalone, citation-free questions that are context-independent
     const canUseCache = !needsCitation && intent_eval.intent === 'general' && (isStandaloneQuestion(message) || history.length === 0)

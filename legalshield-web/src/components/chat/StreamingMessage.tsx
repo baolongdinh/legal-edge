@@ -128,13 +128,31 @@ export const StreamingMessage = memo(({
         </div>
 
         <div className="prose prose-lex max-w-none">
+          {/* Show a prominent status pill when waiting for first content chunk */}
+          {isStreaming && !content && (
+            <div className="flex items-center gap-3 py-4">
+              <div className="flex gap-1.5">
+                {[0, 1, 2].map(i => (
+                  <motion.span
+                    key={i}
+                    className="w-2 h-2 rounded-full bg-lex-gold"
+                    animate={{ opacity: [0.3, 1, 0.3], scale: [0.8, 1.1, 0.8] }}
+                    transition={{ repeat: Infinity, duration: 1.2, delay: i * 0.2 }}
+                  />
+                ))}
+              </div>
+              <span className="text-sm font-medium text-lex-lawyer/70 italic">
+                {statusText}
+              </span>
+            </div>
+          )}
           <ReactMarkdown
             remarkPlugins={[remarkGfm]}
             components={markdownComponents}
           >
             {processedContent}
           </ReactMarkdown>
-          {isStreaming && (
+          {isStreaming && content && (
             <motion.span
               animate={{ opacity: [0, 1, 0] }}
               transition={{ repeat: Infinity, duration: 0.8 }}

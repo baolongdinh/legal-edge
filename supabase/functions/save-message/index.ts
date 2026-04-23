@@ -130,10 +130,10 @@ serve(async (req) => {
       attachments = []
     } = body;
 
-    // Validate required fields
-    if (!conversation_id || !role || !content) {
+    // Validate required fields: content can be empty if there are attachments
+    if (!conversation_id || !role || (!content && attachments.length === 0)) {
       return new Response(
-        JSON.stringify({ error: 'conversation_id, role, and content are required' }),
+        JSON.stringify({ error: 'conversation_id, role, and content (or attachments) are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }

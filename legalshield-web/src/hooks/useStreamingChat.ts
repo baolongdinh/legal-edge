@@ -14,7 +14,7 @@ interface UseStreamingChatReturn {
   isStreaming: boolean;
   streamedContent: string;
   error: string | null;
-  sendMessage: (content: string, history: Message[]) => Promise<void>;
+  sendMessage: (content: string, history: Message[], conversationIdOverride?: string) => Promise<void>;
   stopStreaming: () => void;
   retry: () => void;
 }
@@ -47,9 +47,9 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     setStreaming({ isStreaming: false });
   }, [setStreaming]);
 
-  const sendMessage = useCallback(async (content: string, history: Message[]) => {
+  const sendMessage = useCallback(async (content: string, history: Message[], conversationIdOverride?: string) => {
     // Dynamically get the latest ID from the store to avoid stale closure issues
-    const activeId = useChatStore.getState().currentConversationId;
+    const activeId = conversationIdOverride || useChatStore.getState().currentConversationId;
 
     if (streaming.isStreaming) return;
 
@@ -159,6 +159,9 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
 
       // Save assistant message
       let savedMessageId: string | undefined;
+      // Use a stable local ID so suggestions can always be updated by reference
+      const localMessageId = crypto.randomUUID();
+
       if (activeId) {
         try {
           const saved = await messageApi.saveAssistantMessage(
@@ -182,7 +185,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       resetStreaming();
 
       const assistantMessage: Message = {
-        id: savedMessageId,
+        id: savedMessageId || localMessageId, // prefer server ID, fallback to local
         role: 'assistant',
         content: assistantContent,
         follow_up_suggestions: suggestions,
@@ -197,14 +200,13 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
 
       // --- BACKGROUND: Fetch richer follow-up suggestions ---
       if (activeId && assistantContent) {
+        const targetMessageId = savedMessageId || localMessageId;
         suggestionsApi
-          .generate(content, assistantContent, activeId, savedMessageId, attachedDocument)
+          .generate(content, assistantContent, activeId, targetMessageId, attachedDocument)
           .then((res) => {
             if (res?.suggestions?.length > 0) {
               setCurrentSuggestions(res.suggestions);
-              if (savedMessageId) {
-                updateMessageSuggestions(savedMessageId, res.suggestions);
-              }
+              updateMessageSuggestions(targetMessageId, res.suggestions);
             }
           })
           .catch((err) => console.warn('[Suggestions] Background generation failed:', err));

@@ -88,7 +88,8 @@ export function ChatPage() {
       if (activeConversationId) {
         await sendStreamingMessage(
           content,
-          messages.filter((m) => m.role !== 'system')
+          messages.filter((m) => m.role !== 'system'),
+          activeConversationId
         );
       }
     },

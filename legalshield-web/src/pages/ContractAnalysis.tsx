@@ -1,7 +1,7 @@
-import { useCallback, useState, useEffect } from 'react'
+import { useCallback, useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import * as Comlink from 'comlink'
-import { Upload, FileText, Search, Send, Loader2, Zap, AlertTriangle, CheckCircle2, Info, ExternalLink, X, Bot, Shield } from 'lucide-react'
+import { Upload, FileText, Search, Send, Loader2, Zap, AlertTriangle, CheckCircle2, Info, ExternalLink, X, Bot, Shield, Camera, Image as ImageIcon } from 'lucide-react'
 import { motion, AnimatePresence } from 'framer-motion'
 import { toast } from 'sonner'
 import { SplitView } from '../components/layout/SplitView'
@@ -11,6 +11,7 @@ import { Button } from '../components/ui/Button'
 import { Skeleton } from '../components/ui/Skeleton'
 import { useUploadStore, useAnalysisStore } from '../store'
 import { getCurrentUser, invokeEdgeFunction, supabase } from '../lib/supabase'
+import { uploadToCloudinary } from '../lib/cloudinary'
 import { classifySections, ContractSchema } from '../lib/document-parser'
 import { cn } from '../lib/utils'
 
@@ -98,9 +99,15 @@ function VerificationBadge({ status }: { status?: VerificationStatus }) {
 }
 
 function UploadZone() {
-    const { status, progress, setFile, setStatus, setExtractedText, reset, error, setError, extractedText } = useUploadStore()
+    const { status, progress, setFile, setStatus, setExtractedText, reset, setError, extractedText, attachments, addAttachment, removeAttachment } = useUploadStore()
     const { setRisks, setDocument } = useAnalysisStore()
     const [isDragging, setIsDragging] = useState(false)
+    const [isImageMenuOpen, setIsImageMenuOpen] = useState(false)
+    const [isOCRRunning, setIsOCRRunning] = useState(false)
+
+    const fileInputRef = useRef<HTMLInputElement>(null)
+    const cameraInputRef = useRef<HTMLInputElement>(null)
+    const libraryInputRef = useRef<HTMLInputElement>(null)
 
     const handleFile = useCallback(async (file: File) => {
         setFile(file)
@@ -198,11 +205,78 @@ function UploadZone() {
 
         } catch (err) {
             console.error('Analysis failed:', err)
-            setError((err as Error).message)
-            setStatus('error', 0)
-            toast.error(`Lỗi: ${(err as Error).message}`, { id: uploadToast })
+            setError(err instanceof Error ? err.message : 'Có lỗi xảy ra khi tải lên')
+            toast.error('Tải lên thất bại', { id: uploadToast })
         }
-    }, [setFile, setStatus, setExtractedText, setDocument, setRisks, setError])
+    }, [setFile, setStatus, setError, setDocument, setRisks, setExtractedText])
+
+    const handleVisionOCR = useCallback(async (files: FileList | null) => {
+        setIsOCRRunning(true)
+        const ocrToast = toast.loading('Đang xử lý hình ảnh (OCR)...')
+
+        try {
+            const user = await getCurrentUser()
+            if (!user) throw new Error('Vui lòng đăng nhập để tiếp tục.')
+
+            const imageUrls: string[] = [...attachments]
+
+            if (files && files.length > 0) {
+                for (let i = 0; i < files.length; i++) {
+                    const file = files[i]
+                    // Use Cloudinary for images to avoid Supabase Storage CORS/RLS issues
+                    const publicUrl = await uploadToCloudinary(file, 'chat_attachments')
+
+                    imageUrls.push(publicUrl)
+                    addAttachment(publicUrl)
+                }
+            }
+
+            if (imageUrls.length === 0) {
+                toast.dismiss(ocrToast)
+                return
+            }
+
+            setStatus('parsing', 50)
+            const { data, error: ocrError } = await supabase.functions.invoke('vision-ocr', {
+                body: { attachments: imageUrls }
+            })
+
+            if (ocrError) throw ocrError
+            if (!data?.text) throw new Error('Không thể nhận diện văn bản từ hình ảnh.')
+
+            setExtractedText(data.text)
+            setStatus('success', 100)
+            toast.success('Đã trích xuất văn bản từ ảnh thành công!', { id: ocrToast })
+
+            const docId = crypto.randomUUID()
+
+            // Register contract in DB to enable analysis and tracking
+            const { error: insertError } = await supabase.from('contracts').insert({
+                id: docId,
+                user_id: user.id,
+                title: `Hợp đồng từ ảnh (${new Date().toLocaleDateString('vi-VN')})`,
+                status: 'pending_audit',
+                content_hash: `ocr-${Date.now()}`
+            })
+
+            if (insertError) {
+                console.error('Failed to register OCR contract:', insertError)
+                throw insertError
+            }
+
+            setDocument(docId)
+
+            invokeEdgeFunction('ingest-contract', {
+                body: { contract_id: docId, text: data.text }
+            }).catch(console.error)
+
+        } catch (err) {
+            console.error('OCR failed:', err)
+            toast.error('Xử lý ảnh thất bại', { id: ocrToast })
+        } finally {
+            setIsOCRRunning(false)
+        }
+    }, [attachments, addAttachment, setExtractedText, setStatus, setDocument])
 
     const handleDrop = (e: React.DragEvent) => {
         e.preventDefault(); setIsDragging(false)
@@ -225,57 +299,167 @@ function UploadZone() {
                     onDragOver={(e) => { e.preventDefault(); setIsDragging(true) }}
                     onDragLeave={() => setIsDragging(false)}
                     onDrop={handleDrop}
-                    data-testid="upload-zone"
+                    whileHover={{ scale: 1.01 }}
                     className={cn(
-                        "w-full max-w-lg rounded-3xl p-16 text-center transition-all duration-500 cursor-pointer overflow-hidden relative group/upload shadow-sm",
+                        "relative group/upload h-[480px] w-full max-w-2xl rounded-[3rem] border-2 border-dashed border-outline/20 flex flex-col items-center justify-center transition-all duration-500 cursor-pointer overflow-hidden",
                         isDragging
                             ? 'bg-primary/5 ring-2 ring-primary/30 ring-offset-8 ring-offset-surface'
                             : (status === 'error' ? 'bg-error-container text-on-error-container' : 'bg-surface-bright border border-outline/10 hover:shadow-2xl hover:border-primary/20')
                     )}
-                    onClick={() => {
-                        if (status === 'uploading' || status === 'parsing') return
-                        const input = document.createElement('input')
-                        input.type = 'file'
-                        input.accept = '.pdf,.docx,.txt'
-                        input.onchange = (e) => {
-                            const file = (e.target as HTMLInputElement).files?.[0]
-                            if (file) handleFile(file)
-                        }
-                        input.click()
-                    }}
                 >
-                    <div className="relative z-10">
-                        <motion.div
-                            animate={isDragging ? { y: [0, -10, 0] } : {}}
-                            transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
-                            className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-8 transition-colors group-hover/upload:bg-primary/20"
-                        >
-                            <Upload className="text-primary" size={32} />
-                        </motion.div>
-                        <Typography variant="h3" className="text-2xl mb-3 font-serif text-on-surface">Tải lên hợp đồng</Typography>
-                        <Typography variant="body" className="text-on-surface-variant/70 mb-8 max-w-xs mx-auto leading-relaxed">
-                            Bắt đầu đối soát văn bản quy chuẩn bằng trí tuệ nhân tạo chuyên sâu.
-                        </Typography>
-
-                        <div className="space-y-4 max-w-xs mx-auto">
-                            <div className="h-1.5 bg-surface-container rounded-full overflow-hidden">
-                                <motion.div
-                                    initial={{ width: 0 }}
-                                    animate={{ width: `${progress}%` }}
-                                    className={cn(
-                                        "h-full rounded-full transition-all duration-500",
-                                        status === 'error' ? 'bg-error' : 'bg-primary'
+                    <div className="relative z-10 w-full px-8">
+                        {attachments.length > 0 ? (
+                            <div className="space-y-6">
+                                <Typography variant="h3" className="text-xl font-serif text-center">Hình ảnh hợp đồng ({attachments.length}/5)</Typography>
+                                <div className="grid grid-cols-3 gap-3">
+                                    {attachments.map((url, idx) => (
+                                        <div key={url} className="relative group aspect-square">
+                                            <img src={url} alt="Contract page" className="w-full h-full object-cover rounded-2xl border border-outline/10" />
+                                            <button
+                                                onClick={(e) => { e.stopPropagation(); removeAttachment(idx); }}
+                                                className="absolute -top-2 -right-2 bg-error text-on-error p-1.5 rounded-full shadow-lg opacity-0 group-hover:opacity-100 transition-opacity"
+                                            >
+                                                <X size={12} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                    {attachments.length < 5 && (
+                                        <button
+                                            onClick={(e) => { e.stopPropagation(); setIsImageMenuOpen(true); }}
+                                            className="aspect-square flex flex-col items-center justify-center border-2 border-dashed border-outline/20 rounded-2xl text-on-surface-variant/40 hover:text-primary hover:border-primary/30 transition-all"
+                                        >
+                                            <Camera size={24} />
+                                            <span className="text-[10px] mt-2 font-bold uppercase tracking-widest">Thêm ảnh</span>
+                                        </button>
                                     )}
-                                />
+                                </div>
+                                <div className="flex justify-center mt-6">
+                                    <Button
+                                        variant="gold"
+                                        disabled={isOCRRunning}
+                                        onClick={(e) => { e.stopPropagation(); handleVisionOCR(null); }}
+                                        className="h-12 px-10 rounded-2xl font-black tracking-widest shadow-xl shadow-lex-gold/10"
+                                    >
+                                        {isOCRRunning ? <Loader2 className="animate-spin mr-2" /> : <Bot className="mr-2" size={18} />}
+                                        BẮT ĐẦU NHẬN DIỆN (OCR)
+                                    </Button>
+                                </div>
                             </div>
-                            <Typography variant="caption" className={cn(
-                                "text-[10px] font-bold uppercase tracking-[0.2em]",
-                                status === 'error' ? 'text-error' : 'text-on-surface-variant/50'
-                            )}>
-                                {status === 'error' ? (error || 'Lỗi xử lý') : (status === 'uploading' ? 'Đang tải file...' : (status === 'parsing' ? 'Đang trích xuất văn bản...' : 'Hỗ trợ PDF, DOCX (Tối đa 20MB)'))}
-                            </Typography>
+                        ) : (
+                            <>
+                                <motion.div
+                                    animate={isDragging ? { y: [0, -10, 0] } : {}}
+                                    transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+                                    className="w-20 h-20 bg-primary/10 rounded-full flex items-center justify-center mx-auto mb-8 transition-colors group-hover/upload:bg-primary/20"
+                                >
+                                    <Upload className="text-primary" size={32} />
+                                </motion.div>
+                                <Typography variant="h3" className="text-2xl mb-3 font-serif text-on-surface text-center">Pháp lý đa phương thức</Typography>
+                                <Typography variant="body" className="text-on-surface-variant/70 mb-8 max-w-sm mx-auto leading-relaxed text-center text-sm">
+                                    Tải lên file PDF, DOCX hoặc chụp ảnh hợp đồng giấy để bắt đầu phân tích rủi ro chuyên sâu.
+                                </Typography>
+
+                                <div className="flex flex-wrap justify-center gap-3">
+                                    <Button
+                                        variant="primary"
+                                        className="h-14 px-6 rounded-2xl font-bold gap-3"
+                                        onClick={(e) => {
+                                            e.stopPropagation()
+                                            fileInputRef.current?.click()
+                                        }}
+                                    >
+                                        <FileText size={20} />
+                                        Tài liệu (PDF/DOCX)
+                                    </Button>
+
+                                    <div className="relative">
+                                        <Button
+                                            variant="outline"
+                                            className="h-14 px-6 rounded-2xl font-bold gap-3 border-lex-gold/30 text-lex-gold hover:bg-lex-gold/5"
+                                            onClick={(e) => {
+                                                e.stopPropagation()
+                                                setIsImageMenuOpen(!isImageMenuOpen)
+                                            }}
+                                        >
+                                            <Camera size={20} />
+                                            Quét ảnh hợp đồng
+                                        </Button>
+
+                                        {isImageMenuOpen && (
+                                            <AnimatePresence>
+                                                <motion.div
+                                                    initial={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                                                    exit={{ opacity: 0, y: 10, scale: 0.95 }}
+                                                    className="absolute bottom-full mb-4 left-1/2 -translate-x-1/2 bg-surface-bright border border-outline/10 rounded-2xl shadow-2xl p-2 flex flex-col gap-1 z-50 min-w-[180px]"
+                                                >
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); cameraInputRef.current?.click(); setIsImageMenuOpen(false); }}
+                                                        className="flex items-center gap-3 px-4 py-3 hover:bg-primary/5 rounded-xl text-on-surface transition-colors group"
+                                                    >
+                                                        <div className="w-8 h-8 rounded-full bg-primary/10 flex items-center justify-center group-hover:bg-primary/20 transition-colors">
+                                                            <Camera size={16} className="text-primary" />
+                                                        </div>
+                                                        <span className="text-sm font-semibold whitespace-nowrap">Chụp ảnh trực tiếp</span>
+                                                    </button>
+                                                    <button
+                                                        onClick={(e) => { e.stopPropagation(); libraryInputRef.current?.click(); setIsImageMenuOpen(false); }}
+                                                        className="flex items-center gap-3 px-4 py-3 hover:bg-primary/5 rounded-xl text-on-surface transition-colors group"
+                                                    >
+                                                        <div className="w-8 h-8 rounded-full bg-blue-500/10 flex items-center justify-center group-hover:bg-blue-500/20 transition-colors">
+                                                            <ImageIcon size={16} className="text-blue-500" />
+                                                        </div>
+                                                        <span className="text-sm font-semibold whitespace-nowrap">Thư viện ảnh</span>
+                                                    </button>
+                                                </motion.div>
+                                            </AnimatePresence>
+                                        )}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+
+                        <div className="mt-8 max-w-xs mx-auto">
+                            {(status === 'uploading' || status === 'parsing') && (
+                                <div className="space-y-2 text-center">
+                                    <div className="h-1 bg-surface-container rounded-full overflow-hidden">
+                                        <motion.div
+                                            initial={{ width: 0 }}
+                                            animate={{ width: `${progress}%` }}
+                                            className="h-full rounded-full transition-all duration-500 bg-primary"
+                                        />
+                                    </div>
+                                    <Typography variant="caption" className="text-[10px] font-bold uppercase tracking-widest text-on-surface-variant/40">
+                                        {status === 'uploading' ? 'Đang tải lên...' : 'Đang xử lý văn bản...'}
+                                    </Typography>
+                                </div>
+                            )}
                         </div>
                     </div>
+
+                    <input
+                        type="file"
+                        ref={fileInputRef}
+                        onChange={(e) => e.target.files?.[0] && handleFile(e.target.files[0])}
+                        className="hidden"
+                        accept=".pdf,.docx,.txt"
+                    />
+                    <input
+                        type="file"
+                        ref={cameraInputRef}
+                        onChange={(e) => e.target.files && handleVisionOCR(e.target.files)}
+                        className="hidden"
+                        accept="image/*"
+                        capture="environment"
+                    />
+                    <input
+                        type="file"
+                        ref={libraryInputRef}
+                        onChange={(e) => e.target.files && handleVisionOCR(e.target.files)}
+                        className="hidden"
+                        accept="image/*"
+                        multiple
+                    />
                 </motion.div>
 
                 {status === 'error' && (
@@ -335,6 +519,7 @@ function RiskPanel() {
                     filter: `id=eq.${currentDocumentId}`
                 },
                 (payload) => {
+
                     console.log('Realtime status update:', payload.new.status)
                     if (payload.new.status === 'completed') {
                         supabase.from('contract_risks').select('*').eq('contract_id', currentDocumentId)

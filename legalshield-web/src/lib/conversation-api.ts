@@ -118,7 +118,7 @@ export const streamingChatApi = {
         message,
         history,
         conversation_id: conversationId,
-        attachments,
+        image_attachments: attachments,
         ...documentContext, // Spread for compatibility (summary, excerpts, etc.)
       }),
     });

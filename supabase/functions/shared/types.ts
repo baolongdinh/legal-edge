@@ -735,24 +735,71 @@ export async function callVisionLLM(
 }
 
 /**
+ * Unified image fetcher that handles both Supabase Storage paths and external URLs.
+ * Converts any image to a Base64 data object for Gemini Vision input.
+ */
+export async function fetchImage(
+    supabase: any,
+    pathOrUrl: string
+): Promise<{ data: string; mimeType: string }> {
+    if (pathOrUrl.startsWith('http')) {
+        const response = await fetch(pathOrUrl)
+        if (!response.ok) {
+            throw new Error(`Failed to fetch image from URL: ${response.statusText}`)
+        }
+        const blob = await response.blob()
+        const arrayBuffer = await blob.arrayBuffer()
+        const uint8 = new Uint8Array(arrayBuffer)
+        let binary = ''
+        const chunkSize = 8192
+        for (let i = 0; i < uint8.length; i += chunkSize) {
+            binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize))
+        }
+        const base64 = btoa(binary)
+        return {
+            data: base64,
+            mimeType: blob.type || 'image/jpeg'
+        }
+    }
+
+    return fetchImageFromStorage(supabase, pathOrUrl)
+}
+
+/**
  * Fetches an image from Supabase Storage and converts it to a Base64 data object.
  * @param supabase Authenticated Supabase client or service role client.
- * @param storagePath Path to the file in the bucket (e.g., 'user-contracts/chat/msg_id/1.jpg').
+ * @param storagePath Path to the file in the bucket or full relative path.
  */
 export async function fetchImageFromStorage(
     supabase: any,
     storagePath: string
 ): Promise<{ data: string; mimeType: string }> {
-    const bucket = storagePath.split('/')[0]
-    const path = storagePath.split('/').slice(1).join('/')
+    // Robust bucket detection: If path starts with 'user-contracts/', use that as bucket
+    let bucket = 'user-contracts'
+    let path = storagePath
+
+    if (storagePath.includes('/')) {
+        const parts = storagePath.split('/')
+        // If the first part matches known buckets, use it
+        if (['user-contracts', 'contracts', 'documents'].includes(parts[0])) {
+            bucket = parts[0]
+            path = parts.slice(1).join('/')
+        }
+    }
 
     const { data, error } = await supabase.storage.from(bucket).download(path)
     if (error) {
-        throw new Error(`Failed to download image from storage: ${error.message}`)
+        throw new Error(`Failed to download image from storage (Bucket: ${bucket}, Path: ${path}): ${error.message}`)
     }
 
     const arrayBuffer = await data.arrayBuffer()
-    const base64 = btoa(String.fromCharCode(...new Uint8Array(arrayBuffer)))
+    const uint8 = new Uint8Array(arrayBuffer)
+    let binary = ''
+    const chunkSize = 8192
+    for (let i = 0; i < uint8.length; i += chunkSize) {
+        binary += String.fromCharCode(...uint8.subarray(i, i + chunkSize))
+    }
+    const base64 = btoa(binary)
 
     return {
         data: base64,
@@ -1361,6 +1408,7 @@ export function mapRiskToVerifiedEvidence(risk: RiskClause, evidence: LegalSourc
 export const corsHeaders = {
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+    'Access-Control-Allow-Methods': 'GET, POST, PUT, DELETE, OPTIONS',
 }
 
 export function jsonResponse(data: unknown, status = 200, cacheSeconds = 0) {

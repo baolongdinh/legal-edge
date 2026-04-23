@@ -91,11 +91,15 @@ export const useAnalysisStore = create<AnalysisState>()(
 // --- Upload State (Analysis view) ---
 interface UploadState {
     file: File | null
+    attachments: string[]
     status: 'idle' | 'uploading' | 'parsing' | 'success' | 'error'
     progress: number
     extractedText: string | null
     error: string | null
     setFile: (file: File) => void
+    setAttachments: (attachments: string[]) => void
+    addAttachment: (attachment: string) => void
+    removeAttachment: (index: number) => void
     setStatus: (status: UploadState['status'], progress?: number) => void
     setExtractedText: (text: string) => void
     setError: (error: string | null) => void
@@ -104,15 +108,19 @@ interface UploadState {
 
 export const useUploadStore = create<UploadState>((set) => ({
     file: null,
+    attachments: [],
     status: 'idle',
     progress: 0,
     extractedText: null,
     error: null,
-    setFile: (file) => set({ file, status: 'idle', progress: 0, error: null }),
+    setFile: (file) => set({ file, status: 'idle', progress: 0, error: null, attachments: [] }),
+    setAttachments: (attachments) => set({ attachments }),
+    addAttachment: (attachment) => set((s) => ({ attachments: [...s.attachments, attachment] })),
+    removeAttachment: (index) => set((s) => ({ attachments: s.attachments.filter((_, i) => i !== index) })),
     setStatus: (status, progress = 0) => set({ status, progress }),
     setExtractedText: (text) => set({ extractedText: text, status: 'success', progress: 100 }),
     setError: (error) => set({ error, status: 'error' }),
-    reset: () => set({ file: null, status: 'idle', progress: 0, extractedText: null, error: null }),
+    reset: () => set({ file: null, status: 'idle', progress: 0, extractedText: null, error: null, attachments: [] }),
 }))
 
 // --- User / Billing State ---
