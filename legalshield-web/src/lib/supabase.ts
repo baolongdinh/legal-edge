@@ -213,6 +213,17 @@ export async function uploadAndParseDocument(file: File) {
     return invokeEdgeFunction('parse-document', { body: form })
 }
 
+import { uploadToCloudinary } from './cloudinary'
+
+export async function uploadChatImage(file: File, _conversationId: string): Promise<string> {
+    const user = await getCurrentUser()
+    if (!user) throw new Error('Vui lòng đăng nhập để tiếp tục.')
+
+    // Direct migration from Supabase Storage to Cloudinary
+    // Cloudinary provides better performance, resizing, and global CDN.
+    return uploadToCloudinary(file, 'chat_attachments')
+}
+
 export async function deleteFileAssets(body: {
     contract_id?: string
     document_id?: string

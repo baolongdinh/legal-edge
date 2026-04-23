@@ -75,7 +75,7 @@ export function MessageList({
         className
       )}
     >
-      <div className="flex flex-col min-h-full max-w-6xl mx-auto w-full px-6 md:px-10 py-8">
+      <div className="flex flex-col min-h-full max-w-6xl mx-auto w-full px-6 md:px-10 pt-8 pb-4">
         {isLoadingMessages && messages.length === 0 ? (
           <div className="flex-1 space-y-12 py-12">
             {[1, 2, 3].map((i) => (

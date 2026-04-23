@@ -68,11 +68,11 @@ export function FollowUpSuggestions({
                 size="sm"
                 onClick={() => onSelect(suggestion)}
                 className={cn(
-                  'group h-auto py-2 px-3 text-left justify-start gap-2 max-w-[340px] rounded-lg',
+                  'group h-auto py-2 px-3 text-left justify-start gap-2 rounded-lg',
                   'border-lex-deep/10 bg-white hover:bg-lex-deep hover:text-white transition-all duration-300'
                 )}
               >
-                <span className="line-clamp-2 text-[13px] font-medium tracking-tight">
+                <span className="line-clamp-2 text-[13px] font-medium tracking-tight break-words whitespace-normal">
                   {suggestion}
                 </span>
                 <ArrowRight className="h-3.5 w-3.5 shrink-0 opacity-0 -translate-x-2 

@@ -9,8 +9,8 @@ interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
 }
 
 const variants = {
-    primary: 'bg-lex-deep text-white font-semibold hover:bg-lex-dark active:scale-[0.98]',
-    gold: 'bg-lex-gold text-lex-deep font-bold hover:brightness-110 active:scale-[0.98]',
+    primary: 'bg-lex-deep text-white font-semibold hover:bg-lex-midnight hover:shadow-lg hover:shadow-lex-deep/10 active:scale-[0.98] border border-lex-midnight',
+    gold: 'bg-gradient-to-br from-lex-gold via-lex-gold/90 to-lex-gold/80 text-lex-midnight font-black hover:brightness-110 hover:shadow-lg hover:shadow-lex-gold/10 active:scale-[0.98]',
     ghost: 'text-lex-deep hover:bg-lex-deep/5 active:scale-[0.98]',
     outline: 'border border-lex-deep/20 text-lex-deep hover:border-lex-deep/50 active:scale-[0.98]',
 }

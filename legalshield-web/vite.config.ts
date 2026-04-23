@@ -55,6 +55,30 @@ export default defineConfig({
       }
     })
   ],
+  build: {
+    chunkSizeWarningLimit: 1500,
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            // Heaviest dependencies first
+            if (id.includes('pdfjs-dist')) return 'pdfjs-vendor';
+            if (id.includes('pdf-lib') || id.includes('jspdf')) return 'pdf-utils';
+            if (id.includes('framer-motion')) return 'motion-vendor';
+            if (id.includes('lucide-react')) return 'icons-vendor';
+            if (id.includes('react-markdown') || id.includes('remark-gfm')) return 'markdown-vendor';
+            if (id.includes('mammoth') || id.includes('docx')) return 'docx-vendor';
+            if (id.includes('@supabase')) return 'supabase-vendor';
+
+            // Group other UI libs
+            if (id.includes('sonner') || id.includes('clsx') || id.includes('tailwind-merge')) return 'ui-core';
+
+            return 'vendor';
+          }
+        },
+      },
+    },
+  },
   test: {
     globals: true,
     environment: 'jsdom',

@@ -14,6 +14,13 @@ interface MessageRequest {
   follow_up_suggestions?: string[];
   document_context?: any;
   token_count?: number;
+  attachments?: {
+    storage_path: string;
+    file_name: string;
+    mime_type: string;
+    file_size: number;
+    metadata?: any;
+  }[];
 }
 
 // Approximate token count
@@ -119,13 +126,14 @@ serve(async (req) => {
       citations,
       follow_up_suggestions,
       document_context,
-      token_count
+      token_count,
+      attachments = []
     } = body;
 
-    // Validate required fields
-    if (!conversation_id || !role || !content) {
+    // Validate required fields: content can be empty if there are attachments
+    if (!conversation_id || !role || (!content && attachments.length === 0)) {
       return new Response(
-        JSON.stringify({ error: 'conversation_id, role, and content are required' }),
+        JSON.stringify({ error: 'conversation_id, role, and content (or attachments) are required' }),
         { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
     }
@@ -169,6 +177,29 @@ serve(async (req) => {
         JSON.stringify({ error: 'Failed to save message' }),
         { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
       );
+    }
+
+    // Insert attachments if provided
+    if (attachments && attachments.length > 0) {
+      const attachmentsToInsert = attachments.map(att => ({
+        message_id: message.id,
+        user_id: user.id,
+        storage_path: att.storage_path,
+        file_name: att.file_name,
+        mime_type: att.mime_type,
+        file_size: att.file_size,
+        metadata: att.metadata || {}
+      }));
+
+      const { error: attachError } = await supabaseClient
+        .from('message_attachments')
+        .insert(attachmentsToInsert);
+
+      if (attachError) {
+        console.warn('Failed to save message attachments:', attachError);
+        // We don't fail the whole request since message is saved, 
+        // but we return the error in response if needed
+      }
     }
 
     // Update conversation stats

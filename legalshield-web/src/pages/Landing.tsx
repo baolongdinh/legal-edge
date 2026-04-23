@@ -150,9 +150,6 @@ export function Landing() {
                                     Sử dụng ngay
                                     <ArrowRight size={20} />
                                 </button>
-                                <button className="px-10 py-4 rounded-lg font-bold text-lg border border-outline-variant text-primary hover:bg-surface-container-low transition-all">
-                                    Xem Bản Demo
-                                </button>
                             </div>
                         </motion.div>
 

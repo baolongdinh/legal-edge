@@ -147,8 +147,12 @@ export function useConversation(): UseConversationReturn {
       try {
         const response = await messageApi.getForConversation(conversation.id);
         if (response.success) {
-          setMessages(response.messages);
-          setCachedMessages(conversation.id, response.messages);
+          const mappedMessages = (response.messages || []).map((msg: any) => ({
+            ...msg,
+            attachments: msg.attachments || msg.message_attachments || []
+          }));
+          setMessages(mappedMessages);
+          setCachedMessages(conversation.id, mappedMessages);
         }
       } catch (err) {
         console.error('Load messages error:', err);

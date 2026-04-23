@@ -6,7 +6,6 @@ import { MessageList } from '../components/chat/MessageList';
 import { ChatInput } from '../components/chat/ChatInput';
 import { ConversationSidebar } from '../components/chat/ConversationSidebar';
 import { ConversationSummary } from '../components/chat/ConversationSummary';
-import { LegalDisclaimer } from '../components/chat/LegalDisclaimer';
 import { useConversation } from '../hooks/useConversation';
 import { useStreamingChat } from '../hooks/useStreamingChat';
 import { useChatStore } from '../store/chatStore';
@@ -30,6 +29,9 @@ export function ChatPage() {
     currentConversationId,
     attachedDocument,
     setAttachedDocument,
+    attachedImages,
+    addAttachedImages,
+    removeAttachedImage,
     streaming,
   } = useChatStore();
 
@@ -85,7 +87,8 @@ export function ChatPage() {
       if (activeConversationId) {
         await sendStreamingMessage(
           content,
-          messages.filter((m) => m.role !== 'system')
+          messages.filter((m) => m.role !== 'system'),
+          activeConversationId
         );
       }
     },
@@ -117,6 +120,18 @@ export function ChatPage() {
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [setAttachedDocument]);
+
+  const handleImagesAttach = useCallback((files: FileList | null) => {
+    if (!files) return;
+
+    const newImages = Array.from(files).map(file => ({
+      id: crypto.randomUUID(),
+      url: URL.createObjectURL(file),
+      file
+    }));
+
+    addAttachedImages(newImages);
+  }, [addAttachedImages]);
 
   const handleSuggestionClick = useCallback(
     (suggestion: string) => {
@@ -191,9 +206,7 @@ export function ChatPage() {
           )}
         </div>
 
-
-
-        <div className="px-4 md:px-10 pb-4 md:pb-10">
+        <div className="px-3 md:px-10 pb-3 md:pb-10">
           <div className="max-w-[800px] mx-auto w-full">
             <div className="bg-white/95 backdrop-blur-xl p-3 md:p-6 rounded-2xl md:rounded-[2.5rem] border border-lex-border shadow-2xl shadow-lex-deep/5 transition-all hover:shadow-lex-deep/10">
               <input
@@ -208,11 +221,13 @@ export function ChatPage() {
                 attachedDocument={attachedDocument}
                 onAttachDocument={() => fileInputRef.current?.click()}
                 onDetachDocument={() => setAttachedDocument(null)}
+                attachedImages={attachedImages}
+                onAttachImages={handleImagesAttach}
+                onRemoveImage={removeAttachedImage}
                 isStreaming={isChatStreaming}
                 disabled={isChatStreaming}
               />
             </div>
-            <LegalDisclaimer variant="banner" className="mt-3" />
           </div>
         </div>
       </div>

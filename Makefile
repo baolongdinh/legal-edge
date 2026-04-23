@@ -50,8 +50,14 @@ deploy-frontend-vercel:
 	cd $(WEB_DIR) && npx vercel --prod \
 		--build-env VITE_SUPABASE_URL="$$VITE_SUPABASE_URL" \
 		--build-env VITE_SUPABASE_ANON_KEY="$$VITE_SUPABASE_ANON_KEY" \
+		--build-env VITE_CLOUDINARY_CLOUD_NAME="$$VITE_CLOUDINARY_CLOUD_NAME" \
+		--build-env VITE_CLOUDINARY_API_KEY="$$VITE_CLOUDINARY_API_KEY" \
+		--build-env VITE_CLOUDINARY_UPLOAD_PRESET="$$VITE_CLOUDINARY_UPLOAD_PRESET" \
 		--env VITE_SUPABASE_URL="$$VITE_SUPABASE_URL" \
-		--env VITE_SUPABASE_ANON_KEY="$$VITE_SUPABASE_ANON_KEY"
+		--env VITE_SUPABASE_ANON_KEY="$$VITE_SUPABASE_ANON_KEY" \
+		--env VITE_CLOUDINARY_CLOUD_NAME="$$VITE_CLOUDINARY_CLOUD_NAME" \
+		--env VITE_CLOUDINARY_API_KEY="$$VITE_CLOUDINARY_API_KEY" \
+		--env VITE_CLOUDINARY_UPLOAD_PRESET="$$VITE_CLOUDINARY_UPLOAD_PRESET"
 	@echo "$(COLOR_GREEN)✓ Frontend deployment to Vercel completed$(COLOR_RESET)"
 
 # Deploy Supabase (DB + Secrets + Functions)
@@ -105,7 +111,8 @@ deploy-supabase:
 	$(SUPABASE_CLI) functions deploy save-conversation --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
 	$(SUPABASE_CLI) functions deploy save-message --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
 	$(SUPABASE_CLI) functions deploy generate-suggestions --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
-	$(SUPABASE_CLI) functions deploy summarize-conversation --project-ref $(SUPABASE_PROJECT_ID) --use-api
+	$(SUPABASE_CLI) functions deploy summarize-conversation --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy vision-ocr --project-ref $(SUPABASE_PROJECT_ID) --use-api
 	@echo "✅ Supabase deployment complete!"
 
 deploy-frontend:
