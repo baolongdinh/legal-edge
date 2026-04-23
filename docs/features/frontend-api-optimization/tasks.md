@@ -23,6 +23,8 @@ Prevent duplicate API calls and race conditions when switching conversations.
 - [x] T002 Add AbortController to selectConversation in src/hooks/useConversation.ts
 - [x] T003 Add loading state to prevent concurrent conversation selections in src/hooks/useConversation.ts
 - [x] T012 Remove duplicate useConversation hook instance from ConversationSidebar in src/components/chat/ConversationSidebar.tsx
+- [x] T013 Fix syncUser being called on every location change in App.tsx
+- [x] T014 Fix syncUser being called on every re-render in Profile.tsx
 - [ ] T004 Test conversation switching with rapid clicks to verify no duplicate API calls
 
 ---

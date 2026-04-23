@@ -2,16 +2,22 @@ import { User, Mail, Lock, CreditCard, Bell } from 'lucide-react'
 import { Button } from '../components/ui/Button'
 import { Typography } from '../components/ui/Typography'
 import { useUserStore, usePayment } from '../store'
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { clsx } from 'clsx'
 
 export function Profile() {
     const { user, subscription, syncUser, apiCallsUsed, apiCallsLimit } = useUserStore()
     const { processPayment, isLoading: isLoadingCheckout } = usePayment()
+    const hasSyncedUserRef = useRef(false)
 
     useEffect(() => {
-        syncUser()
-    }, [syncUser])
+        // Only sync user once on mount
+        if (!hasSyncedUserRef.current) {
+            syncUser()
+            hasSyncedUserRef.current = true
+        }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [])
 
     const planDisplay = { free: 'Miễn phí', pro: 'Pro', enterprise: 'Enterprise' }
 

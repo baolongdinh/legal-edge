@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Toaster } from 'sonner'
-import { useEffect, lazy, Suspense } from 'react'
+import { useEffect, lazy, Suspense, useRef } from 'react'
 import { Sidebar } from './components/layout/Sidebar'
 import { Topbar } from './components/layout/Topbar'
 import { AuthGuard } from './components/auth/AuthGuard'
@@ -41,10 +41,16 @@ function PageLoader() {
 function AppShell({ title, subtitle }: { title: string; subtitle?: string }) {
   const syncUser = useUserStore((state) => state.syncUser)
   const location = useLocation()
+  const hasSyncedUserRef = useRef(false)
 
   useEffect(() => {
-    syncUser()
-  }, [syncUser])
+    // Only sync user once on mount, not on every location change
+    if (!hasSyncedUserRef.current) {
+      syncUser()
+      hasSyncedUserRef.current = true
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   // Hide global footer on mobile for chat and analysis to maximize space
   const isChatOrAnalysis = location.pathname.startsWith('/chat') || location.pathname.startsWith('/analysis')
