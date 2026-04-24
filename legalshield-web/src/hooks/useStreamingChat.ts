@@ -4,21 +4,6 @@ import { useConversationStore } from '@/store/conversationStore';
 import { streamingChatApi, messageApi, suggestionsApi, summarizationApi } from '../lib/conversation-api';
 import { uploadToCloudinary } from '../lib/cloudinary';
 import { uploadChatImage, invokeEdgeFunction } from '../lib/supabase';
-import * as Comlink from 'comlink';
-
-// Proxy for the Web Worker
-let workerApi: { parsePDF: (arrayBuffer: ArrayBuffer) => Promise<string>; parseDocx: (arrayBuffer: ArrayBuffer) => Promise<string> } | null = null;
-const initWorker = () => {
-  if (!workerApi) {
-    console.log('[Worker] Initializing document worker');
-    const worker = new Worker(new URL('../workers/document.worker.ts', import.meta.url), { type: 'module' });
-    workerApi = Comlink.wrap(worker);
-    console.log('[Worker] Worker initialized successfully');
-  } else {
-    console.log('[Worker] Reusing existing worker');
-  }
-  return workerApi;
-};
 
 interface UseStreamingChatOptions {
   conversationId?: string;
@@ -198,70 +183,25 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
               throw new Error(`Không thể tải file "${doc.file.name}" lên. Vui lòng thử lại.`);
             }
 
-            // Parse file content based on type
+            // Parse file content using server-side parsing (supports all formats)
             let fileContent: string | null = null;
             const extension = doc.file.name.split('.').pop()?.toLowerCase();
 
-            console.log('[Document Parse] Starting parse', { fileName: doc.file.name, extension, fileType: doc.file.type });
+            console.log('[Document Parse] Starting server-side parse', { fileName: doc.file.name, extension, fileType: doc.file.type });
 
-            if (extension === 'txt' || extension === 'md' || extension === 'csv' || extension === 'json' || extension === 'xml' || extension === 'html' || doc.file.type.startsWith('text/')) {
-              // Text files: use FileReader
-              fileContent = await new Promise<string>((resolve) => {
-                const reader = new FileReader();
-                reader.onload = (e) => resolve(e.target?.result as string);
-                reader.readAsText(doc.file!);
+            try {
+              const formData = new FormData();
+              formData.append('file', doc.file);
+              formData.append('mode', 'ephemeral'); // No DB persistence for chat
+              const response = await invokeEdgeFunction<{ text_content?: string }>('parse-document', {
+                body: formData
               });
-              console.log('[Document Parse] Text file parsed:', { fileName: doc.file.name, contentLength: fileContent?.length });
-            } else if (extension === 'pdf' || extension === 'docx') {
-              // PDF/DOCX: use worker to parse
-              try {
-                console.log('[Worker] Calling initWorker');
-                const api = initWorker();
-                console.log('[Worker] Got worker API, starting parse');
-                const arrayBuffer = await doc.file.arrayBuffer();
-                console.log('[Worker] ArrayBuffer created, size:', arrayBuffer.byteLength);
-                if (extension === 'pdf') {
-                  fileContent = await api.parsePDF(arrayBuffer);
-                } else if (extension === 'docx') {
-                  fileContent = await api.parseDocx(arrayBuffer);
-                }
-                console.log('[Document Parse] Worker parsed:', { fileName: doc.file.name, extension, contentLength: fileContent?.length });
-              } catch (err) {
-                console.error('[Worker] Failed to parse document locally:', err);
-                // Fallback: try server-side parsing via parse-document function
-                try {
-                  console.log('[Document Parse] Worker failed, trying server-side fallback');
-                  const formData = new FormData();
-                  formData.append('file', doc.file);
-                  const response = await invokeEdgeFunction<{ text_content?: string }>('parse-document', {
-                    body: formData
-                  });
-                  console.log('[Document Parse] Server response:', response);
-                  fileContent = response?.text_content || null;
-                  console.log('[Document Parse] Server fallback parsed:', { fileName: doc.file.name, contentLength: fileContent?.length });
-                } catch (serverErr) {
-                  console.error('Failed to parse document on server:', serverErr);
-                  throw new Error(`Không thể đọc file "${doc.file.name}". Vui lòng thử lại hoặc chọn file khác.`);
-                }
-              }
-            } else if (extension === 'doc') {
-              // .doc (old Word format): use server-side parsing only
-              console.log('[Document Parse] .doc file detected, using server-side parsing');
-              try {
-                const formData = new FormData();
-                formData.append('file', doc.file);
-                const response = await invokeEdgeFunction<{ text_content?: string }>('parse-document', {
-                  body: formData
-                });
-                console.log('[Document Parse] Server response:', response);
-                fileContent = response?.text_content || null;
-                console.log('[Document Parse] Server parsed .doc file:', { fileName: doc.file.name, contentLength: fileContent?.length });
-              } catch (serverErr) {
-                console.error('Failed to parse .doc file on server:', serverErr);
-                throw new Error(`Không thể đọc file "${doc.file.name}". Vui lòng convert sang .docx hoặc chọn file khác.`);
-              }
-            } else {
-              console.log('[Document Parse] Unsupported file type', { fileName: doc.file.name, extension, fileType: doc.file.type });
+              console.log('[Document Parse] Server response:', response);
+              fileContent = response?.text_content || null;
+              console.log('[Document Parse] Server parsed:', { fileName: doc.file.name, contentLength: fileContent?.length });
+            } catch (serverErr) {
+              console.error('[Document Parse] Failed to parse on server:', serverErr);
+              throw new Error(`Không thể đọc file "${doc.file.name}". Vui lòng thử lại hoặc chọn file khác.`);
             }
 
             console.log('[Document Parse] Final result', { fileName: doc.file.name, fileContentLength: fileContent?.length, fileContent: fileContent ? fileContent.substring(0, 100) : null });
