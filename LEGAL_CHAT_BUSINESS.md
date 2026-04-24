@@ -58,7 +58,7 @@ flowchart TD
         X --> Y[Tìm trong lịch sử chat<br/>pgvector - top 5 messages]
         X --> Z[Tìm trên internet<br/>Exa API - external legal sources]
         X --> AA[Tìm trong tài liệu upload<br/>document_chunks - vector search]
-        Y --> AB[Đánh giá lại kết quả<br/>Jina Reranking API]
+        Y --> AB[Đánh giá lại kết quả<br/>Jina Rerank API]
         Z --> AB
         AA --> AB
     end
@@ -118,7 +118,7 @@ flowchart TD
     end
 
     subgraph Phase4["Phase 4: Streaming Response<br/>~2-6s - ASYNC (Streaming)"]
-        K --> L[Parse SSE chunks<br/>chunk | evidence | done]
+        K --> L[Parse SSE chunks<br/>chunk - evidence - done]
         L --> M{Chunk type?}
         M -->|chunk| N[Append nội dung<br/>Update UI in real-time]
         M -->|evidence| O[Set streaming evidence<br/>Hiển thị citations]
@@ -155,7 +155,7 @@ flowchart TD
         D --> E{Còn key nào không?}
         E -->|Còn| F[Thử lại với key mới<br/>NO DELAY - switch ngay lập tức]
         F --> B
-        E -->|Hết| G[Thông báo lỗi chung chung<br/>"Hệ thống không thể trả lời ngay lúc này"]
+        E -->|Hết| G[Thông báo lỗi chung chung<br/>Hệ thống không thể trả lời ngay lúc này]
     end
 
     subgraph Phase2["Phase 2: 500 Error Handling<br/>MAX 5 retries"]
