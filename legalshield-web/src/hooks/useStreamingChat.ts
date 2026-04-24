@@ -1,9 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChatStore, type Message } from '@/store/chatStore';
 import { useConversationStore } from '@/store/conversationStore';
-import { streamingChatApi, messageApi, suggestionsApi, summarizationApi } from '@/lib/conversation-api';
-import { uploadChatImage } from '@/lib/supabase';
-import { uploadToCloudinary } from '@/lib/cloudinary';
+import { streamingChatApi, messageApi } from '../lib/supabase';
+import { uploadToCloudinary } from '../lib/cloudinary';
 
 interface UseStreamingChatOptions {
   conversationId?: string;
