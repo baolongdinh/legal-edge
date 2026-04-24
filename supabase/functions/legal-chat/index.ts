@@ -567,7 +567,10 @@ export const handler = async (req: Request): Promise<Response> => {
       }
     }
 
-    if (needsCitation && combinedEvidence.length === 0 && !hasRecentLegalEvidence(memories)) {
+    // Only abstain if: needs citation AND no evidence AND no memory AND question is very specific
+    // Allow general legal advice even without citations
+    const isSpecificLegalQuestion = requiresLegalCitation(message) && message.length > 20
+    if (isSpecificLegalQuestion && combinedEvidence.length === 0 && !hasRecentLegalEvidence(memories)) {
       const abstain = buildAbstainPayload(
         'Tôi chưa tìm thấy căn cứ pháp lý nào đủ tin cậy trong kho dữ liệu hoặc internet để giải đáp chính xác câu hỏi này. Vui lòng cung cấp thêm thông tin về văn bản luật cụ thể.',
         true,

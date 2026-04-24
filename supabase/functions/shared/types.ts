@@ -160,18 +160,19 @@ export const SECONDARY_LEGAL_DOMAINS = [
 export const LEGAL_SOURCE_ALLOWLIST = [...OFFICIAL_LEGAL_DOMAINS, ...SECONDARY_LEGAL_DOMAINS]
 
 const LEGAL_CITATION_HINTS = [
-    'điều',
-    'luật',
-    'nghị định',
-    'thông tư',
-    'bộ luật',
-    'căn cứ',
-    'quy định',
-    'xử phạt',
-    'thời hạn',
-    'bồi thường',
-    'phạt vi phạm',
-    'án lệ',
+    'điều khoản',
+    'văn bản luật',
+    'nghị định số',
+    'thông tư số',
+    'luật số',
+    'bộ luật số',
+    'căn cứ pháp lý',
+    'điều luật nào',
+    'văn bản nào',
+    'theo luật nào',
+    'theo điều nào',
+    'theo nghị định',
+    'theo thông tư',
 ]
 
 const LAW_TITLE_PATTERNS = [
@@ -806,7 +807,7 @@ export async function fetchImageFromStorage(
  * NOTE: For retry logic, we naturally advance the counter each time.
  */
 const _counters: Record<string, number> = {}
-const _lastFailedKeys: Record<string, Set<string>> = {}
+const _failedKeysInCurrentRetry: Record<string, Set<string>> = {}
 
 export function roundRobinKey(listEnvVar: string, fallbackEnvVar: string, forceNext: boolean = false): string {
     const raw = Deno.env.get(listEnvVar) ?? ''
@@ -820,7 +821,7 @@ export function roundRobinKey(listEnvVar: string, fallbackEnvVar: string, forceN
 
     // Initialize counter and failed keys set for this env var
     if (!_counters[listEnvVar]) _counters[listEnvVar] = 0
-    if (!_lastFailedKeys[listEnvVar]) _lastFailedKeys[listEnvVar] = new Set()
+    if (!_failedKeysInCurrentRetry[listEnvVar]) _failedKeysInCurrentRetry[listEnvVar] = new Set()
 
     // If forcing next key (on 429/401/403 error), advance counter
     if (forceNext) {
@@ -830,14 +831,17 @@ export function roundRobinKey(listEnvVar: string, fallbackEnvVar: string, forceN
     const idx = _counters[listEnvVar]
     const selectedKey = keys[idx]
 
-    // Track this key as used
-    _lastFailedKeys[listEnvVar].add(selectedKey)
+    // Track this key as used in current retry cycle
+    _failedKeysInCurrentRetry[listEnvVar].add(selectedKey)
 
-    // If all keys have been tried, reset to allow retry from start
-    if (_lastFailedKeys[listEnvVar].size >= keys.length) {
-        _lastFailedKeys[listEnvVar].clear()
+    // If all keys have been tried in current cycle, reset to allow retry from start
+    if (_failedKeysInCurrentRetry[listEnvVar].size >= keys.length) {
+        console.log(`[roundRobinKey] All ${keys.length} keys tried for ${listEnvVar}, resetting...`)
+        _failedKeysInCurrentRetry[listEnvVar].clear()
+        _counters[listEnvVar] = 0
     }
 
+    console.log(`[roundRobinKey] ${listEnvVar}: using key ending ...${selectedKey.slice(-5)} (index ${idx}/${keys.length})`)
     return selectedKey
 }
 
