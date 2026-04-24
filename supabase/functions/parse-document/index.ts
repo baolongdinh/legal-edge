@@ -129,7 +129,9 @@ export const handler = async (req: Request): Promise<Response> => {
             }
         }
 
+        console.log(`[parse-document] Checking mime type: "${mimeType}"`)
         if (mimeType === 'text/plain' || mimeType === 'text/csv') {
+            console.log(`[parse-document] Using fast text extraction for ${mimeType}`)
             // Ultra-fast: decode directly, no AI needed
             textContent = new TextDecoder().decode(fileBuffer)
         } else if (mimeType === 'application/pdf' && mode === 'persist' && fileUrl) {
