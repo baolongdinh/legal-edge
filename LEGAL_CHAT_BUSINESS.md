@@ -279,6 +279,155 @@ flowchart TD
 
 ---
 
+## Cache Strategy Review & Improvements
+
+### Current Cache Logic Analysis
+
+#### Exact Cache (Redis)
+**Cache Key Components:**
+- `normalizedMessage` (chuẩn hóa câu hỏi)
+- `effectiveDocumentHash` (hash của document)
+- `contextSummary` (last 2 messages, 50 chars each)
+
+**Cache Condition (`canUseCache`):**
+```typescript
+const canUseCache = !needsCitation && 
+                   intent_eval.intent === 'general' && 
+                   (isStandaloneQuestion(message) || history.length === 0)
+```
+
+**Vấn đề:**
+- ❌ Chỉ cache khi KHÔNG cần citation → Câu hỏi pháp lý KHÔNG cache
+- ❌ Chỉ cache khi intent là 'general' → Câu hỏi analysis/drafting KHÔNG cache
+- ❌ Chỉ cache khi câu hỏi standalone hoặc history trống → Câu hỏi trong conversation KHÔNG cache
+- ❌ `contextSummary` chỉ 100 chars (50 x 2) → Có thể không đủ capture context
+
+#### Semantic Cache (pgvector)
+**Embedding Strategy:**
+- Standalone questions: `queryEmbedding` only
+- Contextual questions: `average(queryEmbedding, contextEmbedding)`
+
+**Vấn đề:**
+- ❌ Average có thể làm mất thông tin quan trọng
+- ❌ Không có weighting cho query vs context
+- ❌ Threshold 0.05 có thể quá strict hoặc quá loose
+
+---
+
+### Proposed Improvements (Ưu tiên chính xác)
+
+#### 1. Tăng Context Summary Length
+```typescript
+// BEFORE: 50 chars x 2 = 100 chars
+const contextSummary = history.length > 0
+  ? history.slice(-2).map((h: any) => h.content.slice(0, 50)).join('|')
+  : 'no-context'
+
+// AFTER: 150 chars x 2 = 300 chars
+const contextSummary = history.length > 0
+  ? history.slice(-2).map((h: any) => h.content.slice(0, 150)).join('|')
+  : 'no-context'
+```
+
+**Lợi ích:** Capture được nhiều hơn context của conversation
+
+#### 2. Cải thiện Semantic Cache Embedding
+```typescript
+// BEFORE: Simple average
+cacheEmbedding = queryEmbedding.map((v, i) => (v + contextEmbedding[i]) / 2)
+
+// AFTER: Weighted average (query 70%, context 30%)
+cacheEmbedding = queryEmbedding.map((v, i) => (v * 0.7 + contextEmbedding[i] * 0.3))
+```
+
+**Lợi ích:** Query quan trọng hơn context, nhưng vẫn có context
+
+#### 3. Thêm Document-Aware Cache
+```typescript
+// BEFORE: Không cache khi có document
+const canUseCache = !needsCitation && intent_eval.intent === 'general' && ...
+
+// AFTER: Cache câu hỏi về document cụ thể
+const canUseCache = intent_eval.intent === 'general' && 
+                   (isStandaloneQuestion(message) || 
+                    (effectiveDocumentHash && isDocumentRelatedQuestion(message)))
+```
+
+**Lợi ích:** Có thể cache câu hỏi về document cụ thể (ví dụ: "Điều khoản này có nghĩa gì?")
+
+#### 4. Thêm Conversation Summary Cache
+```typescript
+// Cache summary của conversation thay vì từng câu hỏi
+const conversationSummary = history.length > 0
+  ? history.slice(-5).map((h: any) => h.content).join('\n')
+  : ''
+
+const conversationCacheKey = buildCacheKey('cache:conversation_summary', conversation_id, conversationSummary)
+```
+
+**Lợi ích:** Cache context của conversation để tái sử dụng
+
+#### 5. Cache Invalidation khi Document Thay đổi
+```typescript
+// Khi document được update/re-upload, invalidate cache liên quan
+async function invalidateDocumentCache(documentHash: string) {
+  const pattern = `cache:legal_answer:*:${documentHash}:*`
+  await redis.del(pattern)
+}
+```
+
+**Lợi ích:** Tránh trả lời từ cache khi document đã thay đổi
+
+#### 6. Phân loại Cache theo Confidence Level
+```typescript
+// Chỉ cache câu trả lời có confidence cao
+const canCache = payload.confidence_score >= 0.8 &&
+                !payload.abstained &&
+                payload.citations?.length > 0
+```
+
+**Lợi ích:** Chỉ cache câu trả lời chất lượng cao
+
+---
+
+### Cache Strategy Mới (Recommendation)
+
+#### Phase 1: Strict Cache (Chỉ cache câu hỏi chung chung)
+```typescript
+// Cache: Chào hỏi, cảm ơn, tán gẫu
+const canUseCache = intent_eval.intent === 'general' && 
+                   isStandaloneQuestion(message) &&
+                   !document_context &&
+                   history.length === 0
+```
+
+#### Phase 2: Document-Aware Cache (Cache câu hỏi về document cụ thể)
+```typescript
+// Cache: Câu hỏi về document đã upload
+const canUseDocumentCache = effectiveDocumentHash && 
+                          isDocumentRelatedQuestion(message) &&
+                          payload.citations?.length > 0
+```
+
+#### Phase 3: Contextual Cache (Cache câu hỏi trong conversation với context đầy đủ)
+```typescript
+// Cache: Câu hỏi trong conversation với context summary đầy đủ
+const canUseContextualCache = history.length > 0 &&
+                             contextSummary.length > 200 &&
+                             payload.confidence_score >= 0.8
+```
+
+#### Phase 4: No Cache (Luôn RAG)
+```typescript
+// KHÔNG cache: Câu hỏi pháp lý phức tạp, soạn văn bản
+const noCache = needsCitation || 
+                intent_eval.intent === 'analysis' ||
+                intent_eval.intent === 'drafting' ||
+                isComplexLegalQuestion(message)
+```
+
+---
+
 ## Core Flow Chat (Backend: `legal-chat/index.ts`)
 
 ### Phase 0: Authentication & Validation (SYNC)
