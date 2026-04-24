@@ -568,19 +568,11 @@ export const handler = async (req: Request): Promise<Response> => {
         })
       : Promise.resolve([])
 
-    const fetchLocalLawPromise = (needsCitation || Boolean(effectiveDocumentHash) || isDrafting)
-      ? (needsHyDE ? embedText(hydeDoc, undefined, 768) : Promise.resolve(queryEmbeddingForCache)).then(emb =>
-        supabase.rpc('match_document_chunks', {
-          query_embedding: emb,
-          match_threshold: 0.2, // Lowered to get more candidates for reranking
-          match_count: intent_eval.complexity === 'high' ? 40 : 25,
-          p_query_text: standaloneQuery || message // HYBRID: Add keyword search
-        }).then(({ data }) => data || [])
-      ).catch(e => {
-        console.warn('Local RAG failed:', e)
-        return []
-      })
-      : Promise.resolve([])
+    // FIX: Skip local RAG for uploaded documents
+    // Use compactDocumentContext (full document content) instead
+    // Reason: contract_chunks requires contract_id (UUID), but frontend only sends document_hash (string)
+    // and document content is already extracted in compactDocumentContext
+    const fetchLocalLawPromise = Promise.resolve([])
 
     const [, parallelExa, parallelLocalLaw] = await Promise.all([
       fetchMemoryPromise,
