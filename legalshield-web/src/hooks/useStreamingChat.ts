@@ -254,8 +254,14 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
                   method: 'POST',
                   body: formData
                 });
+                console.log('[Document Parse] Server response status:', response.status, response.statusText);
+                if (!response.ok) {
+                  const errorText = await response.text();
+                  console.error('[Document Parse] Server error response:', errorText);
+                  throw new Error(`Server returned ${response.status}: ${errorText}`);
+                }
                 const data = await response.json();
-                fileContent = data.text || null;
+                fileContent = data.text_content || null;
                 console.log('[Document Parse] Server parsed .doc file:', { fileName: doc.file.name, contentLength: fileContent?.length });
               } catch (serverErr) {
                 console.error('Failed to parse .doc file on server:', serverErr);
