@@ -237,7 +237,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
                     body: formData
                   });
                   const data = await response.json();
-                  fileContent = data.text || null;
+                  fileContent = data.text_content || null;
                   console.log('[Document Parse] Server fallback parsed:', { fileName: doc.file.name, contentLength: fileContent?.length });
                 } catch (serverErr) {
                   console.error('Failed to parse document on server:', serverErr);
