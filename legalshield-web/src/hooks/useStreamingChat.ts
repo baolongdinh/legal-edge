@@ -259,7 +259,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       messageApi.saveUserMessage(
         activeId,
         content,
-        localDocument,
+        userMessage.document_context, // Use updated document_context with uploaded files
         uploadedAttachments
       ).catch(err => {
         console.error('Failed to save user message:', err);
@@ -278,7 +278,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         content,
         [...history, userMessage],
         activeId || undefined,
-        attachedDocument,
+        userMessage.document_context, // Use updated document_context with uploaded files
         (chunk) => {
           // On chunk: clear status once content starts flowing
           assistantContent += chunk;
@@ -373,7 +373,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       if (activeId && assistantContent) {
         const targetMessageId = savedMessageId || localMessageId;
         suggestionsApi
-          .generate(content, assistantContent, activeId, targetMessageId, attachedDocument)
+          .generate(content, assistantContent, activeId, targetMessageId, userMessage.document_context)
           .then((res) => {
             if (res?.suggestions?.length > 0) {
               setCurrentSuggestions(res.suggestions);
