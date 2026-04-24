@@ -3,7 +3,7 @@ import { useChatStore, type Message } from '@/store/chatStore';
 import { useConversationStore } from '@/store/conversationStore';
 import { streamingChatApi, messageApi, suggestionsApi, summarizationApi } from '../lib/conversation-api';
 import { uploadToCloudinary } from '../lib/cloudinary';
-import { uploadChatImage } from '../lib/supabase';
+import { uploadChatImage, invokeEdgeFunction } from '../lib/supabase';
 import * as Comlink from 'comlink';
 
 // Proxy for the Web Worker
@@ -233,18 +233,11 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
                   console.log('[Document Parse] Worker failed, trying server-side fallback');
                   const formData = new FormData();
                   formData.append('file', doc.file);
-                  const response = await fetch('/functions/v1/parse-document', {
-                    method: 'POST',
+                  const response = await invokeEdgeFunction<{ text_content?: string }>('parse-document', {
                     body: formData
                   });
-                  console.log('[Document Parse] Server response status:', response.status, response.statusText);
-                  if (!response.ok) {
-                    const errorText = await response.text();
-                    console.error('[Document Parse] Server error response:', errorText);
-                    throw new Error(`Server returned ${response.status}: ${errorText}`);
-                  }
-                  const data = await response.json();
-                  fileContent = data.text_content || null;
+                  console.log('[Document Parse] Server response:', response);
+                  fileContent = response?.text_content || null;
                   console.log('[Document Parse] Server fallback parsed:', { fileName: doc.file.name, contentLength: fileContent?.length });
                 } catch (serverErr) {
                   console.error('Failed to parse document on server:', serverErr);
@@ -257,18 +250,11 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
               try {
                 const formData = new FormData();
                 formData.append('file', doc.file);
-                const response = await fetch('/functions/v1/parse-document', {
-                  method: 'POST',
+                const response = await invokeEdgeFunction<{ text_content?: string }>('parse-document', {
                   body: formData
                 });
-                console.log('[Document Parse] Server response status:', response.status, response.statusText);
-                if (!response.ok) {
-                  const errorText = await response.text();
-                  console.error('[Document Parse] Server error response:', errorText);
-                  throw new Error(`Server returned ${response.status}: ${errorText}`);
-                }
-                const data = await response.json();
-                fileContent = data.text_content || null;
+                console.log('[Document Parse] Server response:', response);
+                fileContent = response?.text_content || null;
                 console.log('[Document Parse] Server parsed .doc file:', { fileName: doc.file.name, contentLength: fileContent?.length });
               } catch (serverErr) {
                 console.error('Failed to parse .doc file on server:', serverErr);
