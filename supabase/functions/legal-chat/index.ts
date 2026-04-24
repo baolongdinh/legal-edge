@@ -245,12 +245,12 @@ async function autoGenerateConversationTitle(
   }
 }
 /**
- * Task T004: Helper for streaming Gemini response.
+ * Task T004: Helper for streaming Gemini response with retry and key rotation.
  */
-async function* streamGemini(contents: any[], apiKey: string, model = 'gemini-2.5-flash-lite'): AsyncGenerator<string> {
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent?key=${apiKey}`;
+async function* streamGemini(contents: any[], model = 'gemini-2.5-flash-lite'): AsyncGenerator<string> {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:streamGenerateContent`;
 
-  const response = await fetch(url, {
+  const response = await fetchWithRetry(url, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -260,7 +260,7 @@ async function* streamGemini(contents: any[], apiKey: string, model = 'gemini-2.
         temperature: 0.7,
       }
     })
-  });
+  }, { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' });
 
   if (!response.ok) {
     throw new Error(`Gemini streaming error: ${await response.text()}`);
@@ -690,9 +690,6 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
     }
 
     // --- CASE 3: NORMAL STREAMING ---
-    const geminiKeys = (Deno.env.get('GEMINI_API_KEYS') || Deno.env.get('GEMINI_API_KEY') || '').split(',').map(k => k.trim());
-    const geminiApiKey = geminiKeys[Math.floor(Math.random() * geminiKeys.length)];
-
     return new Response(new ReadableStream({
       async start(controller) {
         try {
@@ -701,7 +698,7 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
           }
 
           let fullResponseText = '';
-          for await (const chunk of streamGemini(contents, geminiApiKey)) {
+          for await (const chunk of streamGemini(contents)) {
             fullResponseText += chunk;
             send(controller, { type: 'chunk', content: chunk });
           }
@@ -755,7 +752,21 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
 
           controller.close();
         } catch (err) {
-          send(controller, { type: 'error', error: (err as Error).message });
+          const errorMessage = (err as Error).message;
+          console.error('[legal-chat] Streaming error:', errorMessage);
+
+          // Provide user-friendly error messages
+          let userFriendlyError = 'Có lỗi xảy ra khi xử lý tin nhắn. Vui lòng thử lại.';
+
+          if (errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+            userFriendlyError = 'Hết quota API. Vui lòng thử lại sau vài phút hoặc liên hệ hỗ trợ.';
+          } else if (errorMessage.includes('401') || errorMessage.includes('403')) {
+            userFriendlyError = 'Lỗi xác thực API. Vui lòng liên hệ hỗ trợ kỹ thuật.';
+          } else if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
+            userFriendlyError = 'Kết nối quá thời gian. Vui lòng thử lại.';
+          }
+
+          send(controller, { type: 'error', error: userFriendlyError });
           controller.close();
         }
       }

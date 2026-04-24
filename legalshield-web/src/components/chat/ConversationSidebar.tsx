@@ -138,7 +138,11 @@ const MemoizedConversationSidebar = memo(function ConversationSidebar({
 
     const handleSelect = useCallback((conv: Conversation) => {
         navigate(`/chat/${conv.id}`);
-    }, [navigate]);
+        // Auto-close sidebar on mobile after selection
+        if (isMobileOpen && onClose) {
+            onClose();
+        }
+    }, [navigate, isMobileOpen, onClose]);
 
     const handleCreateConversation = useCallback(async () => {
         await onCreateConversation();

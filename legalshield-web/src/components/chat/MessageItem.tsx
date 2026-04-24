@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Scale, ShieldCheck, ShieldAlert, Copy, Search, Check, ChevronRight } from 'lucide-react';
+import { Scale, ShieldCheck, ShieldAlert, Copy, Search, Check, ChevronRight, Download, File } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { clsx, type ClassValue } from 'clsx';
@@ -11,6 +11,14 @@ import type { Message } from '../../store/chatStore';
 
 function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
 }
 
 interface MessageItemProps {
@@ -99,6 +107,15 @@ export const MessageItem = memo(({
 
     return { visible, overflow, gridClass };
   }, [message.imageUrls, message.attachments]);
+
+  // Separate file attachments (non-image)
+  const fileAttachments = useMemo(() => {
+    if (!message.attachments?.length) return null;
+    return message.attachments.filter((a: any) => {
+      const mime = a.mime_type || '';
+      return !mime.startsWith('image/');
+    });
+  }, [message.attachments]);
 
   return (
     <motion.div
@@ -222,6 +239,45 @@ export const MessageItem = memo(({
                   </motion.div>
                 );
               })}
+            </div>
+          )}
+
+          {/* File Attachments (non-image) */}
+          {fileAttachments && fileAttachments.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {fileAttachments.map((file: any, idx: number) => (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.05 }}
+                  className="flex items-center gap-3 p-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  <div className="w-10 h-10 bg-lex-gold/20 rounded-lg flex items-center justify-center">
+                    <File size={20} className="text-lex-gold" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{file.file_name || file.name}</p>
+                    <p className="text-xs text-lex-lawyer/60">
+                      {file.file_size ? formatFileSize(file.file_size) : ''}
+                    </p>
+                  </div>
+                  {file.storage_path && (
+                    <button
+                      onClick={() => {
+                        const url = file.storage_path.startsWith('http')
+                          ? file.storage_path
+                          : `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/user-contracts/${file.storage_path}`;
+                        window.open(url, '_blank');
+                      }}
+                      className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                      title="Tải xuống"
+                    >
+                      <Download size={16} className="text-lex-lawyer/60" />
+                    </button>
+                  )}
+                </motion.div>
+              ))}
             </div>
           )}
 

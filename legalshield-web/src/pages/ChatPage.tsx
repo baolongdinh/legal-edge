@@ -117,23 +117,28 @@ export function ChatPage() {
     ]
   );
 
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const fileData: any = {
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    try {
+      // Don't upload immediately - just store file objects
+      // Upload will happen when user sends the message
+      const fileDataArray = Array.from(files).map((file) => ({
         name: file.name,
         size: file.size,
         type: file.type,
-      };
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setAttachedDocument({
-          ...fileData,
-          document_context: event.target?.result as string,
-        });
-      };
-      reader.readAsText(file);
+        file: file, // Store File object for later upload
+        storage_path: null, // Will be filled during send
+        document_context: null, // Will be filled during send
+      }));
+
+      setAttachedDocument(fileDataArray);
+    } catch (error) {
+      console.error('File selection failed:', error);
+      alert('Không thể chọn file. Vui lòng thử lại.');
     }
+
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [setAttachedDocument]);
 
@@ -232,7 +237,8 @@ export function ChatPage() {
                 ref={fileInputRef}
                 onChange={handleFileChange}
                 className="hidden"
-                accept=".txt,.md"
+                accept=".txt,.md,.pdf,.doc,.docx,.rtf,.xls,.xlsx,.csv,.ppt,.pptx,.json,.xml,.html"
+                multiple
               />
               <ChatInput
                 onSend={handleSendMessage}

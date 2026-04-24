@@ -1,8 +1,9 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChatStore, type Message } from '@/store/chatStore';
 import { useConversationStore } from '@/store/conversationStore';
 import { streamingChatApi, messageApi, suggestionsApi, summarizationApi } from '@/lib/conversation-api';
 import { uploadChatImage } from '@/lib/supabase';
+import { uploadToCloudinary } from '@/lib/cloudinary';
 
 interface UseStreamingChatOptions {
   conversationId?: string;
@@ -40,6 +41,19 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     clearCachedMessages,
   } = useChatStore();
 
+  // Use refs for frequently changing values to avoid dependency issues
+  const attachedImagesRef = useRef(attachedImages);
+  const attachedDocumentRef = useRef(attachedDocument);
+
+  // Update refs when values change
+  useEffect(() => {
+    attachedImagesRef.current = attachedImages;
+  }, [attachedImages]);
+
+  useEffect(() => {
+    attachedDocumentRef.current = attachedDocument;
+  }, [attachedDocument]);
+
   const stopStreaming = useCallback(() => {
     if (abortControllerRef.current) {
       abortControllerRef.current.abort();
@@ -59,31 +73,33 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     resetStreaming();
     setStreaming({ isStreaming: true, streamedContent: '', error: null });
 
+    // Use refs to get latest attachments without dependency issues
+    const localImages = [...attachedImagesRef.current];
+    const localDocument = attachedDocumentRef.current;
+
     const userMessage: Message = {
       role: 'user',
       content,
-      document_context: attachedDocument || undefined,
+      document_context: localDocument || undefined,
       // Attach blob URLs immediately for optimistic display in chat bubble
-      imageUrls: attachedImages.length > 0 ? attachedImages.map(img => img.url) : undefined,
-      attachments: attachedImages.length > 0 ? attachedImages.map(img => ({ storage_path: '', name: img.file.name })) : undefined,
+      imageUrls: localImages.length > 0 ? localImages.map(img => img.url) : undefined,
+      attachments: localImages.length > 0 ? localImages.map(img => ({ storage_path: '', name: img.file.name })) : undefined,
+      // If attachedDocument is an array (multiple files), include it in document_context
+      ...(Array.isArray(localDocument) && localDocument.length > 0 ? {
+        document_context: localDocument
+      } : {}),
     };
     addMessage(userMessage);
 
+    // Clear attachments from store to free memory
+    clearAttachedImages();
+
     // 1. Upload images if any
     let uploadedAttachments: any[] = [];
-    if (attachedImages.length > 0) {
+    if (localImages.length > 0) {
       setStreamingStatus('Đang tải ảnh lên...');
       try {
-        // We need a conversation ID to upload. If none, we'll create one.
-        let uploadId = activeId;
-        if (!uploadId) {
-          // If no active conversation, we'll wait for the conversation creation in the caller 
-          // or create a temp one. Actually ChatPage handles creation if missing.
-          // For simplicity in this loop, we'll assume ChatPage has or will create it.
-          // Wait, createConversation is async. Let's adjust ChatPage as well.
-        }
-
-        const uploadPromises = attachedImages.map(img =>
+        const uploadPromises = localImages.map(img =>
           uploadChatImage(img.file, activeId || 'temp')
             .then(path => ({
               storage_path: path,
@@ -95,11 +111,54 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         uploadedAttachments = await Promise.all(uploadPromises);
 
         // Update user message with real paths
-        // (In a real app we'd update the specific message in store)
         userMessage.attachments = uploadedAttachments;
       } catch (err) {
         console.error('Image upload failed:', err);
         setError('Không thể tải ảnh lên. Vui lòng thử lại.');
+        setStreaming({ isStreaming: false });
+        return;
+      }
+    }
+
+    // 2. Upload document files if any (deferred from ChatPage)
+    if (Array.isArray(localDocument) && localDocument.length > 0) {
+      setStreamingStatus('Đang tải tài liệu lên...');
+      try {
+        const uploadPromises = localDocument.map(async (doc: any) => {
+          if (doc.file && !doc.storage_path) {
+            // Upload to Cloudinary
+            const cloudinaryUrl = await uploadToCloudinary(doc.file, 'chat_documents', 'auto');
+
+            // For text-based files, also read content
+            if (doc.file.type.startsWith('text/') || doc.file.name.endsWith('.txt') || doc.file.name.endsWith('.md') || doc.file.name.endsWith('.csv') || doc.file.name.endsWith('.json') || doc.file.name.endsWith('.xml') || doc.file.name.endsWith('.html')) {
+              return new Promise((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                  resolve({
+                    ...doc,
+                    storage_path: cloudinaryUrl,
+                    document_context: event.target?.result as string,
+                  });
+                };
+                reader.readAsText(doc.file);
+              });
+            } else {
+              // For binary files, just store Cloudinary URL
+              return {
+                ...doc,
+                storage_path: cloudinaryUrl,
+                document_context: null,
+              };
+            }
+          }
+          return doc;
+        });
+
+        const uploadedDocs = await Promise.all(uploadPromises);
+        // Update user message with uploaded documents
+        userMessage.document_context = uploadedDocs;
+      } catch {
+        setError('Không thể tải tài liệu lên. Vui lòng thử lại.');
         setStreaming({ isStreaming: false });
         return;
       }
@@ -113,11 +172,14 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         await messageApi.saveUserMessage(
           activeId,
           content,
-          attachedDocument,
+          localDocument,
           uploadedAttachments
         );
       } catch (err) {
-        console.warn('Failed to save user message:', err);
+        console.error('Failed to save user message:', err);
+        // Show error but continue with streaming - message is already displayed optimistically
+        setError('Không thể lưu tin nhắn. Vui lòng kiểm tra kết nối.');
+        // Don't return - continue with streaming even if save fails
       }
     }
 
@@ -280,16 +342,18 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       setStreaming({ isStreaming: false });
       setStreamingStatus('');
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     streaming.isStreaming,
-    options,
     addMessage,
     setStreaming,
     resetStreaming,
     setCurrentSuggestions,
     setStreamingEvidence,
     setStreamingStatus,
-    attachedDocument,
+    clearAttachedImages,
+    clearCachedMessages,
+    updateMessageSuggestions,
   ]);
 
   const retry = useCallback(() => {
