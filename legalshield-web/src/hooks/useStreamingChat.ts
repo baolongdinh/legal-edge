@@ -1,8 +1,20 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChatStore, type Message } from '@/store/chatStore';
 import { useConversationStore } from '@/store/conversationStore';
-import { streamingChatApi, messageApi } from '../lib/supabase';
+import { streamingChatApi, messageApi, suggestionsApi, summarizationApi } from '../lib/conversation-api';
 import { uploadToCloudinary } from '../lib/cloudinary';
+import { uploadChatImage } from '../lib/supabase';
+import * as Comlink from 'comlink';
+
+// Proxy for the Web Worker
+let workerApi: { parsePDF: (arrayBuffer: ArrayBuffer) => Promise<string>; parseDocx: (arrayBuffer: ArrayBuffer) => Promise<string> } | null = null;
+const initWorker = () => {
+  if (!workerApi) {
+    const worker = new Worker(new URL('../workers/document.worker.ts', import.meta.url), { type: 'module' });
+    workerApi = Comlink.wrap(worker);
+  }
+  return workerApi;
+};
 
 interface UseStreamingChatOptions {
   conversationId?: string;
@@ -154,19 +166,49 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       try {
         // --- T006: Parallel Document Upload + File Reading ---
         // Upload and read file content in parallel to save ~500ms
-        const uploadPromises = localDocument.map(async (doc: any) => {
+        const uploadPromises = localDocument.map(async (doc: { file?: File; storage_path?: string; document_context?: string }) => {
           if (doc.file && !doc.storage_path) {
-            // Parallel: upload + read file content
-            const [cloudinaryUrl, fileContent] = await Promise.all([
-              uploadToCloudinary(doc.file, 'chat_documents', 'auto'),
-              doc.file.type.startsWith('text/') || doc.file.name.endsWith('.txt') || doc.file.name.endsWith('.md') || doc.file.name.endsWith('.csv') || doc.file.name.endsWith('.json') || doc.file.name.endsWith('.xml') || doc.file.name.endsWith('.html')
-                ? new Promise<string>((resolve) => {
-                    const reader = new FileReader();
-                    reader.onload = (e) => resolve(e.target?.result as string);
-                    reader.readAsText(doc.file);
-                  })
-                : Promise.resolve(null)
-            ]);
+            // Upload to cloudinary
+            const cloudinaryUrl = await uploadToCloudinary(doc.file, 'chat_documents', 'auto');
+
+            // Parse file content based on type
+            let fileContent: string | null = null;
+            const extension = doc.file.name.split('.').pop()?.toLowerCase();
+
+            if (extension === 'txt' || extension === 'md' || extension === 'csv' || extension === 'json' || extension === 'xml' || extension === 'html' || doc.file.type.startsWith('text/')) {
+              // Text files: use FileReader
+              fileContent = await new Promise<string>((resolve) => {
+                const reader = new FileReader();
+                reader.onload = (e) => resolve(e.target?.result as string);
+                reader.readAsText(doc.file!);
+              });
+            } else if (extension === 'pdf' || extension === 'docx') {
+              // PDF/DOCX: use worker to parse
+              try {
+                const arrayBuffer = await doc.file.arrayBuffer();
+                const api = initWorker();
+                if (extension === 'pdf') {
+                  fileContent = await api.parsePDF(arrayBuffer);
+                } else if (extension === 'docx') {
+                  fileContent = await api.parseDocx(arrayBuffer);
+                }
+              } catch (err) {
+                console.error('Failed to parse document locally:', err);
+                // Fallback: try server-side parsing via parse-document function
+                try {
+                  const formData = new FormData();
+                  formData.append('file', doc.file);
+                  const response = await fetch('/functions/v1/parse-document', {
+                    method: 'POST',
+                    body: formData
+                  });
+                  const data = await response.json();
+                  fileContent = data.text || null;
+                } catch (serverErr) {
+                  console.error('Failed to parse document on server:', serverErr);
+                }
+              }
+            }
 
             return {
               ...doc,
