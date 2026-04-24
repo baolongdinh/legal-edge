@@ -45,7 +45,10 @@ export const handler = async (req: Request): Promise<Response> => {
 
         // --- Helper: Extract text with Gemini Multimodal (in-memory, no remote file needed) ---
         const extractWithGemini = async (buffer: ArrayBuffer, mime: string) => {
+            console.log(`[extractWithGemini] Starting extraction: mime=${mime}, size=${buffer.byteLength} bytes`)
             const base64File = encode(new Uint8Array(buffer))
+            console.log(`[extractWithGemini] Encoded to base64, length=${base64File.length}`)
+
             const body = {
                 contents: [{
                     parts: [
@@ -55,6 +58,7 @@ export const handler = async (req: Request): Promise<Response> => {
                 }]
             }
 
+            console.log(`[extractWithGemini] Calling Gemini API...`)
             const res = await fetchWithRetry(
                 `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`,
                 {
@@ -65,9 +69,21 @@ export const handler = async (req: Request): Promise<Response> => {
                 { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
             )
 
+            console.log(`[extractWithGemini] Response status: ${res.status}`)
             const data = await res.json()
+
+            // Log full error details if any
+            if (data.error) {
+                console.error('[extractWithGemini] Gemini API error:', JSON.stringify(data.error))
+                throw new Error(`Gemini API error: ${data.error.message || JSON.stringify(data.error)}`)
+            }
+
             const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-            if (!text) throw new Error('Gemini returned empty content')
+            console.log(`[extractWithGemini] Extracted text length: ${text?.length || 0}`)
+            if (!text) {
+                console.error('[extractWithGemini] Gemini returned empty content. Full response:', JSON.stringify(data))
+                throw new Error('Gemini returned empty content')
+            }
             return text
         }
 
@@ -111,7 +127,7 @@ export const handler = async (req: Request): Promise<Response> => {
             }
         }
 
-        if (mimeType === 'text/plain') {
+        if (mimeType === 'text/plain' || mimeType === 'text/csv') {
             // Ultra-fast: decode directly, no AI needed
             textContent = new TextDecoder().decode(fileBuffer)
         } else if (mimeType === 'application/pdf' && mode === 'persist' && fileUrl) {
