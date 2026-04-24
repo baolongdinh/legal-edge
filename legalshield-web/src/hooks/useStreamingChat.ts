@@ -90,6 +90,12 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     const localImages = [...attachedImagesRef.current];
     const localDocument = attachedDocumentRef.current;
 
+    console.log('[Document Upload] Starting upload', {
+      hasLocalDocument: !!localDocument,
+      localDocumentLength: Array.isArray(localDocument) ? localDocument.length : 0,
+      localDocument: localDocument
+    });
+
     const userMessage: Message = {
       role: 'user',
       content,
@@ -163,6 +169,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     // 2. Upload document files if any (deferred from ChatPage)
     if (Array.isArray(localDocument) && localDocument.length > 0) {
       setStreamingStatus('Đang tải tài liệu lên...');
+      console.log('[Document Upload] Starting document upload process', { documentCount: localDocument.length });
       try {
         // Validate file sizes before upload (Cloudinary limit: 10MB)
         const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
@@ -190,6 +197,8 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
             // Parse file content based on type
             let fileContent: string | null = null;
             const extension = doc.file.name.split('.').pop()?.toLowerCase();
+
+            console.log('[Document Parse] Starting parse', { fileName: doc.file.name, extension, fileType: doc.file.type });
 
             if (extension === 'txt' || extension === 'md' || extension === 'csv' || extension === 'json' || extension === 'xml' || extension === 'html' || doc.file.type.startsWith('text/')) {
               // Text files: use FileReader
@@ -228,7 +237,11 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
                   throw new Error(`Không thể đọc file "${doc.file.name}". Vui lòng thử lại hoặc chọn file khác.`);
                 }
               }
+            } else {
+              console.log('[Document Parse] Unsupported file type', { fileName: doc.file.name, extension, fileType: doc.file.type });
             }
+
+            console.log('[Document Parse] Final result', { fileName: doc.file.name, fileContentLength: fileContent?.length, fileContent: fileContent ? fileContent.substring(0, 100) : null });
 
             return {
               ...doc,
@@ -240,8 +253,14 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         });
 
         const uploadedDocs = await Promise.all(uploadPromises);
+        console.log('[Document Upload] Upload complete', { uploadedDocsCount: uploadedDocs.length });
         // Update user message with uploaded documents
         userMessage.document_context = uploadedDocs;
+        console.log('[Document Upload] Updated userMessage.document_context', {
+          docsCount: userMessage.document_context?.length,
+          firstDocHasContent: !!userMessage.document_context?.[0]?.document_context,
+          firstDocContentLength: userMessage.document_context?.[0]?.document_context?.length
+        });
       } catch (err) {
         const errorMessage = err instanceof Error ? err.message : 'Không thể tải tài liệu lên. Vui lòng thử lại.';
         setError(errorMessage);
