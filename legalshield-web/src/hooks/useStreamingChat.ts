@@ -10,8 +10,12 @@ import * as Comlink from 'comlink';
 let workerApi: { parsePDF: (arrayBuffer: ArrayBuffer) => Promise<string>; parseDocx: (arrayBuffer: ArrayBuffer) => Promise<string> } | null = null;
 const initWorker = () => {
   if (!workerApi) {
+    console.log('[Worker] Initializing document worker');
     const worker = new Worker(new URL('../workers/document.worker.ts', import.meta.url), { type: 'module' });
     workerApi = Comlink.wrap(worker);
+    console.log('[Worker] Worker initialized successfully');
+  } else {
+    console.log('[Worker] Reusing existing worker');
   }
   return workerApi;
 };
@@ -211,8 +215,11 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
             } else if (extension === 'pdf' || extension === 'docx') {
               // PDF/DOCX: use worker to parse
               try {
-                const arrayBuffer = await doc.file.arrayBuffer();
+                console.log('[Worker] Calling initWorker');
                 const api = initWorker();
+                console.log('[Worker] Got worker API, starting parse');
+                const arrayBuffer = await doc.file.arrayBuffer();
+                console.log('[Worker] ArrayBuffer created, size:', arrayBuffer.byteLength);
                 if (extension === 'pdf') {
                   fileContent = await api.parsePDF(arrayBuffer);
                 } else if (extension === 'docx') {
@@ -220,7 +227,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
                 }
                 console.log('[Document Parse] Worker parsed:', { fileName: doc.file.name, extension, contentLength: fileContent?.length });
               } catch (err) {
-                console.error('Failed to parse document locally:', err);
+                console.error('[Worker] Failed to parse document locally:', err);
                 // Fallback: try server-side parsing via parse-document function
                 try {
                   const formData = new FormData();
