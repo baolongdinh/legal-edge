@@ -179,7 +179,13 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         const uploadPromises = localDocument.map(async (doc: { file?: File; storage_path?: string; document_context?: string }) => {
           if (doc.file && !doc.storage_path) {
             // Upload to cloudinary
-            const cloudinaryUrl = await uploadToCloudinary(doc.file, 'chat_documents', 'auto');
+            let cloudinaryUrl: string;
+            try {
+              cloudinaryUrl = await uploadToCloudinary(doc.file, 'chat_documents', 'auto');
+            } catch (uploadErr) {
+              console.error('[Document Upload] Failed to upload file:', uploadErr);
+              throw new Error(`Không thể tải file "${doc.file.name}" lên. Vui lòng thử lại.`);
+            }
 
             // Parse file content based on type
             let fileContent: string | null = null;
@@ -219,6 +225,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
                   console.log('[Document Parse] Server fallback parsed:', { fileName: doc.file.name, contentLength: fileContent?.length });
                 } catch (serverErr) {
                   console.error('Failed to parse document on server:', serverErr);
+                  throw new Error(`Không thể đọc file "${doc.file.name}". Vui lòng thử lại hoặc chọn file khác.`);
                 }
               }
             }
@@ -235,8 +242,9 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         const uploadedDocs = await Promise.all(uploadPromises);
         // Update user message with uploaded documents
         userMessage.document_context = uploadedDocs;
-      } catch {
-        setError('Không thể tải tài liệu lên. Vui lòng thử lại.');
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Không thể tải tài liệu lên. Vui lòng thử lại.';
+        setError(errorMessage);
         setStreaming({ isStreaming: false });
         return;
       }
