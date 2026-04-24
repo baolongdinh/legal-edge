@@ -352,6 +352,17 @@ export const handler = async (req: Request): Promise<Response> => {
       attachments = [],      // Alternative naming from frontend
     } = await req.json()
 
+    // DEBUG: Log incoming request data
+    console.log('[DEBUG] Incoming request:', {
+      has_document_context: !!document_context,
+      document_context_type: typeof document_context,
+      is_array: Array.isArray(document_context),
+      document_context_length: Array.isArray(document_context) ? document_context.length : 0,
+      first_doc_keys: Array.isArray(document_context) && document_context.length > 0 ? Object.keys(document_context[0]) : null,
+      first_doc_has_document_context: Array.isArray(document_context) && document_context.length > 0 ? !!document_context[0]?.document_context : false,
+      first_doc_document_context_length: Array.isArray(document_context) && document_context.length > 0 && document_context[0]?.document_context ? document_context[0].document_context.length : 0,
+    })
+
     // FIX: Generate document_hash from document_context if not provided
     // This ensures document retrieval works when frontend uploads files
     let effectiveDocumentHash = document_hash
@@ -429,6 +440,12 @@ export const handler = async (req: Request): Promise<Response> => {
     } else {
       console.log('[Document Context] No document_context received')
     }
+
+    console.log('[DEBUG] documentText extracted:', {
+      has_documentText: !!documentText,
+      documentText_length: documentText?.length || 0,
+      documentText_preview: documentText?.substring(0, 200) || 'N/A'
+    })
 
     const compactDocumentContext = buildCompactDocumentContext(
       typeof context_summary === 'string' ? context_summary : undefined,
