@@ -58,6 +58,8 @@ export const handler = async (req: Request): Promise<Response> => {
                 }]
             }
 
+            const jsonBody = JSON.stringify(body)
+            console.log(`[extractWithGemini] JSON payload size: ${jsonBody.length} chars (~${Math.round(jsonBody.length / 1024)}KB)`)
             console.log(`[extractWithGemini] Calling Gemini API...`)
             const res = await fetchWithRetry(
                 `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`,
