@@ -3,10 +3,10 @@ import { Plus, MessageSquare, Star, Trash2, Folder, Search } from 'lucide-react'
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { LegalDisclaimer } from './LegalDisclaimer';
-import { useConversation } from '../../hooks/useConversation';
 import { Typography } from '../ui/Typography';
 import { Button } from '../ui/Button';
 import { clsx } from 'clsx';
+import { formatDateShort } from '../../lib/date-utils';
 import type { Conversation } from '../../store/conversationStore';
 
 interface ConversationItemProps {
@@ -14,10 +14,9 @@ interface ConversationItemProps {
     isSelected: boolean;
     onSelect: (conv: Conversation) => void;
     onDelete: (id: string) => void;
-    formatDate: (date: string) => string;
 }
 
-const ConversationItem = memo(({ conv, isSelected, onSelect, onDelete, formatDate }: ConversationItemProps) => {
+const ConversationItem = memo(({ conv, isSelected, onSelect, onDelete }: ConversationItemProps) => {
     const isTemp = conv.id.startsWith('temp-');
 
     // Simple status resolver based on existing fields or counts
@@ -78,7 +77,7 @@ const ConversationItem = memo(({ conv, isSelected, onSelect, onDelete, formatDat
             </div>
 
             <div className="flex items-center gap-2 text-[10px] text-lex-lawyer uppercase tracking-wider opacity-40 pl-2 font-bold mb-2">
-                <span>{isTemp ? 'Mới' : formatDate(conv.updated_at)}</span>
+                <span>{isTemp ? 'Mới' : formatDateShort(conv.updated_at)}</span>
                 <span className="w-0.5 h-0.5 bg-lex-lawyer rounded-full" />
                 <span>{conv.message_count} tin nhắn</span>
             </div>
@@ -115,35 +114,43 @@ ConversationItem.displayName = 'ConversationItem';
 interface ConversationSidebarProps {
     isMobileOpen?: boolean;
     onClose?: () => void;
+    conversations: Conversation[];
+    selectedConversation: Conversation | null;
+    isLoading: boolean;
+    onCreateConversation: () => Promise<Conversation | null>;
+    onDeleteConversation: (id: string) => Promise<void>;
+    searchQuery: string;
+    onSearchQueryChange: (query: string) => void;
 }
 
-export function ConversationSidebar({ isMobileOpen, onClose }: ConversationSidebarProps) {
+const MemoizedConversationSidebar = memo(function ConversationSidebar({
+    isMobileOpen,
+    onClose,
+    conversations,
+    selectedConversation,
+    isLoading,
+    onCreateConversation,
+    onDeleteConversation,
+    searchQuery,
+    onSearchQueryChange,
+}: ConversationSidebarProps) {
     const navigate = useNavigate();
-    const {
-        conversations,
-        selectedConversation,
-        isLoading,
-        createConversation,
-        deleteConversation,
-        searchQuery,
-        setSearchQuery,
-    } = useConversation();
-
-    const formatDate = useCallback((dateStr: string) => {
-        try {
-            return new Intl.DateTimeFormat('vi-VN', {
-                day: '2-digit',
-                month: '2-digit',
-                year: '2-digit'
-            }).format(new Date(dateStr));
-        } catch {
-            return '';
-        }
-    }, []);
 
     const handleSelect = useCallback((conv: Conversation) => {
         navigate(`/chat/${conv.id}`);
-    }, [navigate]);
+        // Auto-close sidebar on mobile after selection
+        if (isMobileOpen && onClose) {
+            onClose();
+        }
+    }, [navigate, isMobileOpen, onClose]);
+
+    const handleCreateConversation = useCallback(async () => {
+        await onCreateConversation();
+    }, [onCreateConversation]);
+
+    const handleDeleteConversation = useCallback(async (id: string) => {
+        await onDeleteConversation(id);
+    }, [onDeleteConversation]);
 
     return (
         <>
@@ -173,7 +180,7 @@ export function ConversationSidebar({ isMobileOpen, onClose }: ConversationSideb
                         <Folder size={18} className="text-lex-gold/60" />
                     </div>
                     <Button
-                        onClick={() => createConversation()}
+                        onClick={handleCreateConversation}
                         className="w-full justify-start gap-4 bg-gradient-to-br from-lex-deep to-lex-midnight text-lex-ivory hover:scale-[1.02] active:scale-[0.98] transition-all duration-500 shadow-2xl shadow-lex-deep/20 rounded-2xl py-5 group border border-lex-midnight/50"
                     >
                         <div className="bg-lex-gold/10 p-2 rounded-xl group-hover:bg-lex-gold/20 transition-colors duration-500">
@@ -191,7 +198,7 @@ export function ConversationSidebar({ isMobileOpen, onClose }: ConversationSideb
                             type="text"
                             placeholder="Tìm kiếm trong kho..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={(e) => onSearchQueryChange(e.target.value)}
                             className="w-full bg-surface-bright/50 border border-lex-border rounded-xl py-3 pl-11 pr-4 text-xs focus:ring-1 focus:ring-lex-gold transition-all placeholder:text-lex-lawyer/30 font-medium"
                         />
                     </div>
@@ -218,8 +225,7 @@ export function ConversationSidebar({ isMobileOpen, onClose }: ConversationSideb
                                     conv={conv}
                                     isSelected={selectedConversation?.id === conv.id}
                                     onSelect={handleSelect}
-                                    onDelete={deleteConversation}
-                                    formatDate={formatDate}
+                                    onDelete={handleDeleteConversation}
                                 />
                             ))}
                         </div>
@@ -230,4 +236,6 @@ export function ConversationSidebar({ isMobileOpen, onClose }: ConversationSideb
             </div>
         </>
     );
-}
+});
+
+export { MemoizedConversationSidebar as ConversationSidebar };

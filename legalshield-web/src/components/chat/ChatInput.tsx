@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo, useCallback } from 'react';
 import { Send, Paperclip, X, Loader2, Camera, Image as ImageIcon } from 'lucide-react';
 import { clsx, type ClassValue } from 'clsx';
 
@@ -10,7 +10,7 @@ interface ChatInputProps {
   onSend: (message: string) => void;
   isStreaming?: boolean;
   disabled?: boolean;
-  attachedDocument?: { name: string; size: number } | null;
+  attachedDocument?: { name: string; size: number } | null | { name: string; size: number; type: string; document_context?: string | null }[];
   onAttachDocument?: () => void;
   onDetachDocument?: () => void;
   attachedImages?: { id: string; url: string; file: File }[];
@@ -18,7 +18,7 @@ interface ChatInputProps {
   onRemoveImage?: (id: string) => void;
 }
 
-export function ChatInput({
+const MemoizedChatInput = memo(function ChatInput({
   onSend,
   isStreaming,
   disabled,
@@ -35,26 +35,26 @@ export function ChatInput({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const cameraInputRef = useRef<HTMLInputElement>(null);
 
-  const handleImageSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleImageSelect = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     if (onAttachImages) onAttachImages(e.target.files);
     setIsImageMenuOpen(false);
     if (fileInputRef.current) fileInputRef.current.value = '';
     if (cameraInputRef.current) cameraInputRef.current.value = '';
-  };
+  }, [onAttachImages]);
 
-  const handleSend = () => {
+  const handleSend = useCallback(() => {
     if (content.trim() && !disabled && !isStreaming) {
       onSend(content.trim());
       setContent('');
     }
-  };
+  }, [content, disabled, isStreaming, onSend]);
 
-  const handleKeyDown = (e: React.KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
     }
-  };
+  }, [handleSend]);
 
   // Auto-resize textarea
   useEffect(() => {
@@ -66,22 +66,44 @@ export function ChatInput({
 
   return (
     <div className="relative">
-      {/* File attachment preview */}
+      {/* File attachment preview - handle both single and multiple files */}
       {attachedDocument && (
         <div className="absolute bottom-full mb-4 left-0 animate-in slide-in-from-bottom-2 fade-in duration-300">
-          <div className="flex items-center gap-3 bg-white border border-lex-deep/10 px-4 py-2 rounded-lg shadow-sm">
-            <Paperclip size={14} className="text-lex-deep/40" />
-            <div className="max-w-[200px]">
-              <p className="text-xs font-medium text-lex-deep truncate">{attachedDocument.name}</p>
-              <p className="text-[10px] text-lex-muted">{(attachedDocument.size / 1024).toFixed(1)} KB</p>
+          {Array.isArray(attachedDocument) ? (
+            // Multiple files
+            <div className="flex flex-col gap-2 max-w-[300px]">
+              {attachedDocument.map((doc, idx) => (
+                <div key={idx} className="flex items-center gap-3 bg-white border border-lex-deep/10 px-4 py-2 rounded-lg shadow-sm">
+                  <Paperclip size={14} className="text-lex-deep/40" />
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-medium text-lex-deep truncate">{doc.name}</p>
+                    <p className="text-[10px] text-lex-muted">{(doc.size / 1024).toFixed(1)} KB</p>
+                  </div>
+                </div>
+              ))}
+              <button
+                onClick={onDetachDocument}
+                className="mt-2 text-xs text-red-500 hover:text-red-600 font-medium"
+              >
+                Xóa tất cả ({attachedDocument.length} file)
+              </button>
             </div>
-            <button
-              onClick={onDetachDocument}
-              className="p-1 hover:bg-lex-deep/5 rounded-full transition-colors"
-            >
-              <X size={14} className="text-lex-deep/40" />
-            </button>
-          </div>
+          ) : (
+            // Single file
+            <div className="flex items-center gap-3 bg-white border border-lex-deep/10 px-4 py-2 rounded-lg shadow-sm">
+              <Paperclip size={14} className="text-lex-deep/40" />
+              <div className="max-w-[200px]">
+                <p className="text-xs font-medium text-lex-deep truncate">{attachedDocument.name}</p>
+                <p className="text-[10px] text-lex-muted">{(attachedDocument.size / 1024).toFixed(1)} KB</p>
+              </div>
+              <button
+                onClick={onDetachDocument}
+                className="p-1 hover:bg-lex-deep/5 rounded-full transition-colors"
+              >
+                <X size={14} className="text-lex-deep/40" />
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -169,7 +191,10 @@ export function ChatInput({
                 <span className="text-sm font-semibold">Thư viện ảnh</span>
               </button>
               <button
-                onClick={onAttachDocument}
+                onClick={() => {
+                  onAttachDocument?.();
+                  setIsImageMenuOpen(false);
+                }}
                 className="flex items-center gap-3 px-4 py-3 hover:bg-lex-lawyer/5 rounded-xl text-lex-deep transition-colors group"
               >
                 <div className="w-8 h-8 rounded-full bg-lex-lawyer/10 flex items-center justify-center group-hover:bg-lex-lawyer/20 transition-colors">
@@ -228,4 +253,6 @@ export function ChatInput({
       </div>
     </div>
   );
-}
+});
+
+export { MemoizedChatInput as ChatInput };

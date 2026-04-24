@@ -65,6 +65,8 @@ interface ConversationState {
 
   // Computed
   filteredConversations: () => Conversation[];
+  _filteredConversationsCache: Conversation[];
+  _lastFilterState: string;
 }
 
 export const useConversationStore = create<ConversationState>()(
@@ -81,15 +83,19 @@ export const useConversationStore = create<ConversationState>()(
       page: 1,
       hasMore: false,
       availableFolders: [],
+      _filteredConversationsCache: [],
+      _lastFilterState: '',
 
       // Actions
       setConversations: (conversations) => {
-        set({ conversations });
+        set({ conversations, _filteredConversationsCache: [], _lastFilterState: '' }); // Clear cache on update
       },
 
       addConversation: (conversation) => {
         set((state) => ({
           conversations: [conversation, ...state.conversations],
+          _filteredConversationsCache: [], // Clear cache on add
+          _lastFilterState: '',
         }));
       },
 
@@ -102,6 +108,8 @@ export const useConversationStore = create<ConversationState>()(
             state.selectedConversation?.id === id
               ? { ...state.selectedConversation, ...updates }
               : state.selectedConversation,
+          _filteredConversationsCache: [], // Clear cache on update
+          _lastFilterState: '',
         }));
       },
 
@@ -112,6 +120,8 @@ export const useConversationStore = create<ConversationState>()(
             state.selectedConversation?.id === id
               ? null
               : state.selectedConversation,
+          _filteredConversationsCache: [], // Clear cache on delete
+          _lastFilterState: '',
         }));
       },
 
@@ -151,9 +161,17 @@ export const useConversationStore = create<ConversationState>()(
         set({ error });
       },
 
-      // Computed
+      // Computed with caching to prevent N+1 re-filtering
       filteredConversations: () => {
         const state = get();
+        // Create cache key from filter state
+        const filterState = `${state.filter}|${state.searchQuery}|${state.selectedFolder}`;
+
+        // Return cached result if filter state hasn't changed
+        if (state._lastFilterState === filterState && state._filteredConversationsCache.length > 0) {
+          return state._filteredConversationsCache;
+        }
+
         let filtered = state.conversations;
 
         // Apply filter
@@ -183,6 +201,12 @@ export const useConversationStore = create<ConversationState>()(
               c.title.toLowerCase().includes(query)
           );
         }
+
+        // Cache the result
+        set({
+          _filteredConversationsCache: filtered,
+          _lastFilterState: filterState,
+        });
 
         return filtered;
       },

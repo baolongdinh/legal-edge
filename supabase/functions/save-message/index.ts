@@ -28,6 +28,13 @@ function estimateTokens(text: string): number {
   return Math.ceil(text.length / 4);
 }
 
+// Sanitize text to prevent PostgreSQL Unicode escape sequence errors
+function sanitizeText(text: string): string {
+  if (!text) return text;
+  // Remove null bytes and other problematic characters
+  return text.replace(/\u0000/g, '').replace(/[\x00-\x08\x0B\x0C\x0E-\x1F]/g, '');
+}
+
 // Trigger summarization if needed (fire-and-forget)
 async function triggerSummarizationIfNeeded(
   supabase: any,
@@ -156,13 +163,16 @@ serve(async (req) => {
     // Calculate token count if not provided
     const calculatedTokenCount = token_count ?? estimateTokens(content);
 
+    // Sanitize content to prevent PostgreSQL Unicode errors
+    const sanitizedContent = sanitizeText(content);
+
     // Insert message
     const { data: message, error: messageError } = await supabaseClient
       .from('messages')
       .insert({
         conversation_id,
         role,
-        content,
+        content: sanitizedContent,
         citations: citations || [],
         follow_up_suggestions: follow_up_suggestions || [],
         document_context: document_context || {},
@@ -191,14 +201,18 @@ serve(async (req) => {
         metadata: att.metadata || {}
       }));
 
+      // Use user-scoped client - RLS policy now allows insertion via conversation ownership
       const { error: attachError } = await supabaseClient
         .from('message_attachments')
         .insert(attachmentsToInsert);
 
       if (attachError) {
-        console.warn('Failed to save message attachments:', attachError);
-        // We don't fail the whole request since message is saved, 
-        // but we return the error in response if needed
+        console.error('Failed to save message attachments:', attachError);
+        // Return error since attachments are critical
+        return new Response(
+          JSON.stringify({ error: 'Failed to save attachments', detail: attachError.message }),
+          { status: 500, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
     }
 

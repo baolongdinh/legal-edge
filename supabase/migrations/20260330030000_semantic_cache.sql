@@ -19,10 +19,10 @@ CREATE OR REPLACE FUNCTION find_semantic_match(p_embedding vector(768), p_thresh
 RETURNS TABLE (result_json JSONB, similarity FLOAT) AS $$
 BEGIN
     RETURN QUERY
-    SELECT sc.result_json, (sc.embedding <=> p_embedding) as distance
+    SELECT sc.result_json, 1 - (sc.embedding <=> p_embedding) as similarity
     FROM semantic_cache sc
     WHERE (sc.embedding <=> p_embedding) < p_threshold
-    ORDER BY distance ASC
+    ORDER BY (sc.embedding <=> p_embedding) ASC
     LIMIT 1;
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;

@@ -1,4 +1,5 @@
 import { motion, AnimatePresence } from 'framer-motion';
+import { useMemo, memo } from 'react';
 import { X, Target, Zap, Scale, Loader2, RotateCcw } from 'lucide-react';
 import { cn } from '../../lib/utils';
 
@@ -15,14 +16,14 @@ interface ConversationSummaryProps {
     };
 }
 
-export function ConversationSummary({
+const MemoizedConversationSummary = memo(function ConversationSummary({
     isOpen,
     onClose,
     summary,
     onRegenerate,
     isRegenerating
 }: ConversationSummaryProps) {
-    const layers = [
+    const layers = useMemo(() => [
         {
             id: 'l1',
             title: 'Khái quát sự vụ',
@@ -41,7 +42,7 @@ export function ConversationSummary({
             icon: <Zap size={16} />,
             content: summary.level_3 || (isRegenerating ? 'Đang đánh giá rủi ro pháp lý...' : 'Hệ thống đang chờ dữ liệu để đánh giá các rủi ro.')
         },
-    ];
+    ], [summary.level_1, summary.level_2, summary.level_3, isRegenerating]);
 
     return (
         <AnimatePresence>
@@ -140,4 +141,6 @@ export function ConversationSummary({
             )}
         </AnimatePresence>
     );
-}
+});
+
+export { MemoizedConversationSummary as ConversationSummary };

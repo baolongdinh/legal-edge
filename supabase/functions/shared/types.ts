@@ -522,9 +522,9 @@ export async function verifyLegalCitation(citation: string, exaKey: string): Pro
 }
 
 /**
- * Advanced Fetch Wrapper with Retry, Exponential Backoff, and API Key Rotation.
+ * Advanced Fetch Wrapper with Retry and Immediate API Key Rotation.
  * Retries up to 5 times (total 6 attempts).
- * Automatically rotates keys if a listEnvVar is provided and a 429/5xx error occurs.
+ * Automatically rotates keys on 429/401/403 errors with ZERO wait time for minimal latency.
  */
 export async function fetchWithRetry(
     url: string,
@@ -537,13 +537,14 @@ export async function fetchWithRetry(
         timeoutMs?: number
     }
 ): Promise<Response> {
-    const { listEnvVar, fallbackEnvVar, maxRetries = 5, backoffBase = 100, timeoutMs = 30_000 } = config
+    const { listEnvVar, fallbackEnvVar, maxRetries = 5, backoffBase = 10, timeoutMs = 30_000 } = config
     let lastError: Error | null = null
 
     for (let attempt = 0; attempt <= maxRetries; attempt++) {
         try {
-            // Get current key
-            const currentKey = roundRobinKey(listEnvVar, fallbackEnvVar)
+            // Get current key - forceNext on retry attempts to rotate keys
+            const forceNextKey = attempt > 0
+            const currentKey = roundRobinKey(listEnvVar, fallbackEnvVar, forceNextKey)
 
             // Inject key into Headers or URL
             const finalOptions = { ...options }
@@ -580,20 +581,13 @@ export async function fetchWithRetry(
                 return response
             }
 
-            // Support Retry-After header
-            const retryAfter = response.headers.get('Retry-After')
-            const retryAfterMs = retryAfter ? (parseInt(retryAfter, 10) * 1000) : 0
-
             const errorText = await response.text()
             console.warn(`[Retry ${attempt}/${maxRetries}] ${listEnvVar} failed (${response.status}). Key ending: ...${currentKey.slice(-5)}. Error: ${errorText.slice(0, 150)}...`)
             lastError = new Error(`${listEnvVar} error ${response.status}: ${errorText}`)
 
             if (attempt < maxRetries) {
-                const jitter = Math.random() * 200
-                const backoffDelay = (backoffBase * Math.pow(2, attempt)) + jitter
-                const finalDelay = Math.max(backoffDelay, retryAfterMs)
-                console.log(`[Retry ${attempt}/${maxRetries}] Waiting ${Math.round(finalDelay)}ms before next attempt...`)
-                await new Promise(resolve => setTimeout(resolve, finalDelay))
+                console.log(`[Retry ${attempt}/${maxRetries}] Switching to next key immediately (no wait)...`)
+                // No wait delay - immediate key rotation
                 continue
             }
 
@@ -603,8 +597,7 @@ export async function fetchWithRetry(
             lastError = e as Error
 
             if (attempt < maxRetries) {
-                const delay = backoffBase * Math.pow(2, attempt)
-                await new Promise(resolve => setTimeout(resolve, delay))
+                // Retrying immediately with next key, no delay
                 continue
             }
         }
@@ -808,13 +801,14 @@ export async function fetchImageFromStorage(
 }
 
 /**
- * Round-robin key selector.
+ * Round-robin key selector with sequential rotation on errors.
  * Reads GEMINI_API_KEYS or GROQ_API_KEYS (comma-separated list) from env.
  * NOTE: For retry logic, we naturally advance the counter each time.
  */
 const _counters: Record<string, number> = {}
+const _lastFailedKeys: Record<string, Set<string>> = {}
 
-export function roundRobinKey(listEnvVar: string, fallbackEnvVar: string): string {
+export function roundRobinKey(listEnvVar: string, fallbackEnvVar: string, forceNext: boolean = false): string {
     const raw = Deno.env.get(listEnvVar) ?? ''
     const keys = raw.split(',').map((k: string) => k.trim()).filter(Boolean)
 
@@ -824,9 +818,27 @@ export function roundRobinKey(listEnvVar: string, fallbackEnvVar: string): strin
         return single
     }
 
-    // Use a random index for better distribution across stateless Edge instances
-    const idx = Math.floor(Math.random() * keys.length)
-    return keys[idx]
+    // Initialize counter and failed keys set for this env var
+    if (!_counters[listEnvVar]) _counters[listEnvVar] = 0
+    if (!_lastFailedKeys[listEnvVar]) _lastFailedKeys[listEnvVar] = new Set()
+
+    // If forcing next key (on 429/401/403 error), advance counter
+    if (forceNext) {
+        _counters[listEnvVar] = (_counters[listEnvVar] + 1) % keys.length
+    }
+
+    const idx = _counters[listEnvVar]
+    const selectedKey = keys[idx]
+
+    // Track this key as used
+    _lastFailedKeys[listEnvVar].add(selectedKey)
+
+    // If all keys have been tried, reset to allow retry from start
+    if (_lastFailedKeys[listEnvVar].size >= keys.length) {
+        _lastFailedKeys[listEnvVar].clear()
+    }
+
+    return selectedKey
 }
 
 export async function mapWithConcurrency<T, R>(

@@ -59,7 +59,15 @@ CREATE POLICY "Users can view own attachments"
 DROP POLICY IF EXISTS "Users can insert own attachments" ON message_attachments;
 CREATE POLICY "Users can insert own attachments"
   ON message_attachments FOR INSERT
-  WITH CHECK (auth.uid() = user_id);
+  WITH CHECK (
+    auth.uid() = user_id OR
+    EXISTS (
+      SELECT 1 FROM messages
+      JOIN conversations ON conversations.id = messages.conversation_id
+      WHERE messages.id = message_attachments.message_id
+      AND conversations.user_id = auth.uid()
+    )
+  );
 
 -- Delete: Users can delete their own attachments
 DROP POLICY IF EXISTS "Users can delete own attachments" ON message_attachments;

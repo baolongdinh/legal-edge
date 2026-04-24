@@ -28,7 +28,7 @@ interface ChatState {
   // Messages
   messages: Message[];
   currentConversationId: string | null;
-  messageCache: Record<string, Message[]>;
+  messageCache: Record<string, { messages: Message[]; timestamp: number }>;
   isLoadingMessages: boolean;
 
   // Streaming state
@@ -68,6 +68,7 @@ interface ChatState {
   // Cache actions
   getCachedMessages: (conversationId: string) => Message[] | null;
   setCachedMessages: (conversationId: string, messages: Message[]) => void;
+  clearCachedMessages: (conversationId: string) => void;
   clearCache: () => void;
 }
 
@@ -129,11 +130,13 @@ export const useChatStore = create<ChatState>()(
       },
 
       setMessages: (messages) => {
-        // Validation pass to ensure all messages have IDs
-        const validatedMessages = messages.map(msg => ({
-          ...msg,
-          id: (msg.id && msg.id.trim() !== '') ? msg.id : crypto.randomUUID()
-        }));
+        // Optimization: Only validate and assign UUIDs to messages without valid IDs
+        const validatedMessages = messages.map(msg => {
+          if (msg.id && msg.id.trim() !== '') {
+            return msg; // Skip validation for messages with valid IDs
+          }
+          return { ...msg, id: crypto.randomUUID() };
+        });
         set({ messages: validatedMessages });
       },
 
@@ -234,16 +237,35 @@ export const useChatStore = create<ChatState>()(
       // Cache actions
       getCachedMessages: (id) => {
         const state = (useChatStore.getState() as any);
-        return state.messageCache[id] || null;
+        const cached = state.messageCache[id];
+        if (!cached) return null;
+
+        // Check TTL (5 minutes = 300000ms)
+        const CACHE_TTL = 5 * 60 * 1000;
+        const now = Date.now();
+        if (now - cached.timestamp > CACHE_TTL) {
+          // Cache expired, return null
+          return null;
+        }
+
+        return cached.messages;
       },
 
       setCachedMessages: (id, messages) => {
         set((state) => ({
           messageCache: {
             ...state.messageCache,
-            [id]: messages,
+            [id]: { messages, timestamp: Date.now() },
           },
         }));
+      },
+
+      clearCachedMessages: (id) => {
+        set((state) => {
+          const newCache = { ...state.messageCache };
+          delete newCache[id];
+          return { messageCache: newCache };
+        });
       },
 
       clearCache: () => {
@@ -254,6 +276,7 @@ export const useChatStore = create<ChatState>()(
       name: 'chat-storage',
       partialize: (state) => ({
         currentConversationId: state.currentConversationId,
+        messageCache: state.messageCache,
       }),
     }
   )

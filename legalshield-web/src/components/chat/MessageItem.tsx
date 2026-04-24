@@ -1,6 +1,6 @@
 import { memo, useState, useCallback, useMemo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Scale, ShieldCheck, ShieldAlert, Copy, Search, Check, ChevronRight } from 'lucide-react';
+import { Scale, ShieldCheck, ShieldAlert, Copy, Search, Check, ChevronRight, Download, File } from 'lucide-react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { clsx, type ClassValue } from 'clsx';
@@ -11,6 +11,14 @@ import type { Message } from '../../store/chatStore';
 
 function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
 }
 
 interface MessageItemProps {
@@ -72,6 +80,42 @@ export const MessageItem = memo(({
     // Turn [1] or [#1] into [1](#citation-1) style for ReactMarkdown detection
     return message.content.replace(/\[(?:#)?(\d+)\]/g, '[$1](#citation-$1)');
   }, [message.content, isUser]);
+
+  // Memoize image URL resolution to avoid re-computation on every render
+  const imageAttachments = useMemo(() => {
+    if (!message.imageUrls?.length && !message.attachments?.some((a: any) => a.storage_path)) {
+      return null;
+    }
+
+    const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
+    // Prefer blob URLs for optimistic display; fallback to Supabase storage URLs
+    const resolvedUrls: string[] = message.imageUrls?.length
+      ? message.imageUrls
+      : (message.attachments || []).reduce((acc: string[], a: any) => {
+        const p = a.storage_path || a.file_path;
+        if (!p) return acc;
+        acc.push(p.startsWith('http') ? p : `${supabaseUrl}/storage/v1/object/public/user-contracts/${p}`);
+        return acc;
+      }, []);
+
+    if (!resolvedUrls.length) return null;
+
+    const MAX_VISIBLE = 4;
+    const visible = resolvedUrls.slice(0, MAX_VISIBLE);
+    const overflow = resolvedUrls.length - MAX_VISIBLE;
+    const gridClass = visible.length === 1 ? 'grid-cols-1' : 'grid-cols-2';
+
+    return { visible, overflow, gridClass };
+  }, [message.imageUrls, message.attachments]);
+
+  // Separate file attachments (non-image)
+  const fileAttachments = useMemo(() => {
+    if (!message.attachments?.length) return null;
+    return message.attachments.filter((a: any) => {
+      const mime = a.mime_type || '';
+      return !mime.startsWith('image/');
+    });
+  }, [message.attachments]);
 
   return (
     <motion.div
@@ -169,54 +213,73 @@ export const MessageItem = memo(({
           )}
 
           {/* Image Attachments — blob URLs (optimistic) or Supabase URLs */}
-          {(message.imageUrls?.length || message.attachments?.some((a: any) => a.storage_path)) && (() => {
-            const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-            // Prefer blob URLs for optimistic display; fallback to Supabase storage URLs
-            const resolvedUrls: string[] = message.imageUrls?.length
-              ? message.imageUrls
-              : (message.attachments || []).reduce((acc: string[], a: any) => {
-                const p = a.storage_path || a.file_path;
-                if (!p) return acc;
-                acc.push(p.startsWith('http') ? p : `${supabaseUrl}/storage/v1/object/public/user-contracts/${p}`);
-                return acc;
-              }, []);
+          {imageAttachments && (
+            <div className={cn('grid gap-1.5 mt-3 max-w-xs', imageAttachments.gridClass)}>
+              {imageAttachments.visible.map((url, idx) => {
+                const isLast = idx === imageAttachments.visible.length - 1;
+                const showOverlay = isLast && imageAttachments.overflow > 0;
+                return (
+                  <motion.div
+                    key={idx}
+                    initial={{ opacity: 0, scale: 0.92 }}
+                    animate={{ opacity: 1, scale: 1 }}
+                    transition={{ delay: idx * 0.05 }}
+                    className="relative rounded-xl overflow-hidden border border-white/10 shadow-md cursor-zoom-in"
+                    style={{ aspectRatio: '1 / 1' }}
+                    onClick={() => window.open(url, '_blank')}
+                  >
+                    <img src={url} alt={`Ảnh ${idx + 1}`} className="w-full h-full object-cover" />
+                    {showOverlay ? (
+                      <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
+                        <span className="text-white text-xl font-bold">+{imageAttachments.overflow + 1}</span>
+                      </div>
+                    ) : (
+                      <div className="absolute inset-0 bg-black/0 hover:bg-black/15 transition-colors" />
+                    )}
+                  </motion.div>
+                );
+              })}
+            </div>
+          )}
 
-            if (!resolvedUrls.length) return null;
-
-            const MAX_VISIBLE = 4;
-            const visible = resolvedUrls.slice(0, MAX_VISIBLE);
-            const overflow = resolvedUrls.length - MAX_VISIBLE;
-            const gridClass = visible.length === 1 ? 'grid-cols-1' : 'grid-cols-2';
-
-            return (
-              <div className={cn('grid gap-1.5 mt-3 max-w-xs', gridClass)}>
-                {visible.map((url, idx) => {
-                  const isLast = idx === visible.length - 1;
-                  const showOverlay = isLast && overflow > 0;
-                  return (
-                    <motion.div
-                      key={idx}
-                      initial={{ opacity: 0, scale: 0.92 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: idx * 0.05 }}
-                      className="relative rounded-xl overflow-hidden border border-white/10 shadow-md cursor-zoom-in"
-                      style={{ aspectRatio: '1 / 1' }}
-                      onClick={() => window.open(url, '_blank')}
+          {/* File Attachments (non-image) */}
+          {fileAttachments && fileAttachments.length > 0 && (
+            <div className="mt-3 space-y-2">
+              {fileAttachments.map((file: any, idx: number) => (
+                <motion.div
+                  key={idx}
+                  initial={{ opacity: 0, x: -10 }}
+                  animate={{ opacity: 1, x: 0 }}
+                  transition={{ delay: idx * 0.05 }}
+                  className="flex items-center gap-3 p-3 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-colors"
+                >
+                  <div className="w-10 h-10 bg-lex-gold/20 rounded-lg flex items-center justify-center">
+                    <File size={20} className="text-lex-gold" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium truncate">{file.file_name || file.name}</p>
+                    <p className="text-xs text-lex-lawyer/60">
+                      {file.file_size ? formatFileSize(file.file_size) : ''}
+                    </p>
+                  </div>
+                  {file.storage_path && (
+                    <button
+                      onClick={() => {
+                        const url = file.storage_path.startsWith('http')
+                          ? file.storage_path
+                          : `${import.meta.env.VITE_SUPABASE_URL}/storage/v1/object/public/user-contracts/${file.storage_path}`;
+                        window.open(url, '_blank');
+                      }}
+                      className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                      title="Tải xuống"
                     >
-                      <img src={url} alt={`Ảnh ${idx + 1}`} className="w-full h-full object-cover" />
-                      {showOverlay ? (
-                        <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
-                          <span className="text-white text-xl font-bold">+{overflow + 1}</span>
-                        </div>
-                      ) : (
-                        <div className="absolute inset-0 bg-black/0 hover:bg-black/15 transition-colors" />
-                      )}
-                    </motion.div>
-                  );
-                })}
-              </div>
-            );
-          })()}
+                      <Download size={16} className="text-lex-lawyer/60" />
+                    </button>
+                  )}
+                </motion.div>
+              ))}
+            </div>
+          )}
 
         </div>
 

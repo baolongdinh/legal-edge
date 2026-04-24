@@ -9,8 +9,7 @@ import { ConversationSummary } from '../components/chat/ConversationSummary';
 import { useConversation } from '../hooks/useConversation';
 import { useStreamingChat } from '../hooks/useStreamingChat';
 import { useChatStore } from '../store/chatStore';
-import { useConversationStore } from '../store/conversationStore';
-import { summarizationApi, conversationApi } from '../lib/conversation-api';
+import { summarizationApi } from '../lib/conversation-api';
 
 export function ChatPage() {
   const { conversationId } = useParams<{ conversationId?: string }>();
@@ -21,7 +20,10 @@ export function ChatPage() {
     isLoading: isLoadingConversations,
     selectedConversation,
     createConversation,
+    deleteConversation,
     selectConversation,
+    searchQuery,
+    setSearchQuery,
   } = useConversation();
 
   const {
@@ -41,6 +43,8 @@ export function ChatPage() {
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(false);
   const [isRegeneratingSummary, setIsRegeneratingSummary] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const hasLoadedConversation = useRef(false);
+  const previousConversationIdRef = useRef<string | null>(null);
 
   const {
     sendMessage: sendStreamingMessage,
@@ -56,22 +60,34 @@ export function ChatPage() {
       } else if (selectedConversation) {
         selectConversation(null);
       }
+      hasLoadedConversation.current = false;
+      previousConversationIdRef.current = null;
       return;
     }
 
-    // Trigger loading if ID mismatch OR if ID matches but messages are empty (likely a page reload)
-    const needsSelection = selectedConversation?.id !== conversationId ||
-      (selectedConversation?.id === conversationId && messages.length === 0);
+    // Detect actual conversationId change
+    const conversationIdChanged = previousConversationIdRef.current !== conversationId;
+    if (conversationIdChanged) {
+      hasLoadedConversation.current = false;
+      previousConversationIdRef.current = conversationId;
+    }
 
-    if (needsSelection && !isLoadingConversations && conversations.length > 0) {
+    // Only load if not already loaded this conversation
+    if (hasLoadedConversation.current) {
+      return;
+    }
+
+    if (!isLoadingConversations && conversations.length > 0) {
       const conv = conversations.find((c) => c.id === conversationId);
       if (conv) {
         selectConversation(conv);
+        hasLoadedConversation.current = true;
       } else {
         navigate('/chat', { replace: true });
       }
     }
-  }, [conversationId, conversations, selectedConversation?.id, messages.length, selectConversation, isLoadingConversations, navigate]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [conversationId, selectConversation, isLoadingConversations, navigate]);
 
   const handleSendMessage = useCallback(
     async (content: string) => {
@@ -101,23 +117,28 @@ export function ChatPage() {
     ]
   );
 
-  const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const fileData: any = {
+  const handleFileChange = useCallback(async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = e.target.files;
+    if (!files || files.length === 0) return;
+
+    try {
+      // Don't upload immediately - just store file objects
+      // Upload will happen when user sends the message
+      const fileDataArray = Array.from(files).map((file) => ({
         name: file.name,
         size: file.size,
         type: file.type,
-      };
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setAttachedDocument({
-          ...fileData,
-          document_context: event.target?.result as string,
-        });
-      };
-      reader.readAsText(file);
+        file: file, // Store File object for later upload
+        storage_path: null, // Will be filled during send
+        document_context: null, // Will be filled during send
+      }));
+
+      setAttachedDocument(fileDataArray);
+    } catch (error) {
+      console.error('File selection failed:', error);
+      alert('Không thể chọn file. Vui lòng thử lại.');
     }
+
     if (fileInputRef.current) fileInputRef.current.value = '';
   }, [setAttachedDocument]);
 
@@ -145,17 +166,12 @@ export function ChatPage() {
     setIsRegeneratingSummary(true);
 
     try {
+      // Trigger summarization - the API responses will update the conversation store directly
       await summarizationApi.summarize(currentConversationId, 1);
       setTimeout(() => summarizationApi.summarize(currentConversationId!, 2), 2000);
 
-      setTimeout(async () => {
-        const response = await conversationApi.list();
-        if (response.success) {
-          const updated = response.conversations.find((c: any) => c.id === currentConversationId);
-          if (updated) {
-            useConversationStore.getState().updateConversation(currentConversationId!, updated);
-          }
-        }
+      // Wait for all summarization levels to complete before stopping loading state
+      setTimeout(() => {
         setIsRegeneratingSummary(false);
       }, 5000);
     } catch (err) {
@@ -169,6 +185,13 @@ export function ChatPage() {
       <ConversationSidebar
         isMobileOpen={isMobileSidebarOpen}
         onClose={() => setIsMobileSidebarOpen(false)}
+        conversations={conversations}
+        selectedConversation={selectedConversation}
+        isLoading={isLoadingConversations}
+        onCreateConversation={createConversation}
+        onDeleteConversation={deleteConversation}
+        searchQuery={searchQuery}
+        onSearchQueryChange={setSearchQuery}
       />
 
       <div className="flex-1 flex flex-col min-w-0 bg-transparent relative">
@@ -214,7 +237,8 @@ export function ChatPage() {
                 ref={fileInputRef}
                 onChange={handleFileChange}
                 className="hidden"
-                accept=".txt,.md"
+                accept=".txt,.md,.pdf,.doc,.docx,.rtf,.xls,.xlsx,.csv,.ppt,.pptx,.json,.xml,.html"
+                multiple
               />
               <ChatInput
                 onSend={handleSendMessage}

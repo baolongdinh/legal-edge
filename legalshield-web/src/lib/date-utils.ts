@@ -57,3 +57,15 @@ export function formatDateTime(date: Date | string): string {
     minute: '2-digit',
   });
 }
+
+export function formatDateShort(dateStr: string): string {
+  try {
+    return new Intl.DateTimeFormat('vi-VN', {
+      day: '2-digit',
+      month: '2-digit',
+      year: '2-digit'
+    }).format(new Date(dateStr));
+  } catch {
+    return '';
+  }
+}

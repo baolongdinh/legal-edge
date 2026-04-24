@@ -14,16 +14,19 @@ export interface CloudinaryResponse {
     width: number;
     height: number;
     bytes: number;
+    resource_type: string;
 }
 
 /**
  * Uploads a file directly to Cloudinary using Unsigned Upload Preset.
  * @param file The file object from input.
  * @param folder Optional folder name in Cloudinary.
+ * @param resourceType Resource type: 'image', 'raw' (for PDF, DOC, Excel, etc.), 'video', 'auto'
  */
 export async function uploadToCloudinary(
     file: File,
-    folder: string = 'chat_attachments'
+    folder: string = 'chat_attachments',
+    resourceType: 'image' | 'raw' | 'video' | 'auto' = 'auto'
 ): Promise<string> {
     if (!CLOUD_NAME || !UPLOAD_PRESET) {
         throw new Error('Cloudinary configuration missing (Cloud Name or Upload Preset)');
@@ -40,7 +43,19 @@ export async function uploadToCloudinary(
     }
 
     try {
-        const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
+        // Determine resource type based on file type if 'auto'
+        let actualResourceType = resourceType;
+        if (resourceType === 'auto') {
+            if (file.type.startsWith('image/')) {
+                actualResourceType = 'image';
+            } else if (file.type.startsWith('video/')) {
+                actualResourceType = 'video';
+            } else {
+                actualResourceType = 'raw'; // PDF, DOC, Excel, etc.
+            }
+        }
+
+        const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/${actualResourceType}/upload`;
 
         const response = await fetch(url, {
             method: 'POST',

@@ -1,7 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { useConversationStore, type Conversation } from '@/store/conversationStore';
 import { useChatStore } from '@/store/chatStore';
 import { conversationApi, messageApi } from '@/lib/conversation-api';
+import { useDebounce } from './useDebounce';
 
 interface UseConversationReturn {
   conversations: Conversation[];
@@ -58,6 +59,15 @@ export function useConversation(): UseConversationReturn {
     setCachedMessages,
     setLoadingMessages,
   } = useChatStore();
+
+  // AbortController for cancelling in-flight message fetch requests
+  const abortControllerRef = useRef<AbortController | null>(null);
+  
+  // Track if a conversation selection is in progress to prevent concurrent selections
+  const isSelectingRef = useRef(false);
+
+  // Track if conversations have been fetched on mount
+  const hasFetchedConversationsRef = useRef(false);
 
   // Fetch conversations
   const fetchConversations = useCallback(async () => {
@@ -128,11 +138,23 @@ export function useConversation(): UseConversationReturn {
   }, [addConversation, removeConversation]);
 
   const selectConversation = useCallback(async (conversation: Conversation | null) => {
+    // Prevent concurrent selections
+    if (isSelectingRef.current) {
+      console.log('[selectConversation] Selection already in progress, skipping');
+      return;
+    }
+
+    // Cancel any in-flight message fetch request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort();
+    }
+
     // 1. Update store synchronously for instant UI feedback in sidebar
     setSelectedConversation(conversation);
 
     if (conversation) {
       setCurrentConversationId(conversation.id);
+      isSelectingRef.current = true;
 
       // 2. Try cache first to show messages immediately
       const cached = getCachedMessages(conversation.id);
@@ -142,11 +164,15 @@ export function useConversation(): UseConversationReturn {
         setMessages([]);
       }
 
-      // 3. Background fetch for latest messages
+      // 3. Background fetch for latest messages with AbortController
       setLoadingMessages(true);
+      const abortController = new AbortController();
+      abortControllerRef.current = abortController;
+
       try {
         const response = await messageApi.getForConversation(conversation.id);
-        if (response.success) {
+        // Only update if this request wasn't cancelled
+        if (!abortController.signal.aborted && response.success) {
           const mappedMessages = (response.messages || []).map((msg: any) => ({
             ...msg,
             attachments: msg.attachments || msg.message_attachments || []
@@ -155,10 +181,17 @@ export function useConversation(): UseConversationReturn {
           setCachedMessages(conversation.id, mappedMessages);
         }
       } catch (err) {
-        console.error('Load messages error:', err);
-        if (!cached) clearMessages();
+        // Ignore errors from aborted requests
+        if (err instanceof Error && err.name !== 'AbortError') {
+          console.error('Load messages error:', err);
+          if (!cached) clearMessages();
+        }
       } finally {
-        setLoadingMessages(false);
+        if (!abortController.signal.aborted) {
+          setLoadingMessages(false);
+        }
+        abortControllerRef.current = null;
+        isSelectingRef.current = false;
       }
     } else {
       setCurrentConversationId(null);
@@ -323,10 +356,27 @@ export function useConversation(): UseConversationReturn {
     setStoreSearchQuery(query);
   }, [setStoreSearchQuery]);
 
-  // Auto-fetch when filter or search changes
+  // Debounce search query to prevent excessive API calls
+  const debouncedSearchQuery = useDebounce(searchQuery, 500);
+
+  // Auto-fetch conversations on mount and when filter/search changes (debounced)
   useEffect(() => {
-    fetchConversations();
-  }, [filter, searchQuery]);
+    // Only fetch on mount or when filter/search actually changes
+    if (!hasFetchedConversationsRef.current) {
+      fetchConversations();
+      hasFetchedConversationsRef.current = true;
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Empty deps - only run on mount
+
+  // Separate effect for filter/search changes
+  useEffect(() => {
+    // Only fetch if filter or search query changes after initial mount
+    if (hasFetchedConversationsRef.current) {
+      fetchConversations();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [filter, debouncedSearchQuery]);
 
   return {
     conversations,
