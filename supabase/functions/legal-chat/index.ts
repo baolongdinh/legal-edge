@@ -410,10 +410,25 @@ export const handler = async (req: Request): Promise<Response> => {
       ? `[Nội dung từ hình ảnh: ${visionSummary}]\n\nCâu hỏi của người dùng: ${message}`
       : message
 
+    // FIX: Extract document text from document_context array
+    // Frontend sends document_context as array of uploaded documents
+    let documentText: string | undefined
+    if (document_context) {
+      if (typeof document_context === 'string') {
+        documentText = document_context
+      } else if (Array.isArray(document_context)) {
+        // Extract document_context field from each uploaded doc
+        documentText = document_context
+          .map((doc: any) => doc?.document_context || '')
+          .filter(Boolean)
+          .join('\n\n---\n\n')
+      }
+    }
+
     const compactDocumentContext = buildCompactDocumentContext(
       typeof context_summary === 'string' ? context_summary : undefined,
       Array.isArray(context_excerpts) ? context_excerpts : [],
-      typeof document_context === 'string' ? document_context : undefined,
+      documentText,
     )
 
     // --- T001: Heuristic Intent Evaluation for Simple Questions ---
