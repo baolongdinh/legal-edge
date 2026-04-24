@@ -230,12 +230,19 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
                 console.error('[Worker] Failed to parse document locally:', err);
                 // Fallback: try server-side parsing via parse-document function
                 try {
+                  console.log('[Document Parse] Worker failed, trying server-side fallback');
                   const formData = new FormData();
                   formData.append('file', doc.file);
                   const response = await fetch('/functions/v1/parse-document', {
                     method: 'POST',
                     body: formData
                   });
+                  console.log('[Document Parse] Server response status:', response.status, response.statusText);
+                  if (!response.ok) {
+                    const errorText = await response.text();
+                    console.error('[Document Parse] Server error response:', errorText);
+                    throw new Error(`Server returned ${response.status}: ${errorText}`);
+                  }
                   const data = await response.json();
                   fileContent = data.text_content || null;
                   console.log('[Document Parse] Server fallback parsed:', { fileName: doc.file.name, contentLength: fileContent?.length });
