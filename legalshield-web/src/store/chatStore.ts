@@ -58,6 +58,7 @@ interface ChatState {
   addAttachedImages: (images: { id: string; url: string; file: File }[]) => void;
   removeAttachedImage: (id: string) => void;
   clearAttachedImages: () => void;
+  clearAttachedDocument: () => void;
 
   // Suggestions
   currentSuggestions: string[];
@@ -220,6 +221,10 @@ export const useChatStore = create<ChatState>()(
         const state = useChatStore.getState();
         state.attachedImages.forEach(img => URL.revokeObjectURL(img.url));
         set({ attachedImages: [] });
+      },
+
+      clearAttachedDocument: () => {
+        set({ attachedDocument: null });
       },
 
       setCurrentSuggestions: (suggestions) => {

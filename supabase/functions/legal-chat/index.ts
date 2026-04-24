@@ -82,7 +82,13 @@ Yêu cầu trả về định dạng JSON duy nhất:
       { role: 'user', content: prompt },
     ], { jsonMode: true, temperature: 0.1 });
 
-    const parsed = JSON.parse(result);
+    // Strip markdown code blocks if present
+    let cleanResult = result.trim();
+    if (cleanResult.startsWith('```')) {
+      cleanResult = cleanResult.replace(/^```(?:json)?\n?/, '').replace(/```$/, '');
+    }
+
+    const parsed = JSON.parse(cleanResult);
     return {
       intent: parsed.intent || 'analysis',
       needs_citations: parsed.needs_citations ?? true,
@@ -703,6 +709,12 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
             send(controller, { type: 'chunk', content: chunk });
           }
 
+          // Fallback: If streaming returns empty, provide a generic response
+          if (!fullResponseText || fullResponseText.trim().length === 0) {
+            fullResponseText = 'Xin lỗi, tôi không thể tạo câu trả lời lúc này. Vui lòng thử lại hoặc cung cấp thêm thông tin chi tiết.';
+            send(controller, { type: 'chunk', content: fullResponseText });
+          }
+
           const payload = buildLegalAnswerPayload(fullResponseText, combinedEvidence, needsCitation);
           send(controller, { type: 'done', payload });
 
@@ -711,7 +723,7 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
             has_document_context: Boolean(compactDocumentContext),
             evidence_count: combinedEvidence.length,
             cacheable: Boolean(answerCacheKey),
-          }).catch(() => { });
+          });
 
           persistAnswerAudit({
             functionName: 'legal-chat',
@@ -766,6 +778,8 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
             userFriendlyError = 'Kết nối quá thời gian. Vui lòng thử lại.';
           }
 
+          // Always send error as a chunk so user sees something, then send error type
+          send(controller, { type: 'chunk', content: userFriendlyError });
           send(controller, { type: 'error', error: userFriendlyError });
           controller.close();
         }

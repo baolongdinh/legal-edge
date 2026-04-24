@@ -37,6 +37,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     attachedDocument,
     attachedImages,
     clearAttachedImages,
+    clearAttachedDocument,
     streaming,
     clearCachedMessages,
   } = useChatStore();
@@ -93,6 +94,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
 
     // Clear attachments from store to free memory
     clearAttachedImages();
+    clearAttachedDocument();
 
     // 1. Upload images if any
     let uploadedAttachments: any[] = [];
@@ -207,6 +209,10 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
           setError(err);
           setStreaming({ error: err });
           options?.onError?.(err);
+          // Ensure we add the error as a message so user sees it
+          if (assistantContent.length === 0) {
+            assistantContent = err || 'Có lỗi xảy ra. Vui lòng thử lại.';
+          }
         },
         (sugs) => {
           suggestions = sugs;
@@ -248,6 +254,11 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
           : finalPayload?.citations || [];
 
       resetStreaming();
+
+      // Fallback: If content is empty after streaming, provide a generic message
+      if (!assistantContent || assistantContent.trim().length === 0) {
+        assistantContent = 'Xin lỗi, tôi không thể tạo câu trả lời lúc này. Vui lòng thử lại hoặc cung cấp thêm thông tin chi tiết.';
+      }
 
       const assistantMessage: Message = {
         id: savedMessageId || localMessageId, // prefer server ID, fallback to local

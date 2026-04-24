@@ -108,14 +108,28 @@ export const MessageItem = memo(({
     return { visible, overflow, gridClass };
   }, [message.imageUrls, message.attachments]);
 
-  // Separate file attachments (non-image)
+  // Separate file attachments (non-image) - from both attachments and document_context
   const fileAttachments = useMemo(() => {
-    if (!message.attachments?.length) return null;
-    return message.attachments.filter((a: any) => {
-      const mime = a.mime_type || '';
-      return !mime.startsWith('image/');
-    });
-  }, [message.attachments]);
+    const allFiles: any[] = [];
+
+    // Add from attachments
+    if (message.attachments?.length) {
+      allFiles.push(...message.attachments.filter((a: any) => {
+        const mime = a.mime_type || '';
+        return !mime.startsWith('image/');
+      }));
+    }
+
+    // Add from document_context (for uploaded documents)
+    if (Array.isArray(message.document_context)) {
+      allFiles.push(...message.document_context.filter((doc: any) => {
+        // Only include if it has file info
+        return doc.name || doc.file_name;
+      }));
+    }
+
+    return allFiles.length > 0 ? allFiles : null;
+  }, [message.attachments, message.document_context]);
 
   return (
     <motion.div
