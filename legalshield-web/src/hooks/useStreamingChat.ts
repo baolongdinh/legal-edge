@@ -244,6 +244,23 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
                   throw new Error(`Không thể đọc file "${doc.file.name}". Vui lòng thử lại hoặc chọn file khác.`);
                 }
               }
+            } else if (extension === 'doc') {
+              // .doc (old Word format): use server-side parsing only
+              console.log('[Document Parse] .doc file detected, using server-side parsing');
+              try {
+                const formData = new FormData();
+                formData.append('file', doc.file);
+                const response = await fetch('/functions/v1/parse-document', {
+                  method: 'POST',
+                  body: formData
+                });
+                const data = await response.json();
+                fileContent = data.text || null;
+                console.log('[Document Parse] Server parsed .doc file:', { fileName: doc.file.name, contentLength: fileContent?.length });
+              } catch (serverErr) {
+                console.error('Failed to parse .doc file on server:', serverErr);
+                throw new Error(`Không thể đọc file "${doc.file.name}". Vui lòng convert sang .docx hoặc chọn file khác.`);
+              }
             } else {
               console.log('[Document Parse] Unsupported file type', { fileName: doc.file.name, extension, fileType: doc.file.type });
             }
