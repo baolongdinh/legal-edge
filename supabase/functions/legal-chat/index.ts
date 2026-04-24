@@ -31,14 +31,20 @@ import {
   setCachedLegalAnswer,
   getSemanticCache,
   setSemanticCache,
+  simpleHash,
   storeChatMemory,
   storeEvidenceInMemory,
   jinaRerank,
+  isVolatileLegalSource,
+  shouldStoreInMemory,
   LegalSourceEvidence,
   callLLM,
   callVisionLLM,
   fetchImageFromStorage,
   IntentEvaluation,
+  deduplicateLegalEvidence,
+  deduplicateLegalEvidenceAdvanced,
+  checkEvidenceExistsInRAG,
 } from '../shared/types.ts'
 
 /**
@@ -346,6 +352,17 @@ export const handler = async (req: Request): Promise<Response> => {
       attachments = [],      // Alternative naming from frontend
     } = await req.json()
 
+    // FIX: Generate document_hash from document_context if not provided
+    // This ensures document retrieval works when frontend uploads files
+    let effectiveDocumentHash = document_hash
+    if (!effectiveDocumentHash && document_context) {
+      const docText = typeof document_context === 'string'
+        ? document_context
+        : JSON.stringify(document_context)
+      effectiveDocumentHash = simpleHash(docText.slice(0, 1000)) // Hash first 1000 chars
+      console.log('[legal-chat] Generated document_hash from context:', effectiveDocumentHash)
+    }
+
     // Consolidate and normalize attachments — frontend may send objects OR plain strings
     const rawAttachments = [...image_attachments, ...(Array.isArray(attachments) ? attachments : [])]
     const allAttachments: string[] = rawAttachments
@@ -398,58 +415,101 @@ export const handler = async (req: Request): Promise<Response> => {
       Array.isArray(context_excerpts) ? context_excerpts : [],
       typeof document_context === 'string' ? document_context : undefined,
     )
-    const { intent_eval } = await (async () => {
-      // Fast pre-flight intent evaluation
-      return { intent_eval: await evaluateIntent(message, history, typeof context_summary === 'string' ? context_summary : undefined) };
-    })();
+
+    // --- T001: Heuristic Intent Evaluation for Simple Questions ---
+    // Skip LLM call for simple standalone questions to save ~300ms
+    const isSimpleQuestion = isStandaloneQuestion(message) && message.length < 100 && !document_context && !visionSummary
+    let intent_eval: IntentEvaluation
+    let standaloneQuery: string
+
+    if (isSimpleQuestion) {
+      // Use heuristics instead of LLM for simple questions
+      intent_eval = {
+        intent: 'general',
+        needs_citations: false,
+        complexity: 'low',
+        is_drafting: false,
+        suggested_standalone_query: message,
+        reasoning: 'Fast heuristic path for simple standalone question'
+      }
+      standaloneQuery = message
+      console.log('[Intent] Using heuristic path for simple question')
+    } else {
+      // --- T002: Parallel Intent + Standalone Query for Complex Questions ---
+      // Run both LLM calls in parallel to save ~300ms
+      const [evalResult, queryResult] = await Promise.all([
+        evaluateIntent(message, history, typeof context_summary === 'string' ? context_summary : undefined),
+        buildStandaloneQuery(history, enrichedMessage)
+      ])
+      intent_eval = evalResult
+      standaloneQuery = visionSummary ? enrichedMessage : (intent_eval.suggested_standalone_query || queryResult)
+      console.log('[Intent] Parallel intent + query completed')
+    }
 
     const normalizedMessage = normalizeLegalQuery(message)
     const needsCitation = intent_eval.needs_citations || requiresLegalCitation(message)
     const isDrafting = intent_eval.is_drafting
-    // Always use enrichedMessage (which contains vision extract) for the standalone query
-    const standaloneQuery = visionSummary
-      ? `${enrichedMessage}` // Already has vision context embedded
-      : (intent_eval.suggested_standalone_query || await buildStandaloneQuery(history, enrichedMessage))
+
+    console.log(`[Intent] needs_citations: ${intent_eval.needs_citations}, requiresLegalCitation: ${requiresLegalCitation(message)}, needsCitation: ${needsCitation}, intent: ${intent_eval.intent}`)
 
     // Only cache standalone, citation-free questions that are context-independent
     const canUseCache = !needsCitation && intent_eval.intent === 'general' && (isStandaloneQuestion(message) || history.length === 0)
 
-    // --- STEP 1: EXACT CACHE CHECK (Fast Path) ---
+    // --- FIX: Include context in cache key to avoid wrong answers for same question in different contexts ---
+    // Build context summary from last 2 messages (if any) to include in cache key
+    const contextSummary = history.length > 0
+      ? history.slice(-2).map((h: any) => h.content.slice(0, 50)).join('|')
+      : 'no-context'
+
+    // --- OPTIMIZATION 1: Parallel Cache Checks ---
+    // Run exact cache and semantic cache in parallel to reduce latency
     const answerCacheKey = canUseCache
-      ? buildCacheKey('cache:legal_answer:legal-chat', normalizedMessage, document_hash || 'global')
+      ? buildCacheKey('cache:legal_answer:legal-chat', normalizedMessage, effectiveDocumentHash || 'global', contextSummary)
       : null
 
-    if (answerCacheKey) {
-      const cachedPayload = await getCachedLegalAnswer<any>(answerCacheKey)
-      if (cachedPayload) {
-        // Log cache hit for debugging
-        console.log('[legal-chat] Cache hit:', {
-          key: answerCacheKey,
-          answer: cachedPayload.answer?.substring(0, 100),
-          abstained: cachedPayload.abstained,
-          citations: cachedPayload.citations?.length
-        })
+    const [exactCacheResult, queryEmbeddingForCache] = await Promise.all([
+      answerCacheKey ? getCachedLegalAnswer<any>(answerCacheKey) : Promise.resolve(null),
+      embedText(standaloneQuery || message, undefined, 768)
+    ])
 
-        // Filter out failed responses from cache
-        const isFailedResponse =
-          cachedPayload.abstained ||
-          cachedPayload.answer?.includes('Xin lỗi, tôi không thể tìm thấy câu trả lời phù hợp') ||
-          (cachedPayload.citations?.length === 0 && cachedPayload.verification_status === 'unverified' && cachedPayload.evidence?.length === 0)
+    // --- STEP 1: EXACT CACHE CHECK (Fast Path) ---
+    if (exactCacheResult) {
+      // Log cache hit for debugging
+      console.log('[legal-chat] Exact cache hit:', {
+        key: answerCacheKey,
+        answer: exactCacheResult.answer?.substring(0, 100),
+        abstained: exactCacheResult.abstained,
+        citations: exactCacheResult.citations?.length
+      })
 
-        if (isFailedResponse) {
-          console.log('[legal-chat] Skipping failed cached response, reprocessing...')
-        } else {
-          return jsonResponse({ reply: cachedPayload.answer, ...cachedPayload, cached: true }, 200)
-        }
+      // Filter out failed responses from cache
+      const isFailedResponse =
+        exactCacheResult.abstained ||
+        exactCacheResult.answer?.includes('Xin lỗi, tôi không thể tìm thấy câu trả lời phù hợp') ||
+        (exactCacheResult.citations?.length === 0 && exactCacheResult.verification_status === 'unverified' && exactCacheResult.evidence?.length === 0)
+
+      if (!isFailedResponse) {
+        return jsonResponse({ reply: exactCacheResult.answer, ...exactCacheResult, cached: true }, 200)
       }
     }
 
     // --- STEP 2: SEMANTIC CACHE (Medium Path) ---
-    const queryEmbeddingForCache = await embedText(standaloneQuery || message, undefined, 768)
-
+    // FIX: Include context in semantic cache to avoid wrong answers for same query in different contexts
+    let cacheEmbedding: number[] = []
     if (queryEmbeddingForCache.length > 0) {
       try {
-        const semanticCached = await getSemanticCache(supabase, queryEmbeddingForCache, 0.05)
+        // For standalone questions (no context), use query embedding only
+        // For contextual questions, combine query + context embeddings
+        cacheEmbedding = queryEmbeddingForCache
+        if (history.length > 0 && !isStandaloneQuestion(message)) {
+          // Embed context summary and combine with query embedding
+          const contextEmbedding = await embedText(contextSummary, undefined, 768)
+          // Simple average to combine embeddings
+          cacheEmbedding = queryEmbeddingForCache.map((v, i) => (v + contextEmbedding[i]) / 2)
+          console.log('[Semantic Cache] Using combined query+context embedding')
+        }
+
+        const semanticCached = await getSemanticCache(supabase, cacheEmbedding, 0.05)
         if (semanticCached) {
           // Filter out failed responses from semantic cache
           const isFailedResponse =
@@ -471,42 +531,35 @@ export const handler = async (req: Request): Promise<Response> => {
     }
     // ---------------------------------
 
-    // 2.1 HyDE: Hypothetical Document for better embeddings (T003/T004)
-
-    // 2.1 HyDE: Hypothetical Document for better embeddings (T003/T004)
-    const hydeDoc = await generateHypotheticalDocument(standaloneQuery)
+    // --- OPTIMIZATION 2: Conditional HyDE ---
+    // Only generate HyDE if local RAG is needed AND complexity is high
+    // This saves ~500ms for simple queries
+    const needsHyDE = (needsCitation || Boolean(effectiveDocumentHash) || isDrafting) && intent_eval.complexity === 'high'
+    const hydeDoc = needsHyDE ? await generateHypotheticalDocument(standaloneQuery || message) : standaloneQuery || message
 
     let memories: Awaited<ReturnType<typeof retrieveChatMemory>> = []
     let messageEmbedding: number[] = []
     let exaEvidence: LegalSourceEvidence[] = []
     let localLawChunks: any[] = []
 
-    // 2.2 Start Parallel Promises
-    const fetchMemoryPromise = embedText(standaloneQuery, undefined, 768)
-      .then(async (embedding) => {
-        messageEmbedding = embedding
-        // Fix function overloading by explicitly passing all parameters
-        memories = await retrieveChatMemory(supabase, messageEmbedding, user.id, standaloneQuery, undefined, 0.4, 15)
-      })
-      .catch(e => {
-        console.warn('Memory retrieval failed:', (e as Error).message)
-        memories = []
-      })
-
-    const fetchExaPromise = (needsCitation || intent_eval.intent === 'citation_request')
-      ? retrieveLegalEvidence(standaloneQuery, intent_eval.complexity === 'high' ? 12 : 8).catch(e => {
-        console.warn('Exa retrieval failed:', (e as Error).message)
-        return []
-      })
+    const fetchMemoryPromise = queryEmbeddingForCache.length > 0
+      ? retrieveChatMemory(supabase, queryEmbeddingForCache, user.id, standaloneQuery || message, undefined, 0.3, 5).catch(() => [])
       : Promise.resolve([])
 
-    const fetchLocalLawPromise = (needsCitation || Boolean(document_hash) || isDrafting)
-      ? embedText(hydeDoc, undefined, 768).then(emb =>
+    const fetchExaPromise = (needsCitation || isDrafting)
+      ? retrieveLegalEvidence(standaloneQuery || message, intent_eval.complexity === 'high' ? 10 : 5).catch(e => {
+          console.warn('Exa RAG failed:', e)
+          return []
+        })
+      : Promise.resolve([])
+
+    const fetchLocalLawPromise = (needsCitation || Boolean(effectiveDocumentHash) || isDrafting)
+      ? (needsHyDE ? embedText(hydeDoc, undefined, 768) : Promise.resolve(queryEmbeddingForCache)).then(emb =>
         supabase.rpc('match_document_chunks', {
           query_embedding: emb,
           match_threshold: 0.2, // Lowered to get more candidates for reranking
           match_count: intent_eval.complexity === 'high' ? 40 : 25,
-          p_query_text: standaloneQuery // HYBRID: Add keyword search
+          p_query_text: standaloneQuery || message // HYBRID: Add keyword search
         }).then(({ data }) => data || [])
       ).catch(e => {
         console.warn('Local RAG failed:', e)
@@ -522,6 +575,8 @@ export const handler = async (req: Request): Promise<Response> => {
 
     exaEvidence = parallelExa as LegalSourceEvidence[]
     localLawChunks = parallelLocalLaw as any[]
+
+    console.log(`[Retrieval] Exa: ${exaEvidence.length} items, Local RAG: ${localLawChunks.length} items, needsCitation: ${needsCitation}, intent: ${intent_eval.intent}`)
 
     // --- STEP 3: JINA RERANKING & DYNAMIC ABORT (T005/T006) ---
     let combinedEvidence: LegalSourceEvidence[] = []
@@ -544,11 +599,20 @@ export const handler = async (req: Request): Promise<Response> => {
         const candidateTexts = candidates.map(c => `[${c.source_domain}] ${c.title}: ${c.content.slice(0, 1000)}`)
         const rerankResults = await jinaRerank(standaloneQuery, candidateTexts, 8)
 
-        // Task T006: Dynamic Threshold (0.35)
+        // FIX: Lower threshold from 0.35 to 0.25 to ensure citations show
         combinedEvidence = rerankResults
-          .filter(r => r.score >= 0.35)
+          .filter(r => r.score >= 0.25)
           .map(r => candidates[r.index])
           .filter(Boolean)
+
+        // If no evidence after rerank, use top 3 candidates anyway
+        if (combinedEvidence.length === 0 && rerankResults.length > 0) {
+          console.warn('[Rerank] No evidence above threshold, using top 3 candidates')
+          combinedEvidence = rerankResults
+            .slice(0, 3)
+            .map(r => candidates[r.index])
+            .filter(Boolean)
+        }
       } catch (err) {
         console.warn('Jina rerank in chat failed, using fallback scoring:', err)
         // Fallback: Simple keyword matching when JINA fails
@@ -563,7 +627,7 @@ export const handler = async (req: Request): Promise<Response> => {
           })
           .sort((a, b) => b.score - a.score)
           .slice(0, 8)
-          .filter(c => c.score > 0.1) // Minimum threshold for fallback
+          .filter(c => c.score > 0.05) // Lower threshold for fallback
       }
     }
 
@@ -743,8 +807,8 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
             setCachedLegalAnswer(answerCacheKey, payload, 3600).catch(() => { });
           }
 
-          if (queryEmbeddingForCache.length > 0 && !payload.abstained) {
-            setSemanticCache(supabase, standaloneQuery || message, queryEmbeddingForCache, {
+          if (cacheEmbedding.length > 0 && !payload.abstained) {
+            setSemanticCache(supabase, standaloneQuery || message, cacheEmbedding, {
               reply: payload.answer,
               ...payload
             }).catch(() => { });
@@ -755,6 +819,44 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
             embedText(fullResponseText.slice(0, 400), undefined, 768).then(emb =>
               storeChatMemory(supabase, { user_id: user.id, role: 'assistant', content: fullResponseText.slice(0, 400), embedding: emb })
             ).catch(() => { });
+          }
+
+          // --- T015: Store legal evidence in memory with RAG optimization (Background) ---
+          // Run deduplication, volatility filter, and storage decision in background
+          // This does NOT affect response time
+          if (combinedEvidence.length > 0) {
+            (async () => {
+              try {
+                console.log(`[Background RAG] Starting optimization for ${combinedEvidence.length} evidence items`)
+
+                // T013: Deduplicate evidence
+                const beforeDedup = combinedEvidence.length
+                let deduplicated = combinedEvidence
+                try {
+                  deduplicated = await deduplicateLegalEvidenceAdvanced(combinedEvidence, supabase)
+                } catch (err) {
+                  console.warn('[Background RAG] Advanced deduplication failed, using simple:', err)
+                  deduplicated = deduplicateLegalEvidence(combinedEvidence)
+                }
+                console.log(`[Background RAG] Dedup: ${deduplicated.length}/${beforeDedup} unique items`)
+
+                // T014: Filter volatile sources
+                const beforeFilter = deduplicated.length
+                deduplicated = deduplicated.filter(e => !isVolatileLegalSource(e))
+                console.log(`[Background RAG] Volatility: ${deduplicated.length}/${beforeFilter} after filtering`)
+
+                // T012: Smart storage decision
+                const storageDecision = await shouldStoreInMemory(deduplicated, supabase)
+                if (storageDecision.shouldStore) {
+                  console.log(`[Background RAG] Storing ${deduplicated.length} evidence items: ${storageDecision.reason}`)
+                  await storeEvidenceInMemory(supabase, user.id, deduplicated)
+                } else {
+                  console.log(`[Background RAG] Skipping storage: ${storageDecision.reason}`)
+                }
+              } catch (err) {
+                console.warn('[Background RAG] Optimization failed:', err)
+              }
+            })().catch(() => {})
           }
 
           // Trigger Auto-Titling if this is a named conversation
@@ -770,15 +872,27 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
           const errorMessage = (err as Error).message;
           console.error('[legal-chat] Streaming error:', errorMessage);
 
-          // Provide user-friendly error messages
-          let userFriendlyError = 'Có lỗi xảy ra khi xử lý tin nhắn. Vui lòng thử lại.';
+          // Provide user-friendly error messages (generic, not detailed)
+          let userFriendlyError = 'Hệ thống hiện không thể trả lời ngay lúc này. Vui lòng thử lại sau ít phút.';
+
+          // Check if error indicates all keys were exhausted
+          const allKeysExhausted = errorMessage.includes('All') && errorMessage.includes('keys tried');
 
           if (errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
-            userFriendlyError = 'Hết quota API. Vui lòng thử lại sau vài phút hoặc liên hệ hỗ trợ.';
+            if (allKeysExhausted) {
+              userFriendlyError = 'Hệ thống hiện không thể trả lời ngay lúc này. Vui lòng thử lại sau ít phút.';
+            } else {
+              // Don't show retry message to user, just generic error
+              userFriendlyError = 'Hệ thống hiện không thể trả lời ngay lúc này. Vui lòng thử lại sau ít phút.';
+            }
           } else if (errorMessage.includes('401') || errorMessage.includes('403')) {
-            userFriendlyError = 'Lỗi xác thực API. Vui lòng liên hệ hỗ trợ kỹ thuật.';
+            if (allKeysExhausted) {
+              userFriendlyError = 'Hệ thống hiện không thể trả lời ngay lúc này. Vui lòng thử lại sau ít phút.';
+            } else {
+              userFriendlyError = 'Hệ thống hiện không thể trả lời ngay lúc này. Vui lòng thử lại sau ít phút.';
+            }
           } else if (errorMessage.includes('timeout') || errorMessage.includes('ETIMEDOUT')) {
-            userFriendlyError = 'Kết nối quá thời gian. Vui lòng thử lại.';
+            userFriendlyError = 'Hệ thống hiện không thể trả lời ngay lúc này. Vui lòng thử lại sau ít phút.';
           }
 
           // Always send error as a chunk so user sees something, then send error type

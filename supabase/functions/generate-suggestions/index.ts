@@ -12,9 +12,13 @@ interface SuggestionsRequest {
   message_id?: string;
 }
 
-// Generate cache key from messages
-function generateCacheKey(userMessage: string, aiResponse: string): string {
-  const combined = `${userMessage}|${aiResponse}`;
+// Generate cache key from messages + conversation_id + document context
+function generateCacheKey(userMessage: string, aiResponse: string, conversationId?: string, documentContext?: any): string {
+  // Include conversation_id and document context to ensure each context has unique suggestions
+  const docContextStr = documentContext
+    ? (typeof documentContext === 'string' ? documentContext.slice(0, 100) : JSON.stringify(documentContext).slice(0, 100))
+    : 'no-doc'
+  const combined = `${conversationId || 'global'}|${userMessage.slice(0, 100)}|${aiResponse.slice(0, 100)}|${docContextStr}`;
   let hash = 0;
   for (let i = 0; i < combined.length; i++) {
     const char = combined.charCodeAt(i);
@@ -58,7 +62,7 @@ serve(async (req) => {
     }
 
     // Check cache first
-    const cacheKey = generateCacheKey(user_message, ai_response);
+    const cacheKey = generateCacheKey(user_message, ai_response, conversation_id, document_context);
     let suggestions: string[] = [];
     let fromCache = false;
 
@@ -87,9 +91,17 @@ serve(async (req) => {
 
       const prompt = `Dựa trên cuộc tư vấn pháp lý này, hãy tạo 3-4 câu hỏi mà NGƯỜI DÙNG có khả năng sẽ đặt ra tiếp theo để đào sâu vào câu trả lời của AI.
 
+CÂU HỎI CỦA NGƯỜI DÙNG:
+${user_message}
+
+CÂU TRẢ LỜI CỦA AI:
+${ai_response}
+${docContextText}
+
 Yêu cầu QUAN TRỌNG:
 - Các câu hỏi phải được viết dưới góc nhìn của NGƯỜI DÙNG (ngôi thứ nhất, xưng "Tôi", "Làm thế nào để tôi...", "Tôi cần chuẩn bị gì...", v.v.).
 - Câu hỏi phải mang tính "đào sâu" vào các chi tiết mà AI vừa trả lời (ví dụ: hỏi về thủ tục cụ thể, rủi ro cụ thể, hoặc bằng chứng cần thiết).
+- Nếu AI trả lời về hợp đồng/văn bản, hãy gợi ý câu hỏi về các điều khoản, rủi ro, hoặc thủ tục liên quan.
 - KHÔNG để AI hỏi ngược lại người dùng theo kiểu "Bạn có muốn...". Hãy để người dùng là người chủ động đặt câu hỏi.
 - Ngôn ngữ: Tiếng Việt trang trọng, chuyên nghiệp.
 - Định dạng: Mỗi câu hỏi trên một dòng riêng biệt, không có số thứ tự ở đầu.

@@ -416,6 +416,195 @@ export function isAllowedLegalUrl(url: string): boolean {
     return LEGAL_SOURCE_ALLOWLIST.some((allowed) => domain.endsWith(allowed))
 }
 
+/**
+ * T009: Deduplicate legal evidence using URL + content hash.
+ * Removes duplicate evidence entries to prevent memory bloat.
+ * Enhanced: Full content hash instead of partial hash for accuracy.
+ */
+export function deduplicateLegalEvidence(evidence: LegalSourceEvidence[]): LegalSourceEvidence[] {
+    const seen = new Set<string>()
+    return evidence.filter(e => {
+        const key = `${e.url}-${simpleHash(e.content)}` // Full content hash
+        if (seen.has(key)) return false
+        seen.add(key)
+        return true
+    })
+}
+
+/**
+ * Enhanced deduplication with FTS + Vector similarity check.
+ * Layer 1: Hash-based exact match (fast)
+ * Layer 2: FTS keyword match (medium)
+ * Layer 3: Vector semantic similarity (slow but accurate)
+ */
+export async function deduplicateLegalEvidenceAdvanced(
+    evidence: LegalSourceEvidence[],
+    supabase: any
+): Promise<LegalSourceEvidence[]> {
+    const seen = new Set<string>()
+    const uniqueEvidence: LegalSourceEvidence[] = []
+
+    for (const e of evidence) {
+        // Layer 1: Exact hash match
+        const exactKey = `${e.url}-${simpleHash(e.content)}`
+        if (seen.has(exactKey)) {
+            console.log(`[Dedup] Skipping exact duplicate: ${e.title}`)
+            continue
+        }
+        seen.add(exactKey)
+
+        // Layer 2: FTS keyword match (if supabase available)
+        try {
+            const { data: ftsMatch } = await supabase
+                .from('document_chunks')
+                .select('id, content')
+                .limit(1)
+                .textSearch('fts_tokens', e.title.split(' ').slice(0, 3).join(' & '))
+
+            if (ftsMatch && ftsMatch.length > 0) {
+                const similarity = calculateTextSimilarity(e.content, ftsMatch[0].content)
+                if (similarity > 0.85) {
+                    console.log(`[Dedup] Skipping FTS duplicate (similarity: ${similarity.toFixed(2)}): ${e.title}`)
+                    continue
+                }
+            }
+        } catch (err) {
+            console.warn('[Dedup] FTS check failed, continuing:', err)
+        }
+
+        // Layer 3: Vector similarity (only if Layers 1 & 2 pass)
+        try {
+            const embedding = await embedText(e.content.slice(0, 500), undefined, 768)
+            const { data: vectorMatch } = await supabase.rpc('match_document_chunks', {
+                query_embedding: embedding,
+                match_threshold: 0.9, // High threshold for deduplication
+                match_count: 1,
+                p_query_text: e.title
+            })
+
+            if (vectorMatch && vectorMatch.length > 0) {
+                console.log(`[Dedup] Skipping vector duplicate (similarity: ${vectorMatch[0].similarity.toFixed(2)}): ${e.title}`)
+                continue
+            }
+        } catch (err) {
+            console.warn('[Dedup] Vector check failed, continuing:', err)
+        }
+
+        uniqueEvidence.push(e)
+    }
+
+    console.log(`[Dedup] ${uniqueEvidence.length}/${evidence.length} unique evidence after advanced dedup`)
+    return uniqueEvidence
+}
+
+/**
+ * Calculate text similarity using Jaccard index.
+ * Simple but effective for FTS layer.
+ */
+function calculateTextSimilarity(text1: string, text2: string): number {
+    const words1 = new Set(text1.toLowerCase().split(/\s+/))
+    const words2 = new Set(text2.toLowerCase().split(/\s+/))
+    const intersection = new Set([...words1].filter(x => words2.has(x)))
+    const union = new Set([...words1, ...words2])
+    return intersection.size / union.size
+}
+
+/**
+ * T008: RAG Existence Checker
+ * Checks if evidence already exists in the RAG system using vector similarity search.
+ * Prevents storing duplicate knowledge that's already in the local law chunks.
+ */
+export async function checkEvidenceExistsInRAG(
+    evidence: LegalSourceEvidence[],
+    supabase: any
+): Promise<boolean> {
+    for (const e of evidence) {
+        try {
+            // Generate embedding for the evidence content
+            const embedding = await embedText(e.content.slice(0, 500), undefined, 768)
+
+            // Search for similar chunks in document_chunks
+            const { data } = await supabase.rpc('match_document_chunks', {
+                query_embedding: embedding,
+                match_threshold: 0.9, // High threshold for existence check
+                match_count: 1,
+                p_query_text: e.title
+            })
+
+            // If any similar chunk exists, return true
+            if (data && data.length > 0) {
+                console.log(`[RAG Check] Evidence exists in RAG: ${e.title} (similarity: ${data[0].similarity.toFixed(2)})`)
+                return true
+            }
+        } catch (err) {
+            console.warn('[RAG Check] Failed to check evidence in RAG:', err)
+            // Continue checking other evidence items
+        }
+    }
+
+    console.log(`[RAG Check] No evidence found in RAG for ${evidence.length} items`)
+    return false
+}
+
+/**
+ * T011: Smart Storage Decision
+ * Combines all checks into a single decision function for memory storage.
+ * Returns true only if evidence is new and stable.
+ */
+export async function shouldStoreInMemory(
+    evidence: LegalSourceEvidence[],
+    supabase: any
+): Promise<{ shouldStore: boolean; reason: string }> {
+    // Check if evidence is empty
+    if (evidence.length === 0) {
+        return { shouldStore: false, reason: 'No evidence to store' }
+    }
+
+    // Check if evidence exists in RAG
+    try {
+        const existsInRAG = await checkEvidenceExistsInRAG(evidence, supabase)
+        if (existsInRAG) {
+            return { shouldStore: false, reason: 'Evidence already exists in RAG' }
+        }
+    } catch (err) {
+        console.warn('[Storage Decision] RAG check failed, continuing:', err)
+    }
+
+    // Deduplicate evidence
+    const deduplicated = deduplicateLegalEvidence(evidence)
+    if (deduplicated.length === 0) {
+        return { shouldStore: false, reason: 'All evidence duplicates' }
+    }
+
+    // Check for volatile sources
+    const hasVolatile = deduplicated.some(e => isVolatileLegalSource(e))
+    if (hasVolatile) {
+        return { shouldStore: false, reason: 'Contains volatile sources' }
+    }
+
+    console.log(`[Storage Decision] Should store ${deduplicated.length} unique, stable evidence items`)
+    return { shouldStore: true, reason: 'Evidence is new and stable' }
+}
+
+/**
+ * T010: Volatility filter for legal sources.
+ * Filters out volatile/time-sensitive sources that become stale quickly.
+ */
+export function isVolatileLegalSource(evidence: LegalSourceEvidence): boolean {
+    const domain = getDomainFromUrl(evidence.url)
+    const volatileDomains = [
+        'vnexpress.net',
+        'tuoitre.vn',
+        'thanhnien.vn',
+        'vietnamnet.vn',
+        'dantri.com.vn',
+        'kenh14.vn',
+        'cafef.vn',
+        'tinnhanhchungkhoan.vn'
+    ]
+    return volatileDomains.some(d => domain.includes(d))
+}
+
 export function scoreLegalSource(url: string, title: string, content: string, query: string): number {
     const normalizedQuery = normalizeLegalQuery(query)
     const normalizedTitle = normalizeLegalQuery(title)
@@ -541,7 +730,14 @@ export async function fetchWithRetry(
     const { listEnvVar, fallbackEnvVar, maxRetries = 5, backoffBase = 10, timeoutMs = 30_000 } = config
     let lastError: Error | null = null
 
-    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // Get total number of keys for 429 retry logic
+    const rawKeys = Deno.env.get(listEnvVar) ?? ''
+    const totalKeys = rawKeys.split(',').map((k: string) => k.trim()).filter(Boolean).length
+
+    // For 429, we need to try all keys, so set max attempts to totalKeys
+    const maxAttemptsFor429 = Math.max(totalKeys, maxRetries)
+
+    for (let attempt = 0; attempt <= maxAttemptsFor429; attempt++) {
         try {
             // Get current key - forceNext on retry attempts to rotate keys
             const forceNextKey = attempt > 0
@@ -583,28 +779,34 @@ export async function fetchWithRetry(
             }
 
             const errorText = await response.text()
-            console.warn(`[Retry ${attempt}/${maxRetries}] ${listEnvVar} failed (${response.status}). Key ending: ...${currentKey.slice(-5)}. Error: ${errorText.slice(0, 150)}...`)
+            console.warn(`[Retry ${attempt}/${maxAttemptsFor429}] ${listEnvVar} failed (${response.status}). Key ending: ...${currentKey.slice(-5)}. Error: ${errorText.slice(0, 150)}...`)
             lastError = new Error(`${listEnvVar} error ${response.status}: ${errorText}`)
 
-            if (attempt < maxRetries) {
-                console.log(`[Retry ${attempt}/${maxRetries}] Switching to next key immediately (no wait)...`)
+            // FIX: For 429 (quota), retry ALL keys without limit
+            // For 500 errors, respect maxRetries
+            const isQuotaError = response.status === 429
+            const shouldRetry = isQuotaError ? attempt < totalKeys - 1 : attempt < maxRetries
+
+            if (shouldRetry) {
+                const retryLimit = isQuotaError ? totalKeys : maxRetries
+                console.log(`[Retry ${attempt}/${retryLimit}] Switching to next key immediately (no wait)...`)
                 // No wait delay - immediate key rotation
                 continue
             }
 
         } catch (e) {
             const errorMsg = (e as Error).message || String(e)
-            console.warn(`[Retry ${attempt}/${maxRetries}] Network error for ${listEnvVar}:`, errorMsg)
+            console.warn(`[Retry ${attempt}/${maxAttemptsFor429}] Network error for ${listEnvVar}:`, errorMsg)
             lastError = e as Error
 
-            if (attempt < maxRetries) {
+            if (attempt < maxAttemptsFor429) {
                 // Retrying immediately with next key, no delay
                 continue
             }
         }
     }
 
-    throw lastError || new Error(`Failed after ${maxRetries} retries`)
+    throw lastError || new Error(`Failed after ${maxAttemptsFor429} attempts`)
 }
 
 /**

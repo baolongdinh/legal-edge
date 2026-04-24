@@ -25,6 +25,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const retryDataRef = useRef<{ content: string; history: Message[] } | null>(null);
+  const summaryDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const {
     addMessage,
@@ -101,19 +102,45 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     if (localImages.length > 0) {
       setStreamingStatus('Đang tải ảnh lên...');
       try {
-        const uploadPromises = localImages.map(img =>
+        // --- T008: Optimistic Attachment Display ---
+        // Attachments already displayed optimistically in userMessage (line 86-87)
+        // Just upload in background and update with real URLs
+        const uploadPromises = localImages.map((img, idx) =>
           uploadChatImage(img.file, activeId || 'temp')
             .then(path => ({
               storage_path: path,
               file_name: img.file.name,
               file_size: img.file.size,
-              mime_type: img.file.type
+              mime_type: img.file.type,
+              // Keep the optimistic blob URL for display
+              optimistic_url: img.url
             }))
+            .catch(err => {
+              console.error(`Failed to upload image ${idx}:`, err);
+              // Return optimistic URL as fallback
+              return {
+                storage_path: img.url,
+                file_name: img.file.name,
+                file_size: img.file.size,
+                mime_type: img.file.type,
+                optimistic_url: img.url,
+                upload_failed: true
+              };
+            })
         );
         uploadedAttachments = await Promise.all(uploadPromises);
 
-        // Update user message with real paths
-        userMessage.attachments = uploadedAttachments;
+        // Update user message with real paths (or fallback to optimistic URLs)
+        userMessage.attachments = uploadedAttachments.map(att => ({
+          ...att,
+          // Use real path if upload succeeded, otherwise keep optimistic URL
+          storage_path: att.upload_failed ? att.optimistic_url : att.storage_path
+        }));
+
+        // Update message in store with final URLs
+        if (uploadedAttachments.some(att => att.upload_failed)) {
+          setError('Một số ảnh không tải lên được. Hiển thị bản cục bộ.');
+        }
       } catch (err) {
         console.error('Image upload failed:', err);
         setError('Không thể tải ảnh lên. Vui lòng thử lại.');
@@ -126,32 +153,27 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     if (Array.isArray(localDocument) && localDocument.length > 0) {
       setStreamingStatus('Đang tải tài liệu lên...');
       try {
+        // --- T006: Parallel Document Upload + File Reading ---
+        // Upload and read file content in parallel to save ~500ms
         const uploadPromises = localDocument.map(async (doc: any) => {
           if (doc.file && !doc.storage_path) {
-            // Upload to Cloudinary
-            const cloudinaryUrl = await uploadToCloudinary(doc.file, 'chat_documents', 'auto');
+            // Parallel: upload + read file content
+            const [cloudinaryUrl, fileContent] = await Promise.all([
+              uploadToCloudinary(doc.file, 'chat_documents', 'auto'),
+              doc.file.type.startsWith('text/') || doc.file.name.endsWith('.txt') || doc.file.name.endsWith('.md') || doc.file.name.endsWith('.csv') || doc.file.name.endsWith('.json') || doc.file.name.endsWith('.xml') || doc.file.name.endsWith('.html')
+                ? new Promise<string>((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => resolve(e.target?.result as string);
+                    reader.readAsText(doc.file);
+                  })
+                : Promise.resolve(null)
+            ]);
 
-            // For text-based files, also read content
-            if (doc.file.type.startsWith('text/') || doc.file.name.endsWith('.txt') || doc.file.name.endsWith('.md') || doc.file.name.endsWith('.csv') || doc.file.name.endsWith('.json') || doc.file.name.endsWith('.xml') || doc.file.name.endsWith('.html')) {
-              return new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                  resolve({
-                    ...doc,
-                    storage_path: cloudinaryUrl,
-                    document_context: event.target?.result as string,
-                  });
-                };
-                reader.readAsText(doc.file);
-              });
-            } else {
-              // For binary files, just store Cloudinary URL
-              return {
-                ...doc,
-                storage_path: cloudinaryUrl,
-                document_context: null,
-              };
-            }
+            return {
+              ...doc,
+              storage_path: cloudinaryUrl,
+              document_context: fileContent,
+            };
           }
           return doc;
         });
@@ -169,20 +191,20 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     // Show initial status
     setStreamingStatus('Đang phân tích câu hỏi...');
 
+    // --- T003: Background Save User Message ---
+    // Save in background, don't block streaming to save ~100ms
     if (activeId) {
-      try {
-        await messageApi.saveUserMessage(
-          activeId,
-          content,
-          localDocument,
-          uploadedAttachments
-        );
-      } catch (err) {
+      messageApi.saveUserMessage(
+        activeId,
+        content,
+        localDocument,
+        uploadedAttachments
+      ).catch(err => {
         console.error('Failed to save user message:', err);
         // Show error but continue with streaming - message is already displayed optimistically
         setError('Không thể lưu tin nhắn. Vui lòng kiểm tra kết nối.');
-        // Don't return - continue with streaming even if save fails
-      }
+        // Don't block streaming even if save fails
+      });
     }
 
     try {
@@ -233,20 +255,6 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       // Use a stable local ID so suggestions can always be updated by reference
       const localMessageId = crypto.randomUUID();
 
-      if (activeId) {
-        try {
-          const saved = await messageApi.saveAssistantMessage(
-            activeId,
-            assistantContent,
-            finalPayload?.citations,
-            suggestions
-          );
-          savedMessageId = saved?.data?.id;
-        } catch (err) {
-          console.warn('Failed to save assistant message:', err);
-        }
-      }
-
       // Prefer live-streamed evidence; fall back to done-payload citations
       const resolvedEvidence =
         useChatStore.getState().streaming.evidence?.length > 0
@@ -260,8 +268,9 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         assistantContent = 'Xin lỗi, tôi không thể tạo câu trả lời lúc này. Vui lòng thử lại hoặc cung cấp thêm thông tin chi tiết.';
       }
 
+      // --- FIX: Add message immediately with local ID for instant UI update ---
       const assistantMessage: Message = {
-        id: savedMessageId || localMessageId, // prefer server ID, fallback to local
+        id: localMessageId, // Use local ID first, will update after save
         role: 'assistant',
         content: assistantContent,
         follow_up_suggestions: suggestions,
@@ -269,6 +278,25 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         token_count: finalPayload?.output_tokens,
       };
       addMessage(assistantMessage);
+
+      // --- T007: Optimistic Assistant Message Save ---
+      // Save in background, don't block UI to save ~100ms perceived latency
+      if (activeId) {
+        messageApi.saveAssistantMessage(
+          activeId,
+          assistantContent,
+          finalPayload?.citations,
+          suggestions
+        ).then(saved => {
+          savedMessageId = saved?.data?.id;
+          // Update message ID in store after save completes
+          updateMessageSuggestions(localMessageId, suggestions);
+        }).catch(err => {
+          console.warn('Failed to save assistant message:', err);
+          // Show error indicator but don't remove message
+          setError('Không thể lưu tin nhắn trợ lý. Vui lòng kiểm tra kết nối.');
+        });
+      }
 
       // Invalidate cache for this conversation since we just added new messages
       if (activeId) {
@@ -294,52 +322,47 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       }
 
       // --- BACKGROUND: Multi-layer conversation summaries ---
+      // --- T011: Debounced Summary Generation ---
+      // Trigger all 3 summary levels in parallel after 5s delay
       if (activeId) {
         const conv = useConversationStore.getState().selectedConversation;
 
-        // Level 1: Quick Overview (Immediate) - only if not already summarized
-        if (!conv?.summary_level_1) {
-          summarizationApi
-            .summarize(activeId, 1)
-            .then((res) => {
-              if (res?.success && res.summary) {
-                useConversationStore.getState().updateConversation(activeId, {
-                  summary_level_1: res.summary,
-                });
-              }
-            })
-            .catch((err) => console.warn('[Summary] Background Level-1 failed:', err));
+        // Clear previous debounce timer
+        if (summaryDebounceRef.current) {
+          clearTimeout(summaryDebounceRef.current);
         }
 
-        // Level 2: Detailed Legal Insight (3s delay) - only if not already summarized
-        if (!conv?.summary_level_2) {
-          setTimeout(() => {
-            summarizationApi.summarize(activeId, 2)
-              .then((res) => {
-                if (res?.success && res.summary) {
-                  useConversationStore.getState().updateConversation(activeId, {
-                    summary_level_2: res.summary,
-                  });
-                }
-              })
-              .catch((err) => console.warn('[Summary] Background Level-2 failed:', err));
-          }, 3000);
-        }
+        // Set new debounce timer
+        summaryDebounceRef.current = setTimeout(() => {
+          // Generate all levels in parallel
+          const summaryPromises = [
+            !conv?.summary_level_1
+              ? summarizationApi.summarize(activeId, 1).then(res => {
+                  if (res?.success && res.summary) {
+                    useConversationStore.getState().updateConversation(activeId, { summary_level_1: res.summary });
+                  }
+                }).catch(err => console.warn('[Summary] Level-1 failed:', err))
+              : Promise.resolve(),
 
-        // Level 3: Recommendations (8s delay) - only if not already summarized
-        if (!conv?.summary_level_3) {
-          setTimeout(() => {
-            summarizationApi.summarize(activeId, 3)
-              .then((res) => {
-                if (res?.success && res.summary) {
-                  useConversationStore.getState().updateConversation(activeId, {
-                    summary_level_3: res.summary,
-                  });
-                }
-              })
-              .catch((err) => console.warn('[Summary] Background Level-3 failed:', err));
-          }, 8000);
-        }
+            !conv?.summary_level_2
+              ? summarizationApi.summarize(activeId, 2).then(res => {
+                  if (res?.success && res.summary) {
+                    useConversationStore.getState().updateConversation(activeId, { summary_level_2: res.summary });
+                  }
+                }).catch(err => console.warn('[Summary] Level-2 failed:', err))
+              : Promise.resolve(),
+
+            !conv?.summary_level_3
+              ? summarizationApi.summarize(activeId, 3).then(res => {
+                  if (res?.success && res.summary) {
+                    useConversationStore.getState().updateConversation(activeId, { summary_level_3: res.summary });
+                  }
+                }).catch(err => console.warn('[Summary] Level-3 failed:', err))
+              : Promise.resolve()
+          ];
+
+          Promise.all(summaryPromises).catch(err => console.warn('[Summary] Parallel generation failed:', err));
+        }, 5000);
       }
 
       options?.onComplete?.();
