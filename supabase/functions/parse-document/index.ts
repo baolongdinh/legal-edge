@@ -124,10 +124,21 @@ export const handler = async (req: Request): Promise<Response> => {
             }
         } else if (isComplexDoc) {
             try {
+                console.log(`[parse-document] Extracting complex doc: ${filename} (${mimeType})`)
                 textContent = await extractWithGemini(fileBuffer, mimeType)
+                console.log(`[parse-document] Extracted ${textContent.length} chars from ${filename}`)
             } catch (e) {
-                console.error('Complex document extraction failed:', e)
-                return parseError('Không thể trích xuất tài liệu ở chế độ tạm thời.', 'EXTRACTION_FAILED', 'extract_complex', 400)
+                console.error('[parse-document] Complex document extraction failed:', e)
+                const isOldDoc = filename.toLowerCase().endsWith('.doc') && !filename.toLowerCase().endsWith('.docx')
+                if (isOldDoc) {
+                    return parseError(
+                        `File "${filename}" là định dạng .doc cũ (Microsoft Word 97-2003). Vui lòng convert sang .docx hoặc .pdf để bot có thể đọc được.`,
+                        'UNSUPPORTED_OLD_DOC_FORMAT',
+                        'extract_complex',
+                        400
+                    )
+                }
+                return parseError(`Không thể đọc file "${filename}". Vui lòng thử định dạng .pdf, .docx hoặc .txt.`, 'EXTRACTION_FAILED', 'extract_complex', 400)
             }
         } else if (mimeType.startsWith('image/')) {
             // Images: Gemini multimodal
@@ -138,12 +149,19 @@ export const handler = async (req: Request): Promise<Response> => {
                 return parseError('Không thể đọc hình ảnh đính kèm.', 'EXTRACTION_FAILED', 'extract_image', 400)
             }
         } else {
-            // Fallback for unknown types
+            // Fallback for unknown types - try Gemini as last resort
+            console.log(`[parse-document] Unknown mime type ${mimeType} for ${filename}, attempting Gemini fallback`)
             try {
                 textContent = await extractWithGemini(fileBuffer, mimeType)
+                console.log(`[parse-document] Fallback succeeded for ${filename}, extracted ${textContent.length} chars`)
             } catch (e) {
-                console.error('Generic extraction failed:', e)
-                return parseError('Định dạng tài liệu chưa được hỗ trợ ổn định.', 'UNSUPPORTED_FILE_TYPE', 'extract_generic', 400)
+                console.error('[parse-document] Unknown type extraction failed:', e)
+                return parseError(
+                    `Không thể đọc file "${filename}" (định dạng ${mimeType}). Vui lòng chọn file PDF, DOCX, hoặc TXT.`,
+                    'UNSUPPORTED_TYPE',
+                    'extract_unknown',
+                    400
+                )
             }
         }
 

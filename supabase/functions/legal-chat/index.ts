@@ -712,7 +712,11 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
     }
 
     if (compactDocumentContext) {
-      systemPrompt += `\n\nBỐI CẢNH TÀI LIỆU CỤ THỂ:\n"""\n${compactDocumentContext}\n"""`
+      console.log('[LLM Prompt] Adding document context to system prompt, length:', compactDocumentContext.length)
+      console.log('[LLM Prompt] Document context preview:', compactDocumentContext.substring(0, 300))
+      systemPrompt += `\n\nBỐI CẢNH TÀI LIỆU CỤ THỂ (QUAN TRỌNG - Hãy phân tích dựa trên tài liệu này):\n"""\n${compactDocumentContext}\n"""`
+    } else {
+      console.log('[LLM Prompt] No document context to add to system prompt')
     }
 
     if (combinedEvidence.length > 0) {
