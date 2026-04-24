@@ -16,13 +16,13 @@ Fix document upload parsing to support PDF/DOCX files in chat. Currently only te
 Resolve 26 TypeScript errors blocking frontend build
 
 ### Tasks
-- [ ] T001 Fix missing export streamingChatApi in lib/supabase
-- [ ] T002 Fix missing export messageApi in lib/supabase
-- [ ] T003 Fix missing function uploadChatImage
-- [ ] T004 Fix missing function suggestionsApi
-- [ ] T005 Fix missing function summarizationApi
-- [ ] T006 Fix implicit any types (26 instances)
-- [ ] T007 Build frontend to verify all errors resolved
+- [x] T001 Fix missing export streamingChatApi in lib/supabase
+- [x] T002 Fix missing export messageApi in lib/supabase
+- [x] T003 Fix missing function uploadChatImage
+- [x] T004 Fix missing function suggestionsApi
+- [x] T005 Fix missing function summarizationApi
+- [x] T006 Fix implicit any types (26 instances)
+- [x] T007 Build frontend to verify all errors resolved
 
 ### Expected Outcome
 - Frontend builds successfully with 0 TypeScript errors
@@ -36,12 +36,12 @@ Resolve 26 TypeScript errors blocking frontend build
 Enable PDF/DOCX parsing in useStreamingChat.ts using existing document.worker
 
 ### Tasks
-- [ ] T008 Import Comlink in useStreamingChat.ts
-- [ ] T009 Add initWorker function in useStreamingChat.ts
-- [ ] T010 Update file reading logic to detect file extension
-- [ ] T011 Add PDF parsing using worker (parsePDF)
-- [ ] T012 Add DOCX parsing using worker (parseDocx)
-- [ ] T013 Add fallback to server-side parse-document function
+- [x] T008 Import Comlink in useStreamingChat.ts
+- [x] T009 Add initWorker function in useStreamingChat.ts
+- [x] T010 Update file reading logic to detect file extension
+- [x] T011 Add PDF parsing using worker (parsePDF)
+- [x] T012 Add DOCX parsing using worker (parseDocx)
+- [x] T013 Add fallback to server-side parse-document function
 - [ ] T014 Test local worker parsing with sample PDF
 - [ ] T015 Test local worker parsing with sample DOCX
 - [ ] T016 Test fallback to server-side parsing
