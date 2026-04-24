@@ -416,13 +416,18 @@ export const handler = async (req: Request): Promise<Response> => {
     if (document_context) {
       if (typeof document_context === 'string') {
         documentText = document_context
+        console.log('[Document Context] String type received, length:', documentText.length)
       } else if (Array.isArray(document_context)) {
         // Extract document_context field from each uploaded doc
         documentText = document_context
           .map((doc: any) => doc?.document_context || '')
           .filter(Boolean)
           .join('\n\n---\n\n')
+        console.log('[Document Context] Array type received, docs count:', document_context.length, 'total text length:', documentText.length)
+        console.log('[Document Context] First doc preview:', document_context[0]?.document_context?.substring(0, 200))
       }
+    } else {
+      console.log('[Document Context] No document_context received')
     }
 
     const compactDocumentContext = buildCompactDocumentContext(
@@ -430,6 +435,8 @@ export const handler = async (req: Request): Promise<Response> => {
       Array.isArray(context_excerpts) ? context_excerpts : [],
       documentText,
     )
+
+    console.log('[Document Context] compactDocumentContext length:', compactDocumentContext?.length)
 
     // --- T001: Heuristic Intent Evaluation for Simple Questions ---
     // Skip LLM call for simple standalone questions to save ~300ms

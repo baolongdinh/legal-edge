@@ -164,6 +164,16 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     if (Array.isArray(localDocument) && localDocument.length > 0) {
       setStreamingStatus('Đang tải tài liệu lên...');
       try {
+        // Validate file sizes before upload (Cloudinary limit: 10MB)
+        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+        for (const doc of localDocument) {
+          if (doc.file && doc.file.size > MAX_FILE_SIZE) {
+            setError(`File "${doc.file.name}" quá lớn (${(doc.file.size / 1024 / 1024).toFixed(1)}MB). Vui lòng chọn file dưới 10MB.`);
+            setStreaming({ isStreaming: false });
+            return;
+          }
+        }
+
         // --- T006: Parallel Document Upload + File Reading ---
         // Upload and read file content in parallel to save ~500ms
         const uploadPromises = localDocument.map(async (doc: { file?: File; storage_path?: string; document_context?: string }) => {
@@ -182,6 +192,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
                 reader.onload = (e) => resolve(e.target?.result as string);
                 reader.readAsText(doc.file!);
               });
+              console.log('[Document Parse] Text file parsed:', { fileName: doc.file.name, contentLength: fileContent?.length });
             } else if (extension === 'pdf' || extension === 'docx') {
               // PDF/DOCX: use worker to parse
               try {
@@ -192,6 +203,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
                 } else if (extension === 'docx') {
                   fileContent = await api.parseDocx(arrayBuffer);
                 }
+                console.log('[Document Parse] Worker parsed:', { fileName: doc.file.name, extension, contentLength: fileContent?.length });
               } catch (err) {
                 console.error('Failed to parse document locally:', err);
                 // Fallback: try server-side parsing via parse-document function
@@ -204,6 +216,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
                   });
                   const data = await response.json();
                   fileContent = data.text || null;
+                  console.log('[Document Parse] Server fallback parsed:', { fileName: doc.file.name, contentLength: fileContent?.length });
                 } catch (serverErr) {
                   console.error('Failed to parse document on server:', serverErr);
                 }
