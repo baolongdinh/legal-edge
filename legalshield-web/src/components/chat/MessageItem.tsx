@@ -242,7 +242,7 @@ export const MessageItem = memo(({
                     style={{ aspectRatio: '1 / 1' }}
                     onClick={() => window.open(url, '_blank')}
                   >
-                    <img src={url} alt={`Ảnh ${idx + 1}`} className="w-full h-full object-cover" />
+                    <img src={url} alt={`Ảnh ${idx + 1}`} className="w-full h-full object-cover" loading="lazy" decoding="async" />
                     {showOverlay ? (
                       <div className="absolute inset-0 bg-black/60 flex items-center justify-center pointer-events-none">
                         <span className="text-white text-xl font-bold">+{imageAttachments.overflow + 1}</span>

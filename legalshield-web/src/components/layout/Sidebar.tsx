@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Link, useLocation } from 'react-router-dom'
 import { clsx } from 'clsx'
 import {
@@ -6,6 +6,7 @@ import {
     Settings, ChevronLeft, Scale
 } from 'lucide-react'
 import { useUIStore } from '../../store'
+import { debounce } from '../../lib/utils'
 
 const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
@@ -18,18 +19,25 @@ export function Sidebar() {
     const { pathname } = useLocation()
     const { sidebarExpanded, toggleSidebar } = useUIStore()
 
+    const debouncedHandleResize = useMemo(
+        () =>
+            debounce(() => {
+                const isMobile = window.innerWidth < 768
+                useUIStore.setState({ sidebarExpanded: !isMobile })
+            }, 200),
+        []
+    )
+
     useEffect(() => {
-        let isMobile = window.innerWidth < 768;
         const handleResize = () => {
-            const nowMobile = window.innerWidth < 768;
-            if (isMobile !== nowMobile) {
-                isMobile = nowMobile;
-                useUIStore.setState({ sidebarExpanded: !nowMobile });
-            }
+            debouncedHandleResize()
         }
         window.addEventListener('resize', handleResize)
-        return () => window.removeEventListener('resize', handleResize)
-    }, [])
+        return () => {
+            window.removeEventListener('resize', handleResize)
+            debouncedHandleResize.cancel()
+        }
+    }, [debouncedHandleResize])
 
     return (
         <>
