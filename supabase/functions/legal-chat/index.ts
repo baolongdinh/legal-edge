@@ -45,6 +45,7 @@ import {
   deduplicateLegalEvidence,
   deduplicateLegalEvidenceAdvanced,
   checkEvidenceExistsInRAG,
+  checkEvidenceExistsGlobally,
 } from '../shared/types.ts'
 
 /**
@@ -864,14 +865,37 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
               try {
                 console.log(`[Background RAG] Starting optimization for ${combinedEvidence.length} evidence items`)
 
+                // T016: Check global evidence existence (cross-user dedup) - granular check
+                const globalDedupResults = await Promise.all(
+                  combinedEvidence.map(async (e) => ({
+                    evidence: e,
+                    existsGlobally: e.url ? await checkEvidenceExistsGlobally(supabase, e.url) : false
+                  }))
+                )
+                
+                // Filter out evidence that exists globally
+                const newEvidence = globalDedupResults
+                  .filter(r => !r.existsGlobally)
+                  .map(r => r.evidence)
+                
+                const skippedGlobal = combinedEvidence.length - newEvidence.length
+                if (skippedGlobal > 0) {
+                  console.log(`[Background RAG] Skipped ${skippedGlobal} evidence items (exist globally)`)
+                }
+                
+                if (newEvidence.length === 0) {
+                  console.log(`[Background RAG] All evidence exists globally, skipping storage`)
+                  return
+                }
+
                 // T013: Deduplicate evidence
-                const beforeDedup = combinedEvidence.length
-                let deduplicated = combinedEvidence
+                const beforeDedup = newEvidence.length
+                let deduplicated = newEvidence
                 try {
-                  deduplicated = await deduplicateLegalEvidenceAdvanced(combinedEvidence, supabase)
+                  deduplicated = await deduplicateLegalEvidenceAdvanced(newEvidence, supabase)
                 } catch (err) {
                   console.warn('[Background RAG] Advanced deduplication failed, using simple:', err)
-                  deduplicated = deduplicateLegalEvidence(combinedEvidence)
+                  deduplicated = deduplicateLegalEvidence(newEvidence)
                 }
                 console.log(`[Background RAG] Dedup: ${deduplicated.length}/${beforeDedup} unique items`)
 

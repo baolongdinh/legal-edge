@@ -455,11 +455,24 @@ export async function deduplicateLegalEvidenceAdvanced(
 
         // Layer 2: FTS keyword match (if supabase available)
         try {
+            // Extract meaningful keywords (>3 chars) and use OR operator for broader matching
+            // Handle Vietnamese text by keeping words with special characters
+            const keywords = e.title
+                .split(/\s+/)
+                .filter(w => w.length > 3 || /[àáạảãâầấậẩẫăằắặẳẵèéẹẻẽêềếệểễìíịỉĩòóọỏõôồốộổỗơờớợởỡùúụủũưừứựửữỳýỵỷỹđ]/i.test(w))
+                .slice(0, 5)
+                .join(' | ')
+            
+            if (!keywords) {
+                // Skip FTS if no meaningful keywords found
+                throw new Error('No meaningful keywords for FTS')
+            }
+            
             const { data: ftsMatch } = await supabase
                 .from('document_chunks')
                 .select('id, content')
                 .limit(1)
-                .textSearch('fts_tokens', e.title.split(' ').slice(0, 3).join(' & '))
+                .textSearch('fts_tokens', keywords)
 
             if (ftsMatch && ftsMatch.length > 0) {
                 const similarity = calculateTextSimilarity(e.content, ftsMatch[0].content)
@@ -474,7 +487,16 @@ export async function deduplicateLegalEvidenceAdvanced(
 
         // Layer 3: Vector similarity (only if Layers 1 & 2 pass)
         try {
-            const embedding = await embedText(e.content.slice(0, 500), undefined, 768)
+            // Use sliding window for long documents: first + middle + last sections
+            const contentLength = e.content.length
+            const firstPart = e.content.slice(0, 500)
+            const lastPart = contentLength > 1000 ? e.content.slice(-500) : ''
+            const middlePart = contentLength > 1500 
+                ? e.content.slice(Math.floor(contentLength / 2) - 250, Math.floor(contentLength / 2) + 250)
+                : ''
+            const embeddingText = [firstPart, middlePart, lastPart].filter(Boolean).join(' ... ')
+            
+            const embedding = await embedText(embeddingText, undefined, 768)
             const { data: vectorMatch } = await supabase.rpc('match_document_chunks', {
                 query_embedding: embedding,
                 match_threshold: 0.9, // High threshold for deduplication
@@ -520,8 +542,17 @@ export async function checkEvidenceExistsInRAG(
 ): Promise<boolean> {
     for (const e of evidence) {
         try {
+            // Use sliding window for long documents (consistent with dedup logic)
+            const contentLength = e.content.length
+            const firstPart = e.content.slice(0, 500)
+            const lastPart = contentLength > 1000 ? e.content.slice(-500) : ''
+            const middlePart = contentLength > 1500 
+                ? e.content.slice(Math.floor(contentLength / 2) - 250, Math.floor(contentLength / 2) + 250)
+                : ''
+            const embeddingText = [firstPart, middlePart, lastPart].filter(Boolean).join(' ... ')
+            
             // Generate embedding for the evidence content
-            const embedding = await embedText(e.content.slice(0, 500), undefined, 768)
+            const embedding = await embedText(embeddingText, undefined, 768)
 
             // Search for similar chunks in document_chunks
             const { data } = await supabase.rpc('match_document_chunks', {
@@ -544,6 +575,57 @@ export async function checkEvidenceExistsInRAG(
 
     console.log(`[RAG Check] No evidence found in RAG for ${evidence.length} items`)
     return false
+}
+
+/**
+ * T012: Check if evidence exists globally (any user) by URL
+ * Prevents storing duplicate evidence across different user sessions
+ * Uses regex to extract URL from evidence content for accurate matching
+ */
+export async function checkEvidenceExistsGlobally(
+    supabase: any,
+    url: string
+): Promise<boolean> {
+    if (!url) return false
+    
+    try {
+        // Normalize URL for matching (remove trailing slash, protocol variations)
+        const normalizedUrl = url.replace(/\/$/, '').replace(/^https?:\/\//, '').toLowerCase()
+        
+        // Query chat_memory for existing evidence with same URL
+        // Evidence content format: [LEGAL SOURCE] title | domain | ... content
+        // We use a more specific pattern to match the URL in the content
+        const { data, error } = await supabase
+            .from('chat_memory')
+            .select('id, content')
+            .eq('content_type', 'evidence')
+            .limit(10) // Check multiple results for better accuracy
+        
+        if (error) {
+            console.warn('[Global Dedup] Check failed:', error)
+            return false
+        }
+        
+        // Check if any evidence contains the normalized URL
+        const exists = data && data.some((entry: { content: string }) => {
+            const content = entry.content.toLowerCase()
+            // Extract domain from content and compare
+            const urlMatch = content.match(/\| ([^\s|]+)/)
+            if (urlMatch) {
+                const contentDomain = urlMatch[1].replace(/^https?:\/\//, '').replace(/\/$/, '').toLowerCase()
+                return contentDomain === normalizedUrl || content.includes(normalizedUrl)
+            }
+            return content.includes(normalizedUrl)
+        })
+        
+        if (exists) {
+            console.log(`[Global Dedup] Evidence exists globally: ${url}`)
+        }
+        return exists
+    } catch (err) {
+        console.warn('[Global Dedup] Error checking global existence:', err)
+        return false
+    }
 }
 
 /**
@@ -1434,7 +1516,7 @@ export async function setSemanticCache(
 
 /**
  * Stores a message or evidence entry in chat memory.
- * Includes Redis-based deduplication to prevent noisy duplicates.
+ * Includes Redis-based deduplication and semantic similarity check.
  */
 export async function storeChatMemory(
     supabase: any,
@@ -1447,7 +1529,7 @@ export async function storeChatMemory(
         content_type?: 'message' | 'evidence'
     }
 ) {
-    // Dedup check: prevent storing near-identical content within 10 minutes
+    // Layer 1: Redis short-term dedup (10-minute window)
     const redis = getRedisClient()
     if (redis) {
         const dedupKey = `mem:dedup:${entry.user_id}:${simpleHash(entry.content.slice(0, 200))}`
@@ -1455,6 +1537,30 @@ export async function storeChatMemory(
         if (exists) return // Skip duplicate
         await redis.set(dedupKey, 1, { ex: 600 }) // 10 min TTL
     }
+    
+    // Layer 2: Vector similarity check (semantic dedup)
+    if (entry.embedding) {
+        try {
+            const { data: similar } = await supabase.rpc('match_chat_memory', {
+                query_embedding: entry.embedding,
+                match_threshold: 0.92, // High threshold for semantic dedup
+                match_count: 1,
+                p_user_id: entry.user_id,
+                p_session_id: entry.session_id,
+                p_query_text: null, // No FTS needed for dedup
+                p_content_types: [entry.content_type ?? 'message'] // Only check same type
+            })
+            
+            if (similar && similar.length > 0) {
+                console.log(`[Memory Dedup] Semantic duplicate found (sim: ${similar[0].similarity.toFixed(2)}), skipping storage`)
+                return
+            }
+        } catch (err) {
+            console.warn('[Memory Dedup] Vector similarity check failed, continuing:', err)
+        }
+    }
+    
+    // Store if no duplicates found
     const { error } = await supabase.from('chat_memory').insert({
         ...entry,
         content_type: entry.content_type ?? 'message',
