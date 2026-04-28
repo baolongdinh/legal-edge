@@ -48,7 +48,8 @@ export const handler = async (req: Request): Promise<Response> => {
         // --- Helper: Extract text from DOCX using mammoth.js ---
         const extractDocx = async (buffer: ArrayBuffer): Promise<string> => {
             console.log(`[extractDocx] Parsing DOCX with mammoth, size=${buffer.byteLength} bytes`)
-            const result = await mammoth.extractRawText({ arrayBuffer: buffer })
+            // mammoth.js in Deno/Node requires 'buffer' not 'arrayBuffer'
+            const result = await mammoth.extractRawText({ buffer: new Uint8Array(buffer) })
             console.log(`[extractDocx] Extracted ${result.value.length} chars`)
             if (result.messages.length > 0) {
                 console.log(`[extractDocx] Warnings:`, result.messages)
