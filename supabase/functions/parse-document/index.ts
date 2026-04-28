@@ -4,6 +4,8 @@
 //   - mode=ephemeral (default for ChatAI): Extract text in-memory, skip remote file persistence
 //   - mode=persist: Upload to Cloudinary and save file URL to DB
 
+// @deno-types="https://cdn.sheetjs.com/xlsx-0.20.3/package/types/index.d.ts"
+import * as XLSX from 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs'
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { encode } from 'https://deno.land/std@0.177.0/encoding/base64.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
@@ -53,6 +55,22 @@ export const handler = async (req: Request): Promise<Response> => {
                 console.log(`[extractDocx] Warnings:`, result.messages)
             }
             return result.value.trim()
+        }
+
+        // --- Helper: Extract text from Excel using SheetJS ---
+        const extractExcel = async (buffer: ArrayBuffer): Promise<string> => {
+            console.log(`[extractExcel] Parsing Excel with SheetJS, size=${buffer.byteLength} bytes`)
+            const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' })
+            let text = ''
+
+            workbook.SheetNames.forEach((sheetName, index) => {
+                const worksheet = workbook.Sheets[sheetName]
+                const csv = XLSX.utils.sheet_to_csv(worksheet)
+                text += `--- Sheet: ${sheetName} ---\n${csv}\n\n`
+            })
+
+            console.log(`[extractExcel] Extracted ${text.length} chars from ${workbook.SheetNames.length} sheets`)
+            return text.trim()
         }
 
         // --- Helper: Extract text with Gemini Multimodal (in-memory, no remote file needed) ---
@@ -153,6 +171,16 @@ export const handler = async (req: Request): Promise<Response> => {
             } catch (e) {
                 console.warn('Jina failed, falling back to Gemini:', e)
                 textContent = await extractWithGemini(fileBuffer, mimeType)
+            }
+        } else if (mimeType.includes('spreadsheet') || mimeType.includes('excel') || mimeType.includes('sheet')) {
+            // Excel files (xlsx, xls) - use SheetJS
+            try {
+                console.log(`[parse-document] Extracting Excel: ${filename} (${mimeType})`)
+                textContent = await extractExcel(fileBuffer)
+                console.log(`[parse-document] Extracted ${textContent.length} chars from ${filename}`)
+            } catch (e) {
+                console.error('[parse-document] Excel extraction failed:', e)
+                return parseError(`Không thể đọc file Excel "${filename}". Vui lòng kiểm tra định dạng file.`, 'EXTRACTION_FAILED', 'extract_excel', 400)
             }
         } else if (isComplexDoc) {
             try {
