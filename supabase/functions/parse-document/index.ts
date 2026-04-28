@@ -4,8 +4,7 @@
 //   - mode=ephemeral (default for ChatAI): Extract text in-memory, skip remote file persistence
 //   - mode=persist: Upload to Cloudinary and save file URL to DB
 
-// @deno-types="https://cdn.sheetjs.com/xlsx-0.20.3/package/types/index.d.ts"
-import * as XLSX from 'https://cdn.sheetjs.com/xlsx-0.20.3/package/xlsx.mjs'
+import * as XLSX from 'https://deno.land/x/sheetjs/xlsx.mjs'
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { encode } from 'https://deno.land/std@0.177.0/encoding/base64.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
