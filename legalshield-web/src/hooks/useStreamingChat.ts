@@ -1,9 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useChatStore, type Message } from '@/store/chatStore';
 import { useConversationStore } from '@/store/conversationStore';
-import { streamingChatApi, messageApi, suggestionsApi, summarizationApi } from '@/lib/conversation-api';
-import { uploadChatImage } from '@/lib/supabase';
-import { uploadToCloudinary } from '@/lib/cloudinary';
+import { streamingChatApi, messageApi, suggestionsApi, summarizationApi } from '../lib/conversation-api';
+import { uploadToCloudinary } from '../lib/cloudinary';
+import { uploadChatImage, invokeEdgeFunction } from '../lib/supabase';
 
 interface UseStreamingChatOptions {
   conversationId?: string;
@@ -25,6 +25,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
 
   const abortControllerRef = useRef<AbortController | null>(null);
   const retryDataRef = useRef<{ content: string; history: Message[] } | null>(null);
+  const summaryDebounceRef = useRef<NodeJS.Timeout | null>(null);
 
   const {
     addMessage,
@@ -78,6 +79,12 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     const localImages = [...attachedImagesRef.current];
     const localDocument = attachedDocumentRef.current;
 
+    console.log('[Document Upload] Starting upload', {
+      hasLocalDocument: !!localDocument,
+      localDocumentLength: Array.isArray(localDocument) ? localDocument.length : 0,
+      localDocument: localDocument
+    });
+
     const userMessage: Message = {
       role: 'user',
       content,
@@ -101,19 +108,45 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     if (localImages.length > 0) {
       setStreamingStatus('Đang tải ảnh lên...');
       try {
-        const uploadPromises = localImages.map(img =>
+        // --- T008: Optimistic Attachment Display ---
+        // Attachments already displayed optimistically in userMessage (line 86-87)
+        // Just upload in background and update with real URLs
+        const uploadPromises = localImages.map((img, idx) =>
           uploadChatImage(img.file, activeId || 'temp')
             .then(path => ({
               storage_path: path,
               file_name: img.file.name,
               file_size: img.file.size,
-              mime_type: img.file.type
+              mime_type: img.file.type,
+              // Keep the optimistic blob URL for display
+              optimistic_url: img.url
             }))
+            .catch(err => {
+              console.error(`Failed to upload image ${idx}:`, err);
+              // Return optimistic URL as fallback
+              return {
+                storage_path: img.url,
+                file_name: img.file.name,
+                file_size: img.file.size,
+                mime_type: img.file.type,
+                optimistic_url: img.url,
+                upload_failed: true
+              };
+            })
         );
         uploadedAttachments = await Promise.all(uploadPromises);
 
-        // Update user message with real paths
-        userMessage.attachments = uploadedAttachments;
+        // Update user message with real paths (or fallback to optimistic URLs)
+        userMessage.attachments = uploadedAttachments.map(att => ({
+          ...att,
+          // Use real path if upload succeeded, otherwise keep optimistic URL
+          storage_path: att.upload_failed ? att.optimistic_url : att.storage_path
+        }));
+
+        // Update message in store with final URLs
+        if (uploadedAttachments.some(att => att.upload_failed)) {
+          setError('Một số ảnh không tải lên được. Hiển thị bản cục bộ.');
+        }
       } catch (err) {
         console.error('Image upload failed:', err);
         setError('Không thể tải ảnh lên. Vui lòng thử lại.');
@@ -125,42 +158,86 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     // 2. Upload document files if any (deferred from ChatPage)
     if (Array.isArray(localDocument) && localDocument.length > 0) {
       setStreamingStatus('Đang tải tài liệu lên...');
+      console.log('[Document Upload] Starting document upload process', { documentCount: localDocument.length });
       try {
-        const uploadPromises = localDocument.map(async (doc: any) => {
-          if (doc.file && !doc.storage_path) {
-            // Upload to Cloudinary
-            const cloudinaryUrl = await uploadToCloudinary(doc.file, 'chat_documents', 'auto');
-
-            // For text-based files, also read content
-            if (doc.file.type.startsWith('text/') || doc.file.name.endsWith('.txt') || doc.file.name.endsWith('.md') || doc.file.name.endsWith('.csv') || doc.file.name.endsWith('.json') || doc.file.name.endsWith('.xml') || doc.file.name.endsWith('.html')) {
-              return new Promise((resolve) => {
-                const reader = new FileReader();
-                reader.onload = (event) => {
-                  resolve({
-                    ...doc,
-                    storage_path: cloudinaryUrl,
-                    document_context: event.target?.result as string,
-                  });
-                };
-                reader.readAsText(doc.file);
-              });
-            } else {
-              // For binary files, just store Cloudinary URL
-              return {
-                ...doc,
-                storage_path: cloudinaryUrl,
-                document_context: null,
-              };
+        // Validate file sizes before upload (Cloudinary limit: 10MB)
+        const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+        // Only allow file types that can be parsed
+        const ALLOWED_EXTENSIONS = ['pdf', 'docx', 'txt', 'md', 'csv', 'json', 'xml', 'html', 'xlsx', 'xls', 'jpg', 'jpeg', 'png', 'gif', 'webp'];
+        for (const doc of localDocument) {
+          if (doc.file && doc.file.size > MAX_FILE_SIZE) {
+            setError(`File "${doc.file.name}" quá lớn (${(doc.file.size / 1024 / 1024).toFixed(1)}MB). Vui lòng chọn file dưới 10MB.`);
+            setStreaming({ isStreaming: false });
+            return;
+          }
+          // Validate file type
+          if (doc.file) {
+            const extension = doc.file.name.split('.').pop()?.toLowerCase() || '';
+            if (!ALLOWED_EXTENSIONS.includes(extension)) {
+              setError(`File "${doc.file.name}" không được hỗ trợ. Vui lòng chọn file PDF, DOCX, XLSX, TXT, CSV, hoặc hình ảnh (JPG, PNG). File .doc (Word cũ) không được hỗ trợ.`);
+              setStreaming({ isStreaming: false });
+              return;
             }
+          }
+        }
+
+        // --- T006: Parallel Document Upload + File Reading ---
+        // Upload and read file content in parallel to save ~500ms
+        const uploadPromises = localDocument.map(async (doc: { file?: File; storage_path?: string; document_context?: string }) => {
+          if (doc.file && !doc.storage_path) {
+            // Upload to cloudinary
+            let cloudinaryUrl: string;
+            try {
+              cloudinaryUrl = await uploadToCloudinary(doc.file, 'chat_documents', 'auto');
+            } catch (uploadErr) {
+              console.error('[Document Upload] Failed to upload file:', uploadErr);
+              throw new Error(`Không thể tải file "${doc.file.name}" lên. Vui lòng thử lại.`);
+            }
+
+            // Parse file content using server-side parsing (supports all formats)
+            let fileContent: string | null = null;
+            const extension = doc.file.name.split('.').pop()?.toLowerCase();
+
+            console.log('[Document Parse] Starting server-side parse', { fileName: doc.file.name, extension, fileType: doc.file.type });
+
+            try {
+              const formData = new FormData();
+              formData.append('file', doc.file);
+              formData.append('mode', 'ephemeral'); // No DB persistence for chat
+              const response = await invokeEdgeFunction<{ text_content?: string }>('parse-document', {
+                body: formData
+              });
+              console.log('[Document Parse] Server response:', response);
+              fileContent = response?.text_content || null;
+              console.log('[Document Parse] Server parsed:', { fileName: doc.file.name, contentLength: fileContent?.length });
+            } catch (serverErr) {
+              console.error('[Document Parse] Failed to parse on server:', serverErr);
+              throw new Error(`Không thể đọc file "${doc.file.name}". Vui lòng thử lại hoặc chọn file khác.`);
+            }
+
+            console.log('[Document Parse] Final result', { fileName: doc.file.name, fileContentLength: fileContent?.length, fileContent: fileContent ? fileContent.substring(0, 100) : null });
+
+            return {
+              ...doc,
+              storage_path: cloudinaryUrl,
+              document_context: fileContent,
+            };
           }
           return doc;
         });
 
         const uploadedDocs = await Promise.all(uploadPromises);
+        console.log('[Document Upload] Upload complete', { uploadedDocsCount: uploadedDocs.length });
         // Update user message with uploaded documents
         userMessage.document_context = uploadedDocs;
-      } catch {
-        setError('Không thể tải tài liệu lên. Vui lòng thử lại.');
+        console.log('[Document Upload] Updated userMessage.document_context', {
+          docsCount: userMessage.document_context?.length,
+          firstDocHasContent: !!userMessage.document_context?.[0]?.document_context,
+          firstDocContentLength: userMessage.document_context?.[0]?.document_context?.length
+        });
+      } catch (err) {
+        const errorMessage = err instanceof Error ? err.message : 'Không thể tải tài liệu lên. Vui lòng thử lại.';
+        setError(errorMessage);
         setStreaming({ isStreaming: false });
         return;
       }
@@ -169,20 +246,20 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
     // Show initial status
     setStreamingStatus('Đang phân tích câu hỏi...');
 
+    // --- T003: Background Save User Message ---
+    // Save in background, don't block streaming to save ~100ms
     if (activeId) {
-      try {
-        await messageApi.saveUserMessage(
-          activeId,
-          content,
-          localDocument,
-          uploadedAttachments
-        );
-      } catch (err) {
+      messageApi.saveUserMessage(
+        activeId,
+        content,
+        userMessage.document_context, // Use updated document_context with uploaded files
+        uploadedAttachments
+      ).catch(err => {
         console.error('Failed to save user message:', err);
         // Show error but continue with streaming - message is already displayed optimistically
         setError('Không thể lưu tin nhắn. Vui lòng kiểm tra kết nối.');
-        // Don't return - continue with streaming even if save fails
-      }
+        // Don't block streaming even if save fails
+      });
     }
 
     try {
@@ -194,7 +271,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         content,
         [...history, userMessage],
         activeId || undefined,
-        attachedDocument,
+        userMessage.document_context, // Use updated document_context with uploaded files
         (chunk) => {
           // On chunk: clear status once content starts flowing
           assistantContent += chunk;
@@ -233,20 +310,6 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       // Use a stable local ID so suggestions can always be updated by reference
       const localMessageId = crypto.randomUUID();
 
-      if (activeId) {
-        try {
-          const saved = await messageApi.saveAssistantMessage(
-            activeId,
-            assistantContent,
-            finalPayload?.citations,
-            suggestions
-          );
-          savedMessageId = saved?.data?.id;
-        } catch (err) {
-          console.warn('Failed to save assistant message:', err);
-        }
-      }
-
       // Prefer live-streamed evidence; fall back to done-payload citations
       const resolvedEvidence =
         useChatStore.getState().streaming.evidence?.length > 0
@@ -260,8 +323,9 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         assistantContent = 'Xin lỗi, tôi không thể tạo câu trả lời lúc này. Vui lòng thử lại hoặc cung cấp thêm thông tin chi tiết.';
       }
 
+      // --- FIX: Add message immediately with local ID for instant UI update ---
       const assistantMessage: Message = {
-        id: savedMessageId || localMessageId, // prefer server ID, fallback to local
+        id: localMessageId, // Use local ID first, will update after save
         role: 'assistant',
         content: assistantContent,
         follow_up_suggestions: suggestions,
@@ -269,6 +333,25 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         token_count: finalPayload?.output_tokens,
       };
       addMessage(assistantMessage);
+
+      // --- T007: Optimistic Assistant Message Save ---
+      // Save in background, don't block UI to save ~100ms perceived latency
+      if (activeId) {
+        messageApi.saveAssistantMessage(
+          activeId,
+          assistantContent,
+          finalPayload?.citations,
+          suggestions
+        ).then(saved => {
+          savedMessageId = saved?.data?.id;
+          // Update message ID in store after save completes
+          updateMessageSuggestions(localMessageId, suggestions);
+        }).catch(err => {
+          console.warn('Failed to save assistant message:', err);
+          // Show error indicator but don't remove message
+          setError('Không thể lưu tin nhắn trợ lý. Vui lòng kiểm tra kết nối.');
+        });
+      }
 
       // Invalidate cache for this conversation since we just added new messages
       if (activeId) {
@@ -283,7 +366,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       if (activeId && assistantContent) {
         const targetMessageId = savedMessageId || localMessageId;
         suggestionsApi
-          .generate(content, assistantContent, activeId, targetMessageId, attachedDocument)
+          .generate(content, assistantContent, activeId, targetMessageId, userMessage.document_context)
           .then((res) => {
             if (res?.suggestions?.length > 0) {
               setCurrentSuggestions(res.suggestions);
@@ -294,52 +377,47 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       }
 
       // --- BACKGROUND: Multi-layer conversation summaries ---
+      // --- T011: Debounced Summary Generation ---
+      // Trigger all 3 summary levels in parallel after 5s delay
       if (activeId) {
         const conv = useConversationStore.getState().selectedConversation;
 
-        // Level 1: Quick Overview (Immediate) - only if not already summarized
-        if (!conv?.summary_level_1) {
-          summarizationApi
-            .summarize(activeId, 1)
-            .then((res) => {
-              if (res?.success && res.summary) {
-                useConversationStore.getState().updateConversation(activeId, {
-                  summary_level_1: res.summary,
-                });
-              }
-            })
-            .catch((err) => console.warn('[Summary] Background Level-1 failed:', err));
+        // Clear previous debounce timer
+        if (summaryDebounceRef.current) {
+          clearTimeout(summaryDebounceRef.current);
         }
 
-        // Level 2: Detailed Legal Insight (3s delay) - only if not already summarized
-        if (!conv?.summary_level_2) {
-          setTimeout(() => {
-            summarizationApi.summarize(activeId, 2)
-              .then((res) => {
-                if (res?.success && res.summary) {
-                  useConversationStore.getState().updateConversation(activeId, {
-                    summary_level_2: res.summary,
-                  });
-                }
-              })
-              .catch((err) => console.warn('[Summary] Background Level-2 failed:', err));
-          }, 3000);
-        }
+        // Set new debounce timer
+        summaryDebounceRef.current = setTimeout(() => {
+          // Generate all levels in parallel
+          const summaryPromises = [
+            !conv?.summary_level_1
+              ? summarizationApi.summarize(activeId, 1).then(res => {
+                  if (res?.success && res.summary) {
+                    useConversationStore.getState().updateConversation(activeId, { summary_level_1: res.summary });
+                  }
+                }).catch(err => console.warn('[Summary] Level-1 failed:', err))
+              : Promise.resolve(),
 
-        // Level 3: Recommendations (8s delay) - only if not already summarized
-        if (!conv?.summary_level_3) {
-          setTimeout(() => {
-            summarizationApi.summarize(activeId, 3)
-              .then((res) => {
-                if (res?.success && res.summary) {
-                  useConversationStore.getState().updateConversation(activeId, {
-                    summary_level_3: res.summary,
-                  });
-                }
-              })
-              .catch((err) => console.warn('[Summary] Background Level-3 failed:', err));
-          }, 8000);
-        }
+            !conv?.summary_level_2
+              ? summarizationApi.summarize(activeId, 2).then(res => {
+                  if (res?.success && res.summary) {
+                    useConversationStore.getState().updateConversation(activeId, { summary_level_2: res.summary });
+                  }
+                }).catch(err => console.warn('[Summary] Level-2 failed:', err))
+              : Promise.resolve(),
+
+            !conv?.summary_level_3
+              ? summarizationApi.summarize(activeId, 3).then(res => {
+                  if (res?.success && res.summary) {
+                    useConversationStore.getState().updateConversation(activeId, { summary_level_3: res.summary });
+                  }
+                }).catch(err => console.warn('[Summary] Level-3 failed:', err))
+              : Promise.resolve()
+          ];
+
+          Promise.all(summaryPromises).catch(err => console.warn('[Summary] Parallel generation failed:', err));
+        }, 5000);
       }
 
       options?.onComplete?.();

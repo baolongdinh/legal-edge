@@ -4,9 +4,11 @@
 //   - mode=ephemeral (default for ChatAI): Extract text in-memory, skip remote file persistence
 //   - mode=persist: Upload to Cloudinary and save file URL to DB
 
+import * as XLSX from 'https://deno.land/x/sheetjs/xlsx.mjs'
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { encode } from 'https://deno.land/std@0.177.0/encoding/base64.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import mammoth from 'https://esm.sh/mammoth@1.6.0'
 import { uploadToCloudinary } from '../shared/cloudinary.ts'
 import { corsHeaders, errorResponse, fetchWithRetry, jsonResponse } from '../shared/types.ts'
 
@@ -43,9 +45,40 @@ export const handler = async (req: Request): Promise<Response> => {
         const mimeType = file.type || 'application/pdf'
         const filename = file.name
 
+        // --- Helper: Extract text from DOCX using mammoth.js ---
+        const extractDocx = async (buffer: ArrayBuffer): Promise<string> => {
+            console.log(`[extractDocx] Parsing DOCX with mammoth, size=${buffer.byteLength} bytes`)
+            // mammoth.js in Deno/Node requires 'buffer' not 'arrayBuffer'
+            const result = await mammoth.extractRawText({ buffer: new Uint8Array(buffer) })
+            console.log(`[extractDocx] Extracted ${result.value.length} chars`)
+            if (result.messages.length > 0) {
+                console.log(`[extractDocx] Warnings:`, result.messages)
+            }
+            return result.value.trim()
+        }
+
+        // --- Helper: Extract text from Excel using SheetJS ---
+        const extractExcel = async (buffer: ArrayBuffer): Promise<string> => {
+            console.log(`[extractExcel] Parsing Excel with SheetJS, size=${buffer.byteLength} bytes`)
+            const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' })
+            let text = ''
+
+            workbook.SheetNames.forEach((sheetName, index) => {
+                const worksheet = workbook.Sheets[sheetName]
+                const csv = XLSX.utils.sheet_to_csv(worksheet)
+                text += `--- Sheet: ${sheetName} ---\n${csv}\n\n`
+            })
+
+            console.log(`[extractExcel] Extracted ${text.length} chars from ${workbook.SheetNames.length} sheets`)
+            return text.trim()
+        }
+
         // --- Helper: Extract text with Gemini Multimodal (in-memory, no remote file needed) ---
         const extractWithGemini = async (buffer: ArrayBuffer, mime: string) => {
+            console.log(`[extractWithGemini] Starting extraction: mime=${mime}, size=${buffer.byteLength} bytes`)
             const base64File = encode(new Uint8Array(buffer))
+            console.log(`[extractWithGemini] Encoded to base64, length=${base64File.length}`)
+
             const body = {
                 contents: [{
                     parts: [
@@ -55,6 +88,9 @@ export const handler = async (req: Request): Promise<Response> => {
                 }]
             }
 
+            const jsonBody = JSON.stringify(body)
+            console.log(`[extractWithGemini] JSON payload size: ${jsonBody.length} chars (~${Math.round(jsonBody.length / 1024)}KB)`)
+            console.log(`[extractWithGemini] Calling Gemini API...`)
             const res = await fetchWithRetry(
                 `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-lite:generateContent`,
                 {
@@ -65,9 +101,21 @@ export const handler = async (req: Request): Promise<Response> => {
                 { listEnvVar: 'GEMINI_API_KEYS', fallbackEnvVar: 'GEMINI_API_KEY' }
             )
 
+            console.log(`[extractWithGemini] Response status: ${res.status}`)
             const data = await res.json()
+
+            // Log full error details if any
+            if (data.error) {
+                console.error('[extractWithGemini] Gemini API error:', JSON.stringify(data.error))
+                throw new Error(`Gemini API error: ${data.error.message || JSON.stringify(data.error)}`)
+            }
+
             const text = data.candidates?.[0]?.content?.parts?.[0]?.text
-            if (!text) throw new Error('Gemini returned empty content')
+            console.log(`[extractWithGemini] Extracted text length: ${text?.length || 0}`)
+            if (!text) {
+                console.error('[extractWithGemini] Gemini returned empty content. Full response:', JSON.stringify(data))
+                throw new Error('Gemini returned empty content')
+            }
             return text
         }
 
@@ -111,7 +159,9 @@ export const handler = async (req: Request): Promise<Response> => {
             }
         }
 
-        if (mimeType === 'text/plain') {
+        console.log(`[parse-document] Checking mime type: "${mimeType}"`)
+        if (mimeType === 'text/plain' || mimeType === 'text/csv') {
+            console.log(`[parse-document] Using fast text extraction for ${mimeType}`)
             // Ultra-fast: decode directly, no AI needed
             textContent = new TextDecoder().decode(fileBuffer)
         } else if (mimeType === 'application/pdf' && mode === 'persist' && fileUrl) {
@@ -122,12 +172,38 @@ export const handler = async (req: Request): Promise<Response> => {
                 console.warn('Jina failed, falling back to Gemini:', e)
                 textContent = await extractWithGemini(fileBuffer, mimeType)
             }
+        } else if (mimeType.includes('spreadsheet') || mimeType.includes('excel') || mimeType.includes('sheet')) {
+            // Excel files (xlsx, xls) - use SheetJS
+            try {
+                console.log(`[parse-document] Extracting Excel: ${filename} (${mimeType})`)
+                textContent = await extractExcel(fileBuffer)
+                console.log(`[parse-document] Extracted ${textContent.length} chars from ${filename}`)
+            } catch (e) {
+                console.error('[parse-document] Excel extraction failed:', e)
+                return parseError(`Không thể đọc file Excel "${filename}". Vui lòng kiểm tra định dạng file.`, 'EXTRACTION_FAILED', 'extract_excel', 400)
+            }
         } else if (isComplexDoc) {
             try {
-                textContent = await extractWithGemini(fileBuffer, mimeType)
+                console.log(`[parse-document] Extracting complex doc: ${filename} (${mimeType})`)
+                // For DOCX files, use mammoth.js directly instead of Gemini
+                if (mimeType.includes('officedocument') && mimeType.includes('wordprocessingml')) {
+                    textContent = await extractDocx(fileBuffer)
+                } else {
+                    textContent = await extractWithGemini(fileBuffer, mimeType)
+                }
+                console.log(`[parse-document] Extracted ${textContent.length} chars from ${filename}`)
             } catch (e) {
-                console.error('Complex document extraction failed:', e)
-                return parseError('Không thể trích xuất tài liệu ở chế độ tạm thời.', 'EXTRACTION_FAILED', 'extract_complex', 400)
+                console.error('[parse-document] Complex document extraction failed:', e)
+                const isOldDoc = filename.toLowerCase().endsWith('.doc') && !filename.toLowerCase().endsWith('.docx')
+                if (isOldDoc) {
+                    return parseError(
+                        `File "${filename}" là định dạng .doc cũ (Microsoft Word 97-2003). Vui lòng convert sang .docx hoặc .pdf để bot có thể đọc được.`,
+                        'UNSUPPORTED_OLD_DOC_FORMAT',
+                        'extract_complex',
+                        400
+                    )
+                }
+                return parseError(`Không thể đọc file "${filename}". Vui lòng thử định dạng .pdf, .docx hoặc .txt.`, 'EXTRACTION_FAILED', 'extract_complex', 400)
             }
         } else if (mimeType.startsWith('image/')) {
             // Images: Gemini multimodal
@@ -138,12 +214,19 @@ export const handler = async (req: Request): Promise<Response> => {
                 return parseError('Không thể đọc hình ảnh đính kèm.', 'EXTRACTION_FAILED', 'extract_image', 400)
             }
         } else {
-            // Fallback for unknown types
+            // Fallback for unknown types - try Gemini as last resort
+            console.log(`[parse-document] Unknown mime type ${mimeType} for ${filename}, attempting Gemini fallback`)
             try {
                 textContent = await extractWithGemini(fileBuffer, mimeType)
+                console.log(`[parse-document] Fallback succeeded for ${filename}, extracted ${textContent.length} chars`)
             } catch (e) {
-                console.error('Generic extraction failed:', e)
-                return parseError('Định dạng tài liệu chưa được hỗ trợ ổn định.', 'UNSUPPORTED_FILE_TYPE', 'extract_generic', 400)
+                console.error('[parse-document] Unknown type extraction failed:', e)
+                return parseError(
+                    `Không thể đọc file "${filename}" (định dạng ${mimeType}). Vui lòng chọn file PDF, DOCX, hoặc TXT.`,
+                    'UNSUPPORTED_TYPE',
+                    'extract_unknown',
+                    400
+                )
             }
         }
 

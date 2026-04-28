@@ -119,7 +119,7 @@ export const streamingChatApi = {
         history,
         conversation_id: conversationId,
         image_attachments: attachments,
-        ...documentContext, // Spread for compatibility (summary, excerpts, etc.)
+        document_context: documentContext, // Send as field, not spread
       }),
     });
 
