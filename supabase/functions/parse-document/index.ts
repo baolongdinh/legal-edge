@@ -7,6 +7,7 @@
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts'
 import { encode } from 'https://deno.land/std@0.177.0/encoding/base64.ts'
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2'
+import mammoth from 'https://esm.sh/mammoth@1.6.0'
 import { uploadToCloudinary } from '../shared/cloudinary.ts'
 import { corsHeaders, errorResponse, fetchWithRetry, jsonResponse } from '../shared/types.ts'
 
@@ -42,6 +43,17 @@ export const handler = async (req: Request): Promise<Response> => {
         const fileBuffer = await file.arrayBuffer()
         const mimeType = file.type || 'application/pdf'
         const filename = file.name
+
+        // --- Helper: Extract text from DOCX using mammoth.js ---
+        const extractDocx = async (buffer: ArrayBuffer): Promise<string> => {
+            console.log(`[extractDocx] Parsing DOCX with mammoth, size=${buffer.byteLength} bytes`)
+            const result = await mammoth.extractRawText({ arrayBuffer: buffer })
+            console.log(`[extractDocx] Extracted ${result.value.length} chars`)
+            if (result.messages.length > 0) {
+                console.log(`[extractDocx] Warnings:`, result.messages)
+            }
+            return result.value.trim()
+        }
 
         // --- Helper: Extract text with Gemini Multimodal (in-memory, no remote file needed) ---
         const extractWithGemini = async (buffer: ArrayBuffer, mime: string) => {
@@ -145,7 +157,12 @@ export const handler = async (req: Request): Promise<Response> => {
         } else if (isComplexDoc) {
             try {
                 console.log(`[parse-document] Extracting complex doc: ${filename} (${mimeType})`)
-                textContent = await extractWithGemini(fileBuffer, mimeType)
+                // For DOCX files, use mammoth.js directly instead of Gemini
+                if (mimeType.includes('officedocument') && mimeType.includes('wordprocessingml')) {
+                    textContent = await extractDocx(fileBuffer)
+                } else {
+                    textContent = await extractWithGemini(fileBuffer, mimeType)
+                }
                 console.log(`[parse-document] Extracted ${textContent.length} chars from ${filename}`)
             } catch (e) {
                 console.error('[parse-document] Complex document extraction failed:', e)
