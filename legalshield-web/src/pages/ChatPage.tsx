@@ -52,6 +52,13 @@ export function ChatPage() {
     conversationId: currentConversationId || undefined,
   });
 
+  // Cleanup blob URLs on unmount to prevent memory leaks
+  useEffect(() => {
+    return () => {
+      useChatStore.getState().clearAttachedImages();
+    };
+  }, []);
+
   // Load conversation from URL param
   useEffect(() => {
     if (!conversationId) {

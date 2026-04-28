@@ -1,6 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Toaster } from 'sonner'
+import { Analytics } from '@vercel/analytics/react'
 import { useEffect, lazy, Suspense, useRef, useCallback } from 'react'
 import { Sidebar } from './components/layout/Sidebar'
 import { Topbar } from './components/layout/Topbar'
@@ -196,6 +197,7 @@ export default function App() {
           },
         }}
       />
+      <Analytics />
       <AnimatedRoutes />
     </BrowserRouter>
   )
