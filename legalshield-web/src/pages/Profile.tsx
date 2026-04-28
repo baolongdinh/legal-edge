@@ -37,6 +37,8 @@ export function Profile() {
                                     src={user.avatarUrl}
                                     alt={user.name}
                                     className="w-full h-full rounded-full object-cover relative z-10"
+                                    loading="lazy"
+                                    decoding="async"
                                     onError={(e) => { e.currentTarget.style.display = 'none'; }}
                                 />
                             )}

@@ -2,6 +2,7 @@
 import { defineConfig } from 'vitest/config'
 import react from '@vitejs/plugin-react'
 import { VitePWA } from 'vite-plugin-pwa'
+import analyzer from 'rollup-plugin-analyzer'
 import path from 'path'
 
 export default defineConfig({
@@ -12,6 +13,11 @@ export default defineConfig({
   },
   plugins: [
     react(),
+    analyzer({
+      summaryOnly: true,
+      hideDeps: false,
+      limit: 20,
+    }),
     VitePWA({
       registerType: 'autoUpdate',
       includeAssets: ['favicon.ico', 'apple-touch-icon.png', 'mask-icon.svg'],
@@ -103,13 +109,7 @@ export default defineConfig({
   ],
   build: {
     chunkSizeWarningLimit: 1500,
-    minify: 'terser',
-    terserOptions: {
-      compress: {
-        drop_console: true,
-        drop_debugger: true,
-      },
-    },
+    // Performance budgets - warn on large bundles
     rollupOptions: {
       output: {
         manualChunks(id) {
@@ -129,6 +129,13 @@ export default defineConfig({
             return 'vendor';
           }
         },
+      },
+    },
+    minify: 'terser',
+    terserOptions: {
+      compress: {
+        drop_console: true,
+        drop_debugger: true,
       },
     },
   },

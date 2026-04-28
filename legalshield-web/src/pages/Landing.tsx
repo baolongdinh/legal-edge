@@ -167,6 +167,8 @@ export function Landing() {
                                     className="w-full h-full object-cover"
                                     alt="Modern legal dashboard"
                                     src="https://images.unsplash.com/photo-1589829545856-d10d557cf95f?q=80&w=2670&auto=format&fit=crop"
+                                    loading="lazy"
+                                    decoding="async"
                                 />
                                 <div className="absolute inset-0 bg-gradient-to-t from-primary/40 to-transparent"></div>
                                 <div className="absolute bottom-6 left-6 right-6 p-6 bg-surface-bright/95 backdrop-blur-xl rounded-lg shadow-xl border border-white/20">
@@ -232,6 +234,8 @@ export function Landing() {
                                     className="absolute inset-0 w-full h-full object-cover group-hover:scale-105 transition-transform duration-700"
                                     src="https://images.unsplash.com/photo-1505664194779-8beaceb93744?q=80&w=2670&auto=format&fit=crop"
                                     alt="Law library"
+                                    loading="lazy"
+                                    decoding="async"
                                 />
                                 <div className="relative z-20 p-12 h-full flex flex-col justify-end max-w-md">
                                     <ShieldCheck className="text-secondary mb-4" size={48} />
@@ -268,6 +272,8 @@ export function Landing() {
                                         className="w-full h-full object-cover"
                                         src="https://images.unsplash.com/photo-1550751827-4bd374c3f58b?q=80&w=2670&auto=format&fit=crop"
                                         alt="Digital security"
+                                        loading="lazy"
+                                        decoding="async"
                                     />
                                 </div>
                             </div>
