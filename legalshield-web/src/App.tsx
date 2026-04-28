@@ -1,7 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
 import { motion, AnimatePresence } from 'framer-motion'
 import { Toaster } from 'sonner'
-import { useEffect, lazy, Suspense, useRef } from 'react'
+import { useEffect, lazy, Suspense, useRef, useCallback } from 'react'
 import { Sidebar } from './components/layout/Sidebar'
 import { Topbar } from './components/layout/Topbar'
 import { AuthGuard } from './components/auth/AuthGuard'
@@ -9,6 +9,33 @@ import { useUserStore } from './store'
 import { GlobalDisclaimerFooter } from './components/legal/GlobalDisclaimerFooter'
 import { cn } from './lib/utils'
 import './index.css'
+
+// Route preloading utility
+const preloadRoute = (path: string) => {
+  const link = document.createElement('link')
+  link.rel = 'prefetch'
+  link.href = path
+  link.as = 'script'
+  document.head.appendChild(link)
+}
+
+// Map of routes to their chunk names for preloading
+const routePreloadMap: Record<string, () => Promise<unknown>> = {
+  '/dashboard': () => import('./pages/Dashboard'),
+  '/analysis': () => import('./pages/ContractAnalysis'),
+  '/editor': () => import('./pages/DraftEditor'),
+  '/chat': () => import('./pages/ChatPage'),
+  '/settings': () => import('./pages/Profile'),
+  '/pricing': () => import('./pages/Pricing'),
+}
+
+// Preload route component on hover
+export const preloadRouteComponent = (path: string) => {
+  const loader = routePreloadMap[path]
+  if (loader) {
+    loader()
+  }
+}
 
 // Lazy loaded pages
 const Landing = lazy(() => import('./pages/Landing').then(m => ({ default: m.Landing })))
