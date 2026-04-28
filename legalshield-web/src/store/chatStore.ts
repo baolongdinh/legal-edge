@@ -218,8 +218,10 @@ export const useChatStore = create<ChatState>()(
       },
 
       clearAttachedImages: () => {
-        const state = useChatStore.getState();
-        state.attachedImages.forEach(img => URL.revokeObjectURL(img.url));
+        // Note: We don't revoke blob URLs here because they may be referenced
+        // by messages that are already added to the chat. The URLs will be
+        // cleaned up when the message component unmounts or when the images
+        // are uploaded and replaced with Cloudinary URLs.
         set({ attachedImages: [] });
       },
 
