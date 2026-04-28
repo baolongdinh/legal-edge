@@ -1,13 +1,11 @@
-import { useRef, useLayoutEffect, memo, useCallback, useState, useMemo } from 'react';
+import { useRef, useLayoutEffect, memo, useCallback, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import FixedSizeList from 'react-window/dist/esm/FixedSizeList';
 import { MessageItem } from './MessageItem';
 import { StreamingMessage } from './StreamingMessage';
 import { useChatStore } from '../../store/chatStore';
 import { clsx, type ClassValue } from 'clsx';
 import { ArrowDown, Scale } from 'lucide-react';
 import { Button } from '../ui/Button';
-import type { Message } from '../../store/chatStore';
 
 function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
@@ -15,33 +13,10 @@ function cn(...inputs: ClassValue[]) {
 
 const MemoizedMessageItem = memo(MessageItem);
 
-// Threshold for enabling virtual scrolling
-const VIRTUAL_SCROLL_THRESHOLD = 50;
-// Estimated item height for virtual scrolling
-const ITEM_HEIGHT = 200;
-
 interface MessageListProps {
   onSuggestionClick?: (suggestion: string) => void;
   className?: string;
 }
-
-// Virtual list item renderer
-const VirtualItem = memo(({ index, style, data }: { index: number; style: React.CSSProperties; data: { messages: Message[]; onSuggestionClick?: (suggestion: string) => void; isStreaming: boolean } }) => {
-  const { messages, onSuggestionClick, isStreaming } = data;
-  const message = messages[index];
-  const isLast = index === messages.length - 1 && !isStreaming;
-
-  return (
-    <div style={style} className="px-6 md:px-10">
-      <MemoizedMessageItem
-        message={message}
-        onSuggestionClick={onSuggestionClick}
-        isLast={isLast}
-      />
-    </div>
-  );
-});
-VirtualItem.displayName = 'VirtualItem';
 
 const MemoizedMessageList = memo(function MessageList({
   onSuggestionClick,
@@ -49,12 +24,8 @@ const MemoizedMessageList = memo(function MessageList({
 }: MessageListProps) {
   const { messages, streaming, currentConversationId, isLoadingMessages } = useChatStore();
   const scrollRef = useRef<HTMLDivElement>(null);
-  const listRef = useRef<List>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const isAutoScrolling = useRef(true);
-
-  // Check if we should use virtual scrolling
-  const useVirtualScrolling = messages.length >= VIRTUAL_SCROLL_THRESHOLD;
 
   // Handle manual scroll to detect if user wants to stop auto-scrolling
   const handleScroll = useCallback(() => {
@@ -70,64 +41,46 @@ const MemoizedMessageList = memo(function MessageList({
   }, []);
 
   const scrollToBottom = useCallback((smooth = true) => {
-    if (useVirtualScrolling && listRef.current) {
-      // For virtual list, scroll to last item
-      listRef.current.scrollToItem(messages.length - 1, 'end');
-      isAutoScrolling.current = true;
-      setShowScrollButton(false);
-    } else if (scrollRef.current) {
+    if (scrollRef.current) {
       scrollRef.current.scrollTo({
         top: scrollRef.current.scrollHeight,
         behavior: smooth ? 'smooth' : 'auto',
       });
       isAutoScrolling.current = true;
+      // Defer state update to avoid synchronous setState in effect
       requestAnimationFrame(() => {
         setShowScrollButton(false);
       });
     }
-  }, [useVirtualScrolling, messages.length]);
+  }, []);
 
-  // Auto-scroll to bottom when streaming
+  // Auto-scroll to bottom (useLayoutEffect for synchronous scroll)
   useLayoutEffect(() => {
-    if (isAutoScrolling.current && streaming.isStreaming) {
+    if (isAutoScrolling.current) {
       scrollToBottom(false);
     }
-  }, [streaming.streamedContent, streaming.isStreaming, scrollToBottom]);
+  }, [messages, streaming.streamedContent, streaming.isStreaming, scrollToBottom]);
 
-  // Scroll to bottom on new messages (only for non-virtual)
-  useLayoutEffect(() => {
-    if (!useVirtualScrolling && isAutoScrolling.current) {
-      scrollToBottom(false);
-    }
-  }, [messages.length, useVirtualScrolling, scrollToBottom]);
-
-  // Initial scroll or conversation swap
+  // Initial scroll or conversation swap (useLayoutEffect for synchronous scroll)
   useLayoutEffect(() => {
     isAutoScrolling.current = true;
-    // Delay to allow DOM to settle
-    const timer = setTimeout(() => {
-      scrollToBottom(false);
-    }, 100);
-    return () => clearTimeout(timer);
+    scrollToBottom(false);
   }, [currentConversationId, scrollToBottom]);
 
   const hasMessages = messages.length > 0;
 
-  // Memoized data for virtual list
-  const virtualListData = useMemo(() => ({
-    messages,
-    onSuggestionClick,
-    isStreaming: streaming.isStreaming,
-  }), [messages, onSuggestionClick, streaming.isStreaming]);
-
   return (
-    <div className={cn(
-      'flex-1 h-full overflow-hidden bg-transparent relative',
-      className
-    )}>
-      {isLoadingMessages && messages.length === 0 ? (
-        <div className="flex-1 h-full overflow-y-auto">
-          <div className="flex flex-col min-h-full max-w-6xl mx-auto w-full px-6 md:px-10 pt-8 pb-4 space-y-12 py-12">
+    <div
+      ref={scrollRef}
+      onScroll={handleScroll}
+      className={cn(
+        'flex-1 h-full overflow-y-auto space-y-0 scroll-smooth custom-scrollbar bg-transparent relative',
+        className
+      )}
+    >
+      <div className="flex flex-col min-h-full max-w-6xl mx-auto w-full px-6 md:px-10 pt-8 pb-4">
+        {isLoadingMessages && messages.length === 0 ? (
+          <div className="flex-1 space-y-12 py-12">
             {[1, 2, 3].map((i) => (
               <div key={i} className={cn(
                 "flex flex-col gap-4 max-w-[80%]",
@@ -147,50 +100,10 @@ const MemoizedMessageList = memo(function MessageList({
               <p className="text-[10px] uppercase tracking-widest font-bold text-lex-gold/40 animate-pulse">Initializing Archive Retrieval...</p>
             </div>
           </div>
-        </div>
-      ) : useVirtualScrolling ? (
-        // Virtual scrolling for large conversations
-        <>
-          <List
-            ref={listRef}
-            height={window.innerHeight - 200} // Approximate height
-            itemCount={messages.length}
-            itemSize={ITEM_HEIGHT}
-            itemData={virtualListData}
-            className="custom-scrollbar"
-            onScroll={({ scrollOffset, scrollDirection }) => {
-              // Check if at bottom
-              const totalHeight = messages.length * ITEM_HEIGHT;
-              const viewportHeight = window.innerHeight - 200;
-              const isAtBottom = totalHeight - scrollOffset - viewportHeight < 150;
-              isAutoScrolling.current = isAtBottom;
-              setShowScrollButton(!isAtBottom);
-            }}
-          >
-            {VirtualItem}
-          </List>
-
-          {/* Streaming message below virtual list */}
-          {streaming.isStreaming && (
-            <div className="px-6 md:px-10 pb-4">
-              <StreamingMessage
-                content={streaming.streamedContent}
-                isStreaming={streaming.isStreaming}
-                error={streaming.error}
-              />
-            </div>
-          )}
-        </>
-      ) : (
-        // Regular scrolling for small conversations (with animations)
-        <div
-          ref={scrollRef}
-          onScroll={handleScroll}
-          className="h-full overflow-y-auto scroll-smooth custom-scrollbar"
-        >
-          <div className="flex flex-col min-h-full max-w-6xl mx-auto w-full px-6 md:px-10 pt-8 pb-4">
+        ) : (
+          <>
             <AnimatePresence initial={false}>
-              {messages.map((message, i) => (
+              {messages.map((message: any, i: number) => (
                 <motion.div
                   key={`msg-${message.id}`}
                   initial={{ opacity: 0, y: 20, scale: 0.98 }}
@@ -220,9 +133,10 @@ const MemoizedMessageList = memo(function MessageList({
                 </motion.div>
               )}
             </AnimatePresence>
-          </div>
-        </div>
-      )}
+
+          </>
+        )}
+      </div>
 
       {/* Floating Scroll Button */}
       <AnimatePresence>
