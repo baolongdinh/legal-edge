@@ -31,7 +31,14 @@ export const handler = async (req: Request): Promise<Response> => {
 
         if (!orderId) return errorResponse('Missing order ID')
 
-        // 1. Fetch transaction
+        // 1. Check if this is a credit purchase (orderId starts with CREDIT_)
+        const isCreditPurchase = orderId.startsWith('CREDIT_')
+        
+        if (isCreditPurchase) {
+            return await handleCreditPurchase(supabase, orderId, isSuccess, provider)
+        }
+        
+        // 2. Fetch subscription transaction
         const { data: tx, error: txError } = await supabase
             .from('transactions')
             .select('*')
@@ -93,6 +100,95 @@ export const handler = async (req: Request): Promise<Response> => {
     } catch (err: any) {
         return errorResponse(err.message)
     }
+}
+
+// Handle credit purchase payment completion
+async function handleCreditPurchase(
+    supabase: any,
+    orderId: string,
+    isSuccess: boolean,
+    provider: string
+): Promise<Response> {
+    console.log(`[Credit Webhook] Processing credit purchase: ${orderId}, success: ${isSuccess}`)
+    
+    // Find the pending credit transaction
+    const { data: tx, error: txError } = await supabase
+        .from('credit_transactions')
+        .select('*')
+        .eq('metadata->>order_id', orderId)
+        .eq('operation_type', 'topup:pending')
+        .single()
+    
+    if (txError || !tx) {
+        console.error('[Credit Webhook] Transaction not found:', orderId)
+        return jsonResponse({ message: 'Transaction not found' })
+    }
+    
+    // Idempotency check
+    if (tx.metadata?.status === 'completed') {
+        console.log('[Credit Webhook] Already processed:', orderId)
+        return jsonResponse({ message: 'Already processed' })
+    }
+    
+    if (isSuccess) {
+        const credits = tx.amount
+        const userId = tx.user_id
+        
+        // Update transaction status
+        await supabase
+            .from('credit_transactions')
+            .update({
+                operation_type: 'topup',
+                metadata: {
+                    ...tx.metadata,
+                    status: 'completed',
+                    completed_at: new Date().toISOString(),
+                    provider
+                }
+            })
+            .eq('id', tx.id)
+        
+        // Add credits to user balance
+        const { data: current } = await supabase
+            .from('user_credits')
+            .select('balance, lifetime_earned')
+            .eq('user_id', userId)
+            .single()
+        
+        const newBalance = (current?.balance || 0) + credits
+        const newLifetimeEarned = (current?.lifetime_earned || 0) + credits
+        
+        await supabase
+            .from('user_credits')
+            .upsert({
+                user_id: userId,
+                balance: newBalance,
+                lifetime_earned: newLifetimeEarned,
+                updated_at: new Date().toISOString()
+            })
+        
+        console.log(`[Credit Webhook] Added ${credits} credits to user ${userId}. New balance: ${newBalance}`)
+    } else {
+        // Mark as failed
+        await supabase
+            .from('credit_transactions')
+            .update({
+                metadata: {
+                    ...tx.metadata,
+                    status: 'failed',
+                    failed_at: new Date().toISOString()
+                }
+            })
+            .eq('id', tx.id)
+        
+        console.log('[Credit Webhook] Payment failed for:', orderId)
+    }
+    
+    // Return appropriate response
+    if (provider === 'vnpay') {
+        return jsonResponse({ RspCode: '00', Message: 'Confirm Success' })
+    }
+    return jsonResponse({ message: 'Webhook Processed' })
 }
 
 serve(handler)

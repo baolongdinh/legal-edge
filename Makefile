@@ -112,7 +112,10 @@ deploy-supabase:
 	$(SUPABASE_CLI) functions deploy save-message --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
 	$(SUPABASE_CLI) functions deploy generate-suggestions --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
 	$(SUPABASE_CLI) functions deploy summarize-conversation --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
-	$(SUPABASE_CLI) functions deploy vision-ocr --project-ref $(SUPABASE_PROJECT_ID) --use-api
+	$(SUPABASE_CLI) functions deploy vision-ocr --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy get-credit-packages --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy get-user-credits --project-ref $(SUPABASE_PROJECT_ID) --use-api && \
+	$(SUPABASE_CLI) functions deploy create-credit-checkout --project-ref $(SUPABASE_PROJECT_ID) --use-api
 	@echo "✅ Supabase deployment complete!"
 
 deploy-frontend:

@@ -48,6 +48,10 @@ import {
   checkEvidenceExistsGlobally,
 } from '../shared/types.ts'
 
+// Import cost optimization modules
+import { routeByComplexity, callWithFallback, quickResponse, RoutingDecision } from '../shared/model-router.ts'
+import { estimateChatCost, hasEnoughCredits, deductCredits, refundExcessCredits } from '../shared/cost-estimator.ts'
+
 /**
  * Task: Evaluate user intent, complexity, and drafting needs.
  * Uses Groq (via callLLM) for ultra-fast pre-flight analysis.
@@ -396,6 +400,42 @@ export const handler = async (req: Request): Promise<Response> => {
     // @ts-ignore: Deno global
     const key = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? Deno.env.get('SUPABASE_ANON_KEY') ?? ''
     const supabase = createClient(url, key)
+
+    // --- CREDIT CHECK: Pre-estimate cost ---
+    // Initial estimate before full processing (will refine later)
+    const initialCostEstimate = estimateChatCost(
+      { complexity: 'medium', needs_citations: true, is_drafting: false, intent: 'analysis', suggested_standalone_query: message, reasoning: '' },
+      {
+        hasDocument: !!document_context,
+        hasVision: allAttachments.length > 0,
+        historyLength: history.length,
+        needsHyDE: false, // Will refine after intent eval
+        needsExa: true,
+        complexity: 'medium'
+      }
+    )
+
+    // Check if user has enough credits
+    const creditCheck = await hasEnoughCredits(supabase, user.id, initialCostEstimate.maxCredits)
+    if (!creditCheck.sufficient) {
+      return errorResponse(
+        `Bạn không đủ credits. Cần ${initialCostEstimate.maxCredits} credits, bạn còn ${creditCheck.currentBalance} credits. Vui lòng nạp thêm credits.`,
+        402 // Payment Required
+      )
+    }
+
+    // Pre-deduct estimated credits (will refund excess later)
+    const deductResult = await deductCredits(supabase, user.id, initialCostEstimate.estimatedCredits, 'chat:estimate', {
+      message_preview: message.slice(0, 100),
+      has_document: !!document_context,
+      has_attachments: allAttachments.length > 0
+    })
+
+    if (!deductResult.success) {
+      return errorResponse('Không thể trừ credits. Vui lòng thử lại.', 500)
+    }
+
+    console.log(`[Credit] Pre-deducted ${initialCostEstimate.estimatedCredits} credits, balance: ${deductResult.newBalance}`)
 
     // --- STEP 0: VISION PROCESSING ---
     let visionSummary = ''
@@ -807,10 +847,56 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
           }
 
           let fullResponseText = '';
-          for await (const chunk of streamGemini(contents)) {
-            fullResponseText += chunk;
-            send(controller, { type: 'chunk', content: chunk });
+          let modelUsed = 'gemini-2.5-flash-lite';
+          let actualCost = 0;
+          const startTime = Date.now();
+
+          // --- MODEL ROUTING WITH FALLBACK ---
+          // Route based on complexity for optimal cost/quality
+          const routing = routeByComplexity(intent_eval.complexity, {
+            messageLength: message.length,
+            hasDocument: !!documentText,
+            hasVision: allAttachments.length > 0,
+            historyLength: history.length,
+            needsCitation,
+            isDrafting
+          });
+
+          console.log(`[ModelRouter] Routing to ${routing.modelId}, reason: ${routing.reason}`);
+
+          try {
+            // Convert contents to messages format for model router
+            const messages = contents.map((c: any) => ({
+              role: c.role === 'model' ? 'assistant' : 'user',
+              content: c.parts?.[0]?.text || ''
+            }));
+
+            const result = await callWithFallback(messages, routing, {
+              temperature: 0.7,
+              maxTokens: 2500
+            });
+
+            fullResponseText = result.content;
+            modelUsed = result.modelUsed;
+            actualCost = result.actualCost;
+
+            // Stream the response in chunks
+            const chunks = fullResponseText.match(/.{1,50}/g) || [fullResponseText];
+            for (const chunk of chunks) {
+              send(controller, { type: 'chunk', content: chunk });
+            }
+
+            console.log(`[ModelRouter] Used ${modelUsed} in ${result.attempts} attempt(s), cost: $${actualCost.toFixed(6)}`);
+          } catch (error) {
+            console.error('[ModelRouter] All models failed:', error);
+            // Fallback to simple Gemini direct call as last resort
+            for await (const chunk of streamGemini(contents, 'gemini-2.5-flash-lite')) {
+              fullResponseText += chunk;
+              send(controller, { type: 'chunk', content: chunk });
+            }
           }
+
+          const latencyMs = Date.now() - startTime;
 
           // Fallback: If streaming returns empty, provide a generic response
           if (!fullResponseText || fullResponseText.trim().length === 0) {
@@ -821,11 +907,35 @@ Hãy luôn đối chiếu với nội dung hợp đồng gốc và các rủi ro
           const payload = buildLegalAnswerPayload(fullResponseText, combinedEvidence, needsCitation);
           send(controller, { type: 'done', payload });
 
+          // --- CREDIT REFUND & USAGE LOGGING ---
+          // Calculate actual credits used and refund excess
+          const actualCredits = Math.max(1, Math.ceil(actualCost * 1000)); // Convert USD to credits
+          const refundAmount = initialCostEstimate.estimatedCredits - actualCredits;
+
+          if (refundAmount > 0) {
+            await refundExcessCredits(supabase, user.id, initialCostEstimate.estimatedCredits, actualCredits, 'chat');
+            console.log(`[Credit] Refunded ${refundAmount} credits to user ${user.id}`);
+          }
+
+          // Log usage for analytics
+          await supabase.from('credit_usage_logs').insert({
+            user_id: user.id,
+            request_type: 'chat',
+            credits_charged: actualCredits,
+            estimated_credits: initialCostEstimate.estimatedCredits,
+            actual_cost_usd: actualCost,
+            model_used: modelUsed,
+            latency_ms: latencyMs,
+            created_at: new Date().toISOString()
+          });
+
           // Background operations (Audit, Cache, Memory)
           logTelemetry('legal-chat', 'completed', {
             has_document_context: Boolean(compactDocumentContext),
             evidence_count: combinedEvidence.length,
             cacheable: Boolean(answerCacheKey),
+            credits_used: actualCredits,
+            model_used: modelUsed,
           });
 
           persistAnswerAudit({
