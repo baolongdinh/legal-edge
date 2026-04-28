@@ -163,7 +163,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         // Validate file sizes before upload (Cloudinary limit: 10MB)
         const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
         // Only allow file types that can be parsed
-        const ALLOWED_EXTENSIONS = ['pdf', 'docx', 'txt', 'md', 'csv', 'json', 'xml', 'html', 'jpg', 'jpeg', 'png', 'gif', 'webp'];
+        const ALLOWED_EXTENSIONS = ['pdf', 'docx', 'txt', 'md', 'csv', 'json', 'xml', 'html', 'xlsx', 'xls', 'jpg', 'jpeg', 'png', 'gif', 'webp'];
         for (const doc of localDocument) {
           if (doc.file && doc.file.size > MAX_FILE_SIZE) {
             setError(`File "${doc.file.name}" quá lớn (${(doc.file.size / 1024 / 1024).toFixed(1)}MB). Vui lòng chọn file dưới 10MB.`);
@@ -174,7 +174,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
           if (doc.file) {
             const extension = doc.file.name.split('.').pop()?.toLowerCase() || '';
             if (!ALLOWED_EXTENSIONS.includes(extension)) {
-              setError(`File "${doc.file.name}" không được hỗ trợ. Vui lòng chọn file PDF, DOCX, TXT, hoặc hình ảnh (JPG, PNG). File .doc (Word cũ) không được hỗ trợ.`);
+              setError(`File "${doc.file.name}" không được hỗ trợ. Vui lòng chọn file PDF, DOCX, XLSX, TXT, CSV, hoặc hình ảnh (JPG, PNG). File .doc (Word cũ) không được hỗ trợ.`);
               setStreaming({ isStreaming: false });
               return;
             }
