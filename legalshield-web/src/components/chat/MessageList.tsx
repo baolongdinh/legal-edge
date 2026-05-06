@@ -22,10 +22,22 @@ const MemoizedMessageList = memo(function MessageList({
   onSuggestionClick,
   className,
 }: MessageListProps) {
-  const { messages, streaming, currentConversationId, isLoadingMessages } = useChatStore();
+  // Only subscribe to what we need - NOT streaming state (causes re-render flicker)
+  const messages = useChatStore((state) => state.messages);
+  const currentConversationId = useChatStore((state) => state.currentConversationId);
+  const isLoadingMessages = useChatStore((state) => state.isLoadingMessages);
+  // Only subscribe to isStreaming - not the whole streaming object
+  const isStreaming = useChatStore((state) => state.streaming.isStreaming);
+  const streamedContent = useChatStore((state) => state.streaming.streamedContent);
+  const streamingError = useChatStore((state) => state.streaming.error);
+  
   const scrollRef = useRef<HTMLDivElement>(null);
   const [showScrollButton, setShowScrollButton] = useState(false);
   const isAutoScrolling = useRef(true);
+
+  // Get the last message ID - stable reference that doesn't change on streaming state
+  // This prevents flicker: we only show suggestions when message is actually added to the list
+  const lastMessageId = messages.length > 0 ? messages[messages.length - 1]?.id : null;
 
   // Handle manual scroll to detect if user wants to stop auto-scrolling
   const handleScroll = useCallback(() => {
@@ -55,11 +67,12 @@ const MemoizedMessageList = memo(function MessageList({
   }, []);
 
   // Auto-scroll to bottom (useLayoutEffect for synchronous scroll)
+  // Auto-scroll when conversation changes, but allow manual control during streaming
   useLayoutEffect(() => {
     if (isAutoScrolling.current) {
       scrollToBottom(false);
     }
-  }, [messages, streaming.streamedContent, streaming.isStreaming, scrollToBottom]);
+  }, [messages, scrollToBottom]);
 
   // Initial scroll or conversation swap (useLayoutEffect for synchronous scroll)
   useLayoutEffect(() => {
@@ -113,22 +126,22 @@ const MemoizedMessageList = memo(function MessageList({
                   <MemoizedMessageItem
                     message={message}
                     onSuggestionClick={onSuggestionClick}
-                    isLast={message.id === messages[messages.length - 1]?.id && !streaming.isStreaming}
+                    isLast={message.id === lastMessageId}
                   />
                 </motion.div>
               ))}
 
               {/* Streaming message */}
-              {streaming.isStreaming && (
+              {isStreaming && (
                 <motion.div
                   key="streaming-msg"
                   initial={{ opacity: 0, y: 5 }}
                   animate={{ opacity: 1, y: 0 }}
                 >
                   <StreamingMessage
-                    content={streaming.streamedContent}
-                    isStreaming={streaming.isStreaming}
-                    error={streaming.error}
+                    content={streamedContent}
+                    isStreaming={isStreaming}
+                    error={streamingError}
                   />
                 </motion.div>
               )}
@@ -160,7 +173,7 @@ const MemoizedMessageList = memo(function MessageList({
         )}
       </AnimatePresence>
 
-      {!hasMessages && !streaming.isStreaming && !isLoadingMessages && (
+      {!hasMessages && !isStreaming && !isLoadingMessages && (
         <motion.div
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}

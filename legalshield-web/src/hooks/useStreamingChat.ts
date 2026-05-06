@@ -278,9 +278,9 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
           setStreaming({ streamedContent: assistantContent });
           setStreamingStatus('');
         },
-        (payload) => {
+        (payload: any) => {
           finalPayload = payload;
-          suggestions = payload.suggestions || [];
+          suggestions = payload?.suggestions || [];
         },
         (err) => {
           setError(err);
@@ -324,15 +324,22 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
       }
 
       // --- FIX: Add message immediately with local ID for instant UI update ---
+      // NOTE: Don't include citations/suggestions in message object - they cause re-render flicker
+      // Instead, store them separately in the chat store and display from there
       const assistantMessage: Message = {
         id: localMessageId, // Use local ID first, will update after save
         role: 'assistant',
         content: assistantContent,
-        follow_up_suggestions: suggestions,
-        citations: resolvedEvidence,
+        // citations and follow_up_suggestions removed to prevent re-render
         token_count: finalPayload?.output_tokens,
       };
       addMessage(assistantMessage);
+
+      // Store citations and suggestions separately in the store (not in message object)
+      // This prevents MessageItem re-render when these values are set
+      if (resolvedEvidence?.length > 0) {
+        useChatStore.getState().setStreamingEvidence(resolvedEvidence);
+      }
 
       // --- T007: Optimistic Assistant Message Save ---
       // Save in background, don't block UI to save ~100ms perceived latency
@@ -342,7 +349,7 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
           assistantContent,
           finalPayload?.citations,
           suggestions
-        ).then(saved => {
+        ).then((saved: any) => {
           savedMessageId = saved?.data?.id;
           // Update message ID in store after save completes
           updateMessageSuggestions(localMessageId, suggestions);
@@ -358,9 +365,8 @@ export function useStreamingChat(options?: UseStreamingChatOptions): UseStreamin
         clearCachedMessages(activeId);
       }
 
-      if (suggestions.length > 0) {
-        setCurrentSuggestions(suggestions);
-      }
+      // Note: Don't call setCurrentSuggestions here - it will be called after suggestionsApi.generate returns
+      // This prevents double re-render that causes flicker
 
       // --- BACKGROUND: Fetch richer follow-up suggestions ---
       if (activeId && assistantContent) {

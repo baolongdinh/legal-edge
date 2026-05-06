@@ -1,8 +1,7 @@
 import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
-import { motion, AnimatePresence } from 'framer-motion'
 import { Toaster } from 'sonner'
 import { Analytics } from '@vercel/analytics/react'
-import { useEffect, lazy, Suspense, useRef, useCallback } from 'react'
+import { useEffect, useRef } from 'react'
 import { Sidebar } from './components/layout/Sidebar'
 import { Topbar } from './components/layout/Topbar'
 import { AuthGuard } from './components/auth/AuthGuard'
@@ -11,59 +10,17 @@ import { GlobalDisclaimerFooter } from './components/legal/GlobalDisclaimerFoote
 import { cn } from './lib/utils'
 import './index.css'
 
-// Route preloading utility
-const preloadRoute = (path: string) => {
-  const link = document.createElement('link')
-  link.rel = 'prefetch'
-  link.href = path
-  link.as = 'script'
-  document.head.appendChild(link)
-}
-
-// Map of routes to their chunk names for preloading
-const routePreloadMap: Record<string, () => Promise<unknown>> = {
-  '/dashboard': () => import('./pages/Dashboard'),
-  '/analysis': () => import('./pages/ContractAnalysis'),
-  '/editor': () => import('./pages/DraftEditor'),
-  '/chat': () => import('./pages/ChatPage'),
-  '/settings': () => import('./pages/Profile'),
-  '/pricing': () => import('./pages/Pricing'),
-}
-
-// Preload route component on hover
-export const preloadRouteComponent = (path: string) => {
-  const loader = routePreloadMap[path]
-  if (loader) {
-    loader()
-  }
-}
-
-// Lazy loaded pages
-const Landing = lazy(() => import('./pages/Landing').then(m => ({ default: m.Landing })))
-const Platform = lazy(() => import('./pages/Platform').then(m => ({ default: m.Platform })))
-const Solutions = lazy(() => import('./pages/Solutions').then(m => ({ default: m.Solutions })))
-const Resources = lazy(() => import('./pages/Resources').then(m => ({ default: m.Resources })))
-const Dashboard = lazy(() => import('./pages/Dashboard').then(m => ({ default: m.Dashboard })))
-const Pricing = lazy(() => import('./pages/Pricing').then(m => ({ default: m.Pricing })))
-const ContractAnalysis = lazy(() => import('./pages/ContractAnalysis').then(m => ({ default: m.ContractAnalysis })))
-const DraftEditor = lazy(() => import('./pages/DraftEditor').then(m => ({ default: m.DraftEditor })))
-const Profile = lazy(() => import('./pages/Profile').then(m => ({ default: m.Profile })))
-const ChatPage = lazy(() => import('./pages/ChatPage').then(m => ({ default: m.ChatPage })))
-
-// Simple loading fallback
-function PageLoader() {
-  return (
-    <div className="flex h-full w-full items-center justify-center bg-surface">
-      <motion.div
-        animate={{ scale: [1, 1.1, 1], opacity: [0.3, 0.6, 0.3] }}
-        transition={{ duration: 1.5, repeat: Infinity }}
-        className="text-primary font-black tracking-widest text-xs uppercase"
-      >
-        LegalShield AI
-      </motion.div>
-    </div>
-  )
-}
+// Static imports for pages
+import { Landing } from './pages/Landing'
+import { Platform } from './pages/Platform'
+import { Solutions } from './pages/Solutions'
+import { Resources } from './pages/Resources'
+import { Dashboard } from './pages/Dashboard'
+import { Pricing } from './pages/Pricing'
+import { ContractAnalysis } from './pages/ContractAnalysis'
+import { DraftEditor } from './pages/DraftEditor'
+import { Profile } from './pages/Profile'
+import { ChatPage } from './pages/ChatPage'
 
 // App shell with persistent Sidebar + Topbar
 function AppShell({ title, subtitle }: { title: string; subtitle?: string }) {
@@ -77,8 +34,7 @@ function AppShell({ title, subtitle }: { title: string; subtitle?: string }) {
       syncUser()
       hasSyncedUserRef.current = true
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
+  }, [syncUser])
 
   // Hide global footer on mobile for chat and analysis to maximize space
   const isChatOrAnalysis = location.pathname.startsWith('/chat') || location.pathname.startsWith('/analysis')
@@ -103,82 +59,34 @@ function AnimatedRoutes() {
   const location = useLocation()
 
   return (
-    <Suspense fallback={<PageLoader />}>
-      <AnimatePresence mode="wait">
-        <Routes location={location} key={location.pathname}>
-          {/* Public */}
-          <Route path="/" element={
-            <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} transition={{ duration: 0.3 }}>
-              <Landing />
-            </motion.div>
-          } />
-          <Route path="/pricing" element={
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <Pricing />
-            </motion.div>
-          } />
-          <Route path="/platform" element={
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <Platform />
-            </motion.div>
-          } />
-          <Route path="/solutions" element={
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <Solutions />
-            </motion.div>
-          } />
-          <Route path="/resources" element={
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -10 }}>
-              <Resources />
-            </motion.div>
-          } />
+    <Routes location={location} key={location.pathname}>
+      {/* Public */}
+      <Route path="/" element={<Landing />} />
+      <Route path="/pricing" element={<Pricing />} />
+      <Route path="/platform" element={<Platform />} />
+      <Route path="/solutions" element={<Solutions />} />
+      <Route path="/resources" element={<Resources />} />
 
-          {/* App shell */}
-          <Route path="/dashboard" element={<AuthGuard><AppShell title="Dashboard" subtitle="Quản lý hợp đồng của bạn" /></AuthGuard>}>
-            <Route index element={
-              <motion.div initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -10 }} className="h-full">
-                <Dashboard />
-              </motion.div>
-            } />
-          </Route>
-          <Route path="/analysis" element={<AuthGuard><AppShell title="Rà soát Rủi ro" subtitle="Kiểm tra điều khoản hợp đồng" /></AuthGuard>}>
-            <Route index element={
-              <motion.div initial={{ opacity: 0, scale: 0.98 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 1.02 }} className="h-full">
-                <ContractAnalysis />
-              </motion.div>
-            } />
-          </Route>
-          <Route path="/editor" element={<AuthGuard><AppShell title="Trợ lý Soạn thảo" subtitle="Khởi tạo bản nháp văn bản" /></AuthGuard>}>
-            <Route index element={
-              <motion.div initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }} className="h-full">
-                <DraftEditor />
-              </motion.div>
-            } />
-          </Route>
-          <Route path="/chat" element={<AuthGuard><AppShell title="Tra cứu & Tham khảo" subtitle="Tìm kiếm quy định pháp luật" /></AuthGuard>}>
-            <Route index element={
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="h-full">
-                <ChatPage />
-              </motion.div>
-            } />
-            <Route path=":conversationId" element={
-              <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: -20 }} className="h-full">
-                <ChatPage />
-              </motion.div>
-            } />
-          </Route>
-          <Route path="/settings" element={<AuthGuard><AppShell title="Cài đặt & Tài khoản" /></AuthGuard>}>
-            <Route index element={
-              <motion.div initial={{ opacity: 0, scale: 0.95 }} animate={{ opacity: 1, scale: 1 }} exit={{ opacity: 0, scale: 0.95 }} className="h-full">
-                <Profile />
-              </motion.div>
-            } />
-          </Route>
+      {/* App shell */}
+      <Route path="/dashboard" element={<AuthGuard><AppShell title="Dashboard" subtitle="Quản lý hợp đồng của bạn" /></AuthGuard>}>
+        <Route index element={<Dashboard />} />
+      </Route>
+      <Route path="/analysis" element={<AuthGuard><AppShell title="Rà soát Rủi ro" subtitle="Kiểm tra điều khoản hợp đồng" /></AuthGuard>}>
+        <Route index element={<ContractAnalysis />} />
+      </Route>
+      <Route path="/editor" element={<AuthGuard><AppShell title="Trợ lý Soạn thảo" subtitle="Khởi tạo bản nháp văn bản" /></AuthGuard>}>
+        <Route index element={<DraftEditor />} />
+      </Route>
+      <Route path="/chat" element={<AuthGuard><AppShell title="Tra cứu & Tham khảo" subtitle="Tìm kiếm quy định pháp luật" /></AuthGuard>}>
+        <Route index element={<ChatPage />} />
+        <Route path=":conversationId" element={<ChatPage />} />
+      </Route>
+      <Route path="/settings" element={<AuthGuard><AppShell title="Cài đặt & Tài khoản" /></AuthGuard>}>
+        <Route index element={<Profile />} />
+      </Route>
 
-          <Route path="*" element={<Navigate to="/" />} />
-        </Routes>
-      </AnimatePresence>
-    </Suspense>
+      <Route path="*" element={<Navigate to="/" />} />
+    </Routes>
   )
 }
 

@@ -78,9 +78,9 @@ export function useConversation(): UseConversationReturn {
       const response = await conversationApi.list({
         filter,
         search: searchQuery || undefined,
-      });
+      }) as { success: boolean; conversations?: Conversation[]; filters?: { available_folders?: string[] } };
 
-      if (response.success) {
+      if (response.success && response.conversations) {
         setConversations(response.conversations);
         setAvailableFolders(response.filters?.available_folders || []);
       }
@@ -117,9 +117,9 @@ export function useConversation(): UseConversationReturn {
     addConversation(tempConv);
 
     try {
-      const response = await conversationApi.create(title, folder);
+      const response = await conversationApi.create(title, folder) as { success: boolean; conversation?: Conversation };
 
-      if (response.success) {
+      if (response.success && response.conversation) {
         // Remove temp and add real one
         removeConversation(tempId);
         addConversation(response.conversation);
@@ -170,10 +170,10 @@ export function useConversation(): UseConversationReturn {
       abortControllerRef.current = abortController;
 
       try {
-        const response = await messageApi.getForConversation(conversation.id);
+        const response = await messageApi.getForConversation(conversation.id) as { success: boolean; messages?: any[] };
         // Only update if this request wasn't cancelled
-        if (!abortController.signal.aborted && response.success) {
-          const mappedMessages = (response.messages || []).map((msg: any) => ({
+        if (!abortController.signal.aborted && response.success && response.messages) {
+          const mappedMessages = response.messages.map((msg: any) => ({
             ...msg,
             attachments: msg.attachments || msg.message_attachments || []
           }));
@@ -205,7 +205,7 @@ export function useConversation(): UseConversationReturn {
     updateStoreConversation(id, updates);
 
     try {
-      const response = await conversationApi.update(id, updates);
+      const response = await conversationApi.update(id, updates) as { success: boolean };
       if (!response.success && original) {
         // Rollback on failure
         updateStoreConversation(id, original);
@@ -232,7 +232,7 @@ export function useConversation(): UseConversationReturn {
     }
 
     try {
-      const response = await conversationApi.delete(id);
+      const response = await conversationApi.delete(id) as { success: boolean };
       if (!response.success) {
         // Rollback
         addConversation(original);
@@ -253,7 +253,7 @@ export function useConversation(): UseConversationReturn {
     updateStoreConversation(id, { is_archived: true });
 
     try {
-      const response = await conversationApi.archive(id);
+      const response = await conversationApi.delete(id) as { success: boolean };
       if (!response.success && original) {
         updateStoreConversation(id, { is_archived: original.is_archived });
       }
@@ -271,7 +271,7 @@ export function useConversation(): UseConversationReturn {
     updateStoreConversation(id, { is_archived: false });
 
     try {
-      const response = await conversationApi.unarchive(id);
+      const response = await conversationApi.unarchive(id) as { success: boolean };
       if (!response.success && original) {
         updateStoreConversation(id, { is_archived: original.is_archived });
       }
@@ -334,7 +334,7 @@ export function useConversation(): UseConversationReturn {
     updateStoreConversation(id, { folder });
 
     try {
-      const response = await conversationApi.moveToFolder(id, folder);
+      const response = await conversationApi.moveToFolder(id, folder) as { success: boolean };
       if (!response.success && original) {
         updateStoreConversation(id, { folder: original.folder });
       }

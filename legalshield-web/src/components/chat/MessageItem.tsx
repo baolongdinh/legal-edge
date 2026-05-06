@@ -8,6 +8,7 @@ import { FollowUpSuggestions } from './FollowUpSuggestions';
 import { CitationPanel } from './CitationPanel';
 import { LegalDisclaimer } from './LegalDisclaimer';
 import type { Message } from '../../store/chatStore';
+import { useChatStore } from '../../store/chatStore';
 
 function cn(...inputs: ClassValue[]) {
   return clsx(inputs);
@@ -38,6 +39,12 @@ export const MessageItem = memo(({
   const isAssistant = message.role === 'assistant';
   const [copied, setCopied] = useState(false);
   const [selectedCitation, setSelectedCitation] = useState<any>(null);
+
+  // Get suggestions from store to prevent message re-render when streaming ends
+  // This prevents the "flicker" effect where message content appears to jump
+  const currentSuggestions = useChatStore((state) => state.currentSuggestions);
+  // Use message suggestions if available (from DB), otherwise use currentSuggestions from store
+  const displaySuggestions = message.follow_up_suggestions?.length ? message.follow_up_suggestions : currentSuggestions;
 
   const handleCopy = useCallback(() => {
     navigator.clipboard.writeText(message.content);
@@ -364,10 +371,10 @@ export const MessageItem = memo(({
 
 
         {/* Follow-up suggestions (INSIDE bubble) */}
-        {isAssistant && isLast && message.follow_up_suggestions && (
+        {isAssistant && isLast && displaySuggestions && displaySuggestions.length > 0 && (
           <div className="mt-12 pt-10 border-t border-lex-border/60">
             <FollowUpSuggestions
-              suggestions={message.follow_up_suggestions}
+              suggestions={displaySuggestions}
               onSelect={onSuggestionClick || (() => { })}
             />
           </div>
